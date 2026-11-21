@@ -2,185 +2,238 @@
 
 # skillman
 
-**A cold skill library for AI coding agents — curate once, inject per project, update safely.**
+**Curate agent skills once. Give each project only the ones it needs. Update them without trusting upstream blindly.**
 
-Works with the shared Agent Skills layout used by **Claude Code**, **OpenAI Codex CLI** and **OpenCode**.
+A cold skill library, per-project packs, safe upstream updates and a terminal UI for
+**Claude Code**, **OpenAI Codex CLI** and **OpenCode**.
 
 [![ci](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml/badge.svg)](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml)
-![python](https://img.shields.io/badge/python-3.11%2B-blue)
+![python](https://img.shields.io/badge/python-3.11%2B-3776ab)
 ![textual](https://img.shields.io/badge/TUI-Textual%208-5a4fcf)
-![license](https://img.shields.io/badge/license-MIT-green)
+![deps](https://img.shields.io/badge/runtime%20deps-PyYAML%20only-informational)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-<img src="docs/screenshots/1-library.svg" alt="skillman Library tab" width="100%">
+[Quick start](#quick-start) · [Commands](#commands) · [Safe updates](#safe-updates) · [CI](#use-it-in-ci) ·
+[Compare](#how-it-compares) · [FAQ](#faq) · [Docs](#documentation)
+
+<img src="docs/screenshots/1-library.svg" alt="skillman Library tab: 722 skills, search, tags, Markdown preview" width="100%">
 
 </div>
 
----
+## Why skillman
 
-## The problem
+Agent skills (`SKILL.md` folders) work well while you have a dozen. With hundreds, three problems show up:
 
-Agent skills (`SKILL.md` folders) are great until you have hundreds of them:
+- **Context bloat.** Every globally installed skill puts its name and description into *every* session. 700 skills
+  are tens of thousands of tokens before you type anything, and Codex gives skill descriptions a fixed token budget.
+- **Drift.** A skill copied into a project rots when upstream fixes it, and re-copying wipes your local tweaks.
+- **Supply chain.** Skill repos ship hooks, pipe-to-shell installers, MCP configs and symlinks. Pulling "latest" means
+  running someone else's code inside your agent.
 
-- **Context bloat.** Every globally installed skill's name + description is loaded into *every* session. 700 skills ≈ tens of thousands of tokens before you type anything; Codex even has a dedicated skill-context token budget.
-- **Drift.** You copy a skill into a project, upstream fixes it, your copy rots. Or you tweak it locally and a re-copy wipes your change.
-- **Supply chain.** Third-party skill repos ship hooks, `curl | sh` installers, MCP configs and symlinks. Pulling "latest" blindly is running someone else's code in your agent.
+skillman keeps every skill in a **cold library** that no agent scans. Each project gets **real, committed copies** of
+the handful it needs, tracked by a **manifest**, so drift is visible and every update is a reviewed, reversible
+change.
 
-## The approach
+## Quick start
 
+```bash
+git clone https://github.com/hoangisreal/skillman && cd skillman && ./install.sh
+
+# fill the library from 103 curated upstream repos (license required, plugin wiring stripped)
+python3 ~/skill-library/scripts/verify-repos.py -j 8
+python3 ~/skill-library/scripts/tick-candidates.py --pack core web-vue postgres
+python3 ~/skill-library/scripts/import-skills.py
+
+# use it
+cd ~/code/my-app
+skill-add --suggest .          # → @core @web-vue @docker @ci-github …
+skill-add @core @web-vue       # copy + link + record in .agents/skill-manifest.json
+skillman                       # manage everything in the TUI
 ```
-upstream repos ──verify──▶ candidates ──import (gates)──▶  ~/skill-library  (cold: never scanned by any agent)
-                                                              │  skills/ · packs/ · git history
-                              skill-add @web-vue @postgres ───┘
-                                                              ▼
-                       your-project/.agents/skills/<skill>/        ← real copy, committed (Codex, OpenCode)
-                       your-project/.claude/skills/<skill> → ../../.agents/skills/<skill>   (Claude Code)
-                       your-project/.agents/skill-manifest.json    ← packs, source commit, content hash, pins
-```
 
-Keep everything in a **cold library** no agent scans. Each project gets only the handful of skills it needs, as
-**real committed copies** (teammates and CI get the same skills), tracked by a **manifest** so drift is detectable and
-updates are a deliberate, reviewable action.
+You need Python 3.11+ with PyYAML, and git. The TUI runs through [uv](https://docs.astral.sh/uv/)
+(`uv run --script`, Textual pinned by `bin/skillman.lock`), so nothing is installed into your system Python.
+`install.sh` is idempotent and never overwrites a real file.
 
 ## Features
 
 | | |
 |---|---|
-| 📦 **Packs** | Named groups of skills (`@web-vue`, `@postgres`, `@ml-train`, …) with `extends` for composites (`@fullstack-vue` = web-vue + node-backend + postgres + docker). 34 starter packs included; vendor packs (`@vendor/redis`) are generated automatically. |
-| 🎯 **One command per project** | `skill-add @core @web-vue vitest` copies, links and records everything. `skill-add --suggest .` reads `package.json`, `pyproject.toml`, `go.mod`, `pom.xml`, `*.csproj`, `pubspec.yaml`, `Dockerfile`, `*.tf`, workflows… and proposes packs. |
-| 🖥️ **TUI** | `skillman` — 7 tabs: Library (search, filters, Markdown preview, multi-select), Packs (create/edit/rename/extends), Project (status, diff, update, pin, adopt, doctor), Updates, Upstream, Validation, Trash. |
-| 🔄 **Upstream updates** | Check the whole library, one pack, or hand-picked skills. Compares the **git tree OID of each skill's subpath** — no blobs downloaded, ~600 skills across 60+ repos in ~6 s. Shows changelog + diff, applies atomically, **auto-commits** the library, `rollback` restores and pins. |
-| 🛡️ **Safety gates** | An update is **risky** (never auto-applied) if it adds hooks, `curl\|sh`-style patterns, broader `allowed-tools`, new scripts/executables, loses its license, fails validation, or would drop a manual local change. Plugin wiring (`hooks/`, `commands/`, subagents, `.mcp.json`) is never imported. Upstream symlinks are inlined only if they stay inside the repo — never followed to your filesystem. |
-| 🧭 **Drift detection** | Per project skill: `ok` · `outdated` (library newer) · `modified` (edited in project) · `conflict` (both) · `untracked` (adopt it) · `missing` · `orphan`. Pinned skills are skipped by updates. |
-| 🧮 **Token budget** | `doctor` estimates the description tokens your project + global skills inject per session and warns past the budget. Also flags name shadowing against global skill dirs, broken links, manifest drift. |
-| ♻️ **Nothing is deleted** | Removing or replacing a project skill moves it to a trash you can browse and restore. Pack deletions too. Library history lives in git. |
-| ⏰ **Optional automation** | A systemd user timer runs `update-library --auto-safe` weekly: safe updates land (and are committed), risky ones wait in the Updates tab. |
+| 📦 **Packs** | Named groups (`@web-vue`, `@postgres`, `@ml-train`, …) with `extends` for composites: `@fullstack-vue` is web-vue + node-backend + postgres + docker. 34 starter packs ship with the tool; vendor packs such as `@vendor/trailofbits` are generated. |
+| 🎯 **One command per project** | `skill-add @core @web-vue vitest` copies, links and records. `--suggest` reads `package.json`, `pyproject.toml`, `go.mod`, `pom.xml`, `*.csproj`, `pubspec.yaml`, `Dockerfile`, `*.tf` and workflows, then proposes packs. |
+| 🖥️ **TUI** | 7 tabs: Library, Packs, Project, Updates, Upstream, Validation and Trash. Everything the TUI does is also a CLI command. |
+| 🔄 **Upstream updates** | Check the whole library, one pack or a few skills. Compares the **git tree OID of each skill's subpath** without downloading blobs: about 600 skills across 60+ repos in seconds. Shows the changelog and diff, applies atomically, commits the library, and `rollback` undoes it. |
+| 🛡️ **Risk gates** | An update is **risky**, and never auto-applied, if it adds hooks, pipe-to-shell patterns, credential reads, broader `allowed-tools` or new executables, loses its license, or would drop a local change. |
+| 🧭 **Drift detection** | Each project skill is `ok`, `outdated`, `modified`, `conflict`, `untracked`, `missing` or `orphan`. Pinned skills are skipped by updates. |
+| ✅ **CI gates** | `verify` fails a PR whose committed skills drift from the manifest, like a frozen lockfile. `audit` is an offline risk scan with `--fail-on`. Neither needs the library. |
+| 🤖 **Agent-operable** | Ships a `skillman` skill, so Claude Code or Codex manage skills through the tools instead of copying folders around. |
+| 🧮 **Token budget** | `doctor` estimates the description tokens that project and global skills inject per session, and flags shadowing and broken links. |
+| ♻️ **Nothing is deleted** | Removed copies and deleted packs go to a restorable trash. The library is a git repo. |
 
-## Quick start
+## Commands
 
-```bash
-git clone https://github.com/hoangisreal/skillman && cd skillman
-./install.sh                                   # links skillman / skill-add / skill-search into ~/.local/bin,
-                                               # bootstraps ~/skill-library (override with SKILL_LIBRARY=...)
+| Command | Description |
+|---|---|
+| `skill-add @pack name … [dir]` | Add skills and packs to a project |
+| `skill-add --suggest .` · `--packs` · `--list` | Suggest packs, list packs, list skills |
+| `skill-search <words>` | Search names and descriptions |
+| `skillcore.py status .` · `doctor .` | Drift states · health check |
+| `skillcore.py update -C .` · `diff -C . <name>` | Refresh outdated copies · see what changed |
+| `skillcore.py uninstall -C . <name\|@pack>` | Remove (to trash; skills shared with other packs stay) |
+| `skillcore.py verify .` · `audit .` | CI checks: frozen manifest · offline risk scan |
+| `skillcore.py new <name>` | Scaffold your own skill in the library |
+| `skillcore.py update-library --check [--pack P] [names]` | Read-only upstream check |
+| `skillcore.py update-library --auto-safe` | Apply safe updates, queue the risky ones |
+| `skillcore.py rollback <name>` | Undo a library update and pin the skill |
 
-# 1. Find skills: verify the curated upstream list (103 repos, read-only sparse clones)
-python3 ~/skill-library/scripts/verify-repos.py -j 8
-
-# 2. Pick what you want — by pack, by repo, or tick by hand (or in the TUI, tab 5)
-python3 ~/skill-library/scripts/tick-candidates.py --pack core web-vue postgres
-python3 ~/skill-library/scripts/import-skills.py --dry-run
-python3 ~/skill-library/scripts/import-skills.py && python3 ~/skill-library/scripts/validate-library.py
-
-# 3. Use them
-cd ~/code/my-app
-skill-add --suggest .                          # → @core @web-vue @docker @ci-github …
-skill-add @core @web-vue
-skillman                                       # manage interactively
-```
-
-Requirements: Python ≥ 3.11 with PyYAML, git. The TUI runs through [uv](https://docs.astral.sh/uv/)
-(`uv run --script`, Textual pinned by `bin/skillman.lock`) — nothing is installed into your system Python.
+`skillcore.py` lives in `~/skill-library/scripts/`. See the [full command and key reference](docs/commands.md).
 
 ## Screenshots
 
-| Packs — composites via `extends`, token cost per pack | Project — drift states, token budget |
+| Packs: composites via `extends`, token cost per pack | Project: drift states and token budget |
 |---|---|
 | <img src="docs/screenshots/2-packs.svg" alt="Packs tab"> | <img src="docs/screenshots/3-project.svg" alt="Project tab"> |
-| **Updates — tree-OID check across every upstream** | **Upstream — tick verified candidates, dry-run import** |
+| **Updates: tree-OID check across every upstream** | **Upstream: tick verified candidates, dry-run import** |
 | <img src="docs/screenshots/4-updates.svg" alt="Updates tab"> | <img src="docs/screenshots/5-upstream.svg" alt="Upstream tab"> |
-| **Update review — upstream changelog, risk verdict, full diff** | **Validation — every warning, jump to the skill** |
+| **Update review: changelog, risk verdict, full diff** | **Validation: every warning, jump to the skill** |
 | <img src="docs/screenshots/7-update-review.svg" alt="Update review"> | <img src="docs/screenshots/6-validation.svg" alt="Validation tab"> |
 
-Screenshots are rendered headlessly from a copy of a real 722-skill library by `docs/make_screenshots.py`.
+The screenshots are rendered headlessly from a copy of a real 722-skill library by `tools/make_screenshots.py`.
 
-## Command reference
-
-Everything the TUI does is also a CLI: `python3 ~/skill-library/scripts/skillcore.py <command>`.
-
-| Task | Command |
-|---|---|
-| Add skills / packs to a project | `skill-add @core @web-vue vitest [dir]` · `skill-add -C dir … --force` |
-| List / search | `skill-add --packs` · `skill-add --list` · `skill-search postgres migration` |
-| Suggest packs for a repo | `skill-add --suggest .` |
-| Project status · health | `skillcore.py status .` · `skillcore.py doctor .` |
-| Refresh outdated copies · diff | `skillcore.py update -C . [names] [--force]` · `skillcore.py diff -C . <name>` |
-| Remove skills / a whole pack | `skillcore.py uninstall -C . <name> @<pack>` (shared skills are kept) |
-| Track pre-existing copies · pin | `skillcore.py adopt -C .` · `skillcore.py pin -C . <name>` |
-| Check upstream (all / pack / some) | `skillcore.py update-library --check [--pack web-vue] [names…] [--log]` |
-| Apply safe updates · everything | `skillcore.py update-library --auto-safe` · `--apply [--allow-risky]` |
-| Push library updates into projects | `skillcore.py update-projects [--dry-run]` |
-| Undo a library update | `skillcore.py rollback <name>` (restores previous git version and pins it) |
-| Trash | `skillcore.py trash list \| restore <id> \| empty --yes` |
-| Packs from your library | `scripts/build-packs.py` (vendor packs regenerate; your stack packs are never overwritten) |
-
-### TUI keys
-
-`1`–`7` switch tabs · `/` search · `space` multi-select · `q` quit · `ctrl+p` command palette.
-Library: `i` install · `p` add to pack · `w` warnings. Packs: `i` install · `u` remove from project · `n` new · `r` rename ·
-`e`/`E` description/extends · `a`/`x` add/remove skill · `d` delete. Project: `u`/`U` update · `D` diff · `x` remove ·
-`P` remove pack · `a` adopt · `t` pin · `l` fix links · `s` suggest · `o` doctor · `c` change project. Updates: `c` check all ·
-`k` check pack · `L` check Library selection · `enter` changelog + diff · `a` apply selected · `A` apply all safe · `r` rollback ·
-`p` update projects. Upstream: `space` tick · `I` import (dry-run first). Trash: `R` restore · `D` diff · `x`/`E` delete.
-
-## How updates work
-
-1. Every imported skill carries `SOURCE.json`: repo, subpath, **pinned commit**, local modifications.
-2. `check` runs one `git ls-remote` per repo. If HEAD moved, it fetches commits + trees only (`--filter=blob:none`,
-   persistent cache in `.cache/repos`) and compares `rev-parse <old>:<subpath>` vs `<new>:<subpath>`.
-   Unchanged subpaths cost nothing; removed subpaths and vanished licenses are reported.
-3. A changed skill is **materialized** at the new commit into a staging dir with the same import pipeline
-   (license required, plugin wiring stripped, mechanical fixes re-applied), then **assessed** against the current
-   copy by the validator. New risk signals → `risky`.
-4. `apply` swaps the directory atomically, rebuilds the index, and commits to the library repo with the old→new
-   commits in the message. Projects are only *marked* `outdated`; they change when you say so.
-
-## Layout
+## How it works
 
 ```
-skillman/                         this repo (tooling, MIT)
-├── bin/skillman                  Textual TUI (PEP 723 script + uv lock)
-├── bin/skill-add, skill-search   thin CLIs
-├── scripts/skillcore.py          all logic: packs, projects, trash, updates, validation (stdlib + PyYAML)
-├── scripts/{verify-repos,tick-candidates,import-skills,validate-library,build-packs}.py
-├── scripts/systemd/              optional weekly update timer
-├── packs/                        starter packs (only skills resolvable from staging/repos.txt)
-├── staging/repos.txt             curated upstream list: tier, group, owner/repo, subpath hint
-└── tests/                        67 core checks + 26-step TUI pilot test, fully offline (fake git upstream)
-
-~/skill-library/                  your data (its own git repo)
-├── skills/<name>/                SKILL.md + SOURCE.json (+ UPSTREAM-LICENSE.txt)
-├── packs/*.yaml, packs/vendor/   your packs
-├── staging/                      candidates, verify log
-├── INDEX.md|json, VALIDATION.md, IMPORT_LOG.md, UPDATE_LOG.md
-└── scripts → skillman/scripts
+upstream repos ──verify──▶ candidates ──import (gates)──▶ ~/skill-library   (cold: no agent scans it)
+                                                            │  skills/ · packs/ · git history
+                             skill-add @web-vue @postgres ──┘
+                                                            ▼
+                    your-project/.agents/skills/<skill>/              real copy, committed (Codex, OpenCode)
+                    your-project/.claude/skills/<skill> → ../../.agents/skills/<skill>    (Claude Code)
+                    your-project/.agents/skill-manifest.json          packs, source commit, content hash, pins
 ```
 
-## Design notes
+The manifest records each skill's source commit and a content hash. Comparing the recorded hash with the project
+copy's and the library's tells skillman whether a skill is current, outdated, edited locally or both.
+More in [architecture](docs/architecture.md).
 
-- **Copies, not symlinks into the library.** A project must build the same way on a teammate's machine and in CI,
-  so skills are committed with the project. The manifest's content hash is what makes copies manageable.
-- **Cold by default.** Global skill dirs stay tiny and universal; per-project skills load only where relevant.
-- **Git for history, trash for everything else.** Library changes are commits you can revert; project removals are
-  moves you can restore. The tool never `rm`s user data without an explicit "empty trash".
-- **Refuse rather than guess.** Symlinked `.agents/` or `.claude/skills/` dirs, real directories where a link should
-  be, invalid names, path traversal in pack/skill names, dirty library working trees — all refused with a message.
-- **The TUI is a view.** `skillcore.py` is importable and scriptable; the TUI and `skill-add` are thin layers on it,
-  so CLI, TUI, timer and tests exercise the same code.
+## Safe updates
+
+1. Each library skill has a `SOURCE.json` with its repo, subpath and **pinned commit**.
+2. `--check` runs one `git ls-remote` per repo. Only when HEAD moved does it fetch commits and trees
+   (`--filter=blob:none`, cached), then compare `<old>:<subpath>` with `<new>:<subpath>` by tree ID.
+3. Changed skills are rebuilt at the new commit through the import pipeline and **assessed against the current copy**.
+   New risk signals make the update `risky`.
+4. Safe updates are swapped in atomically and committed to the library. Risky ones wait for review in the Updates
+   tab. Projects are only marked `outdated`; they change when you say so.
+
+The [updates guide](docs/updates.md) lists every gate. A weekly systemd timer for `--auto-safe` is included but not
+enabled.
+
+## Use it in CI
+
+```yaml
+- run: pip install pyyaml && curl -fsSLo skillcore.py https://raw.githubusercontent.com/hoangisreal/skillman/<sha>/scripts/skillcore.py
+- run: python skillcore.py verify .                    # committed skills match the manifest
+- run: python skillcore.py audit . --fail-on review    # no hooks, pipe-to-shell, credential reads…
+```
+
+The [CI guide](docs/ci.md) has a complete GitHub Actions workflow and a pre-commit hook.
+
+## Let your agents use it
+
+`install.sh` puts a [`skillman` skill](skills/skillman/SKILL.md) into your library. Add it to a project with
+`skill-add skillman`. Your agent then answers "which skills does this repo have?" or "add the Postgres skills" by
+running `skill-add`, `status`, `doctor` and `audit`, which keeps the manifest correct. It asks you before changing the
+library.
+
+## How it compares
+
+The skills ecosystem has excellent installers. skillman sits on a different axis: a curated, local, versioned library
+with update review. Comparison based on each project's README, November 2026:
+
+| | **skillman** | [vercel-labs/skills](https://github.com/vercel-labs/skills) | [`gh skill`](https://github.blog/changelog/2026-04-16-manage-agent-skills-with-github-cli/) | [Skills Manager](https://github.com/xingkongliang/skills-manager) |
+|---|---|---|---|---|
+| Interface | TUI + CLI | CLI | CLI | Desktop app + CLI |
+| Agents | Claude Code, Codex, OpenCode | 75+ | 6 hosts | 50+ |
+| Local, git-versioned library | ✅ cold, never scanned | — | — | ✅ central repo |
+| Named groups | Packs with `extends` | Experimental, via `package.json` | — | Presets |
+| Per-project record with content hash | ✅ manifest | ✅ `skills-lock.json` | Provenance in frontmatter | — |
+| Change detection | Tree OID per skill subpath | Lock hash | Tree SHA | Update tracking |
+| Updates assessed against the current copy | ✅ risky ones are never auto-applied | — | Preview before install | Upstream diff in app |
+| CI frozen check | `verify` | `install --frozen-lockfile` | — | — |
+| Context-budget check | `doctor` | — | — | — |
+| Marketplace / discovery | Curated list of 103 repos | [skills.sh](https://skills.sh) | `gh skill search` | Marketplace |
+
+**Pick something else if** you need many agents beyond these three, a public marketplace, Windows, or multi-device
+sync. Those tools do it well. skillman is for people who keep a large private collection and want to control what
+reaches each project.
+
+## FAQ
+
+<details>
+<summary><b>Why copy skills into projects instead of symlinking the library?</b></summary>
+
+A project has to behave the same for a teammate and in CI, so its skills are committed with it. The manifest hash is
+what keeps those copies manageable: you see drift, update on purpose and pin deliberate edits.
+</details>
+
+<details>
+<summary><b>Why not install everything globally?</b></summary>
+
+Every global skill's description is loaded into every session, whatever you work on. Agents also choose skills
+better from a short, relevant list. Keep global skills to a tiny universal core and put the rest per project.
+`doctor` shows the budget.
+</details>
+
+<details>
+<summary><b>Does it modify upstream skills?</b></summary>
+
+Only mechanically, and every change is recorded in `local_modifications`: it fixes the frontmatter `name` to match
+the folder, moves a license comment below the frontmatter, inlines in-repo symlinks and strips plugin wiring. The
+upstream license is kept next to each skill.
+</details>
+
+<details>
+<summary><b>Can I use it without the TUI or uv?</b></summary>
+
+Yes. `skill-add` and `skillcore.py` need only Python and PyYAML. The TUI is a view on the same functions.
+</details>
+
+<details>
+<summary><b>Will it ever delete my files?</b></summary>
+
+No. Uninstalling, replacing a modified copy or deleting a pack moves things to a trash you can restore from
+(`skillcore.py trash list`). Library changes are git commits. Only `trash empty --yes` deletes.
+</details>
+
+<details>
+<summary><b>Is the skill library published?</b></summary>
+
+No. This repository contains only the tooling (MIT). Skills are fetched from their upstream repositories, each with
+its own license, into your local library.
+</details>
+
+## Documentation
+
+- [Commands and TUI keys](docs/commands.md)
+- [Packs](docs/packs.md): format, starter packs, vendor packs, suggestions, budget
+- [Upstream updates and safety gates](docs/updates.md)
+- [Using skillman in CI](docs/ci.md)
+- [Architecture](docs/architecture.md): layouts, manifest format, design decisions
+- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## Testing
 
 ```bash
-uv run --no-project --with pyyaml python tests/test_skillcore.py
-uv run --no-project --with textual==8.2.8 --with pyyaml python tests/test_tui.py
-uvx ruff check .
+uv run --no-project --with pyyaml python tests/test_skillcore.py                 # 93 checks: packs, projects, updates, gates
+uv run --no-project --with textual==8.2.8 --with pyyaml python tests/test_tui.py # TUI driven key by key
+uvx ruff@0.8.4 check .
 ```
 
-Tests build a throwaway library plus a fake upstream (bare git repo served over `file://` with partial-clone
-support) and cover: pack expansion and cycles, install/update/conflict/adopt/pin flows, trash round-trips, path
-traversal and symlink refusals, tree-OID change detection, safe vs risky updates, license removal, symlink
-inlining, rollback, and the TUI driven key-by-key with Textual's pilot. CI runs them on Python 3.11–3.13.
+Fully offline. The tests run against a fake upstream git repo served over `file://`. CI runs them on Python 3.11–3.13.
 
-## Licensing
+## License
 
-The tooling is MIT. **Skills are not distributed here** — they are fetched from their upstream repositories,
-each import keeps the upstream license (`UPSTREAM-LICENSE.txt`) and provenance, and skills without a license are
-not imported. Review licenses before redistributing your library.
+The tooling is [MIT](LICENSE). Skills are **not** distributed here. They come from their upstream repositories, each
+import keeps the upstream license and provenance, and unlicensed skills are refused. Check the licenses before you
+redistribute your own library.

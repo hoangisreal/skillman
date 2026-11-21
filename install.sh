@@ -29,6 +29,17 @@ mkdir -p "$LIB/skills" "$LIB/packs" "$LIB/staging"
 [ -e "$LIB/scripts" ] || ln -s "$REPO/scripts" "$LIB/scripts"
 for p in "$REPO"/packs/*.yaml; do [ -e "$LIB/packs/$(basename "$p")" ] || cp "$p" "$LIB/packs/"; done
 [ -e "$LIB/staging/repos.txt" ] || cp "$REPO/staging/repos.txt" "$LIB/staging/repos.txt"
+# the "skillman" skill teaches agents to use these tools; add it to a project with: skill-add skillman
+# (refreshed on re-install unless you replaced it with your own skill of the same name)
+SK="$LIB/skills/skillman"
+if [ ! -e "$SK" ] || grep -q '"shipped_with": "skillman"' "$SK/SOURCE.json" 2>/dev/null; then
+  if ! cmp -s "$REPO/skills/skillman/SKILL.md" "$SK/SKILL.md" 2>/dev/null; then
+    mkdir -p "$SK" && cp "$REPO/skills/skillman/SKILL.md" "$SK/SKILL.md"
+    printf '{\n  "origin": "local",\n  "repo": null,\n  "subpath": null,\n  "commit": null,\n  "tier": "local",\n  "shipped_with": "skillman"\n}\n' \
+      > "$SK/SOURCE.json"
+    python3 "$REPO/scripts/skillcore.py" rebuild-index >/dev/null && echo "installed skill 'skillman' into the library (skill-add skillman)"
+  fi
+fi
 [ -e "$LIB/.gitignore" ] || printf '.cache/\n__pycache__/\n*.pyc\n.claude/\n.mcp.json\n' > "$LIB/.gitignore"
 [ -d "$LIB/.git" ] || git -C "$LIB" init -q
 echo "library ready at $LIB"

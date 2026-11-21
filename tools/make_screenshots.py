@@ -1,6 +1,6 @@
 """Render README screenshots (SVG) of every skillman tab against a COPY of a real library.
 
-Usage: uv run --no-project --with textual==8.2.8 --with pyyaml python docs/make_screenshots.py [library-dir]
+Usage: uv run --no-project --with textual==8.2.8 --with pyyaml python tools/make_screenshots.py [library-dir]
 The library is rsync'ed to a temp dir first, so nothing in it is modified. Needs network for the
 Updates tab (git ls-remote against upstream repos).
 """

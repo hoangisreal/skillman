@@ -546,7 +546,8 @@ class ProjectTab(TabBody):
         Binding("space", "toggle", "Select"), Binding("u", "update", "Update"), Binding("U", "update_all", "Update all"),
         Binding("D", "diff", "Diff"), Binding("x", "uninstall", "Remove"), Binding("P", "uninstall_pack", "Remove pack"),
         Binding("a", "adopt", "Adopt"), Binding("t", "pin", "Pin/unpin"), Binding("l", "links", "Fix links"),
-        Binding("s", "suggest", "Suggest"), Binding("o", "doctor", "Doctor"), Binding("c", "change", "Change project"),
+        Binding("s", "suggest", "Suggest"), Binding("o", "doctor", "Doctor"), Binding("v", "verify", "Verify"),
+        Binding("A", "audit", "Audit"), Binding("c", "change", "Change project"),
         Binding("escape", "clear_sel", "Clear sel", show=False),
     ]
 
@@ -663,6 +664,28 @@ class ProjectTab(TabBody):
     def action_doctor(self) -> None:
         res = sc.doctor(self.app_.project)
         self.app_.push_screen(TextView("doctor", "\n".join(f"{ {'ok': '✓', 'warn': '!', 'error': '✗'}[lv]} {m}" for lv, m in res)))
+
+    def action_verify(self) -> None:
+        if not (self.app_.project / ".agents" / sc.MANIFEST).is_file():
+            self.app_.notify("no .agents/skill-manifest.json: verify (and CI) would fail", severity="error")
+            return
+        res = sc.verify_project(self.app_.project)
+        bad = sum(not ok for _, ok, _ in res)
+        head = f"{len(res) - bad}/{len(res)} skills match the manifest" + (f" · {bad} would fail CI" if bad else " · CI would pass")
+        self.app_.push_screen(TextView("verify (CI frozen check)",
+                                       "\n".join([head, ""] + [f"{'✓' if ok else '✗'} {n}: {m}" for n, ok, m in res])))
+
+    def action_audit(self) -> None:
+        try:
+            rep = sc.audit(self.app_.project)
+        except sc.SkillError as e:
+            self.app_.notify(str(e), severity="error"); return
+        icon = {"ok": "✓", "info": "·", "review": "!", "error": "✗"}
+        lines = [", ".join(f"{lv}={sum(r['level'] == lv for r in rep)}" for lv in sc.AUDIT_LEVELS), ""]
+        for r in sorted(rep, key=lambda r: -sc.AUDIT_LEVELS.index(r["level"])):
+            lines.append(f"{icon[r['level']]} {r['name']}" + (f"  ({len(r['executables'])} executable files)" if r["executables"] else ""))
+            lines += [f"    error: {m}" for m in r["errors"]] + [f"    review: {m}" for m in r["review"]]
+        self.app_.push_screen(TextView("audit (offline risk scan)", "\n".join(lines)))
 
     def action_change(self) -> None:
         def done(p: str | None) -> None:

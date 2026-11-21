@@ -35,3 +35,4 @@ jobs:
           export HOME="$RUNNER_TEMP/home" BIN_DIR="$RUNNER_TEMP/home/bin" SKILL_LIBRARY="$RUNNER_TEMP/home/lib"
           mkdir -p "$HOME" && ./install.sh && ./install.sh >/dev/null
           test -L "$BIN_DIR/skillman" && test -d "$SKILL_LIBRARY/skills" && test -e "$SKILL_LIBRARY/packs/web-vue.yaml"
+          python3 scripts/skillcore.py audit "$SKILL_LIBRARY/skills/skillman"   # shipped agent skill is valid and clean

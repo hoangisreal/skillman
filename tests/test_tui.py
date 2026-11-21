@@ -100,6 +100,20 @@ async def main():
         await pilot.pause()
         check(isinstance(app.screen, sm.TextView), "doctor view")
         await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        tv = app.screen
+        check(isinstance(tv, sm.TextView) and "match the manifest" in tv.text and "alpha: ok" in tv.text,
+              f"verify view {getattr(tv, 'text', '')[:120]!r}")
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("A")
+        await pilot.pause()
+        tv = app.screen
+        check(isinstance(tv, sm.TextView) and tv.title_.startswith("audit") and "alpha" in tv.text, "audit view")
+        await pilot.press("escape")
+        await pilot.pause()
         await pilot.press("s")
         await pilot.pause()
         check(isinstance(app.screen, sm.Pick), "suggest picker")

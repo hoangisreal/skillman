@@ -5,7 +5,7 @@ Used by: skill-add (wrapper), skillman (TUI), validate-library.py, import-skills
 verify-repos.py, tick-candidates.py. Stdlib + PyYAML only. Run `skillcore.py -h` for the CLI.
 
 Env overrides (mainly for tests):
-  SKILL_LIBRARY   library root (default: parent of this scripts/ dir)
+  SKILL_LIBRARY   library root (default ~/skill-library)
   SKILLMAN_STATE  state dir for trash + project registry (default ~/.local/state/skillman)
   SKILLCORE_GIT_BASE  upstream URL prefix (default https://github.com/)
   SKILL_TOKEN_BUDGET  per-project skill-description token budget (default 2000)
@@ -200,7 +200,7 @@ def source_of(d: Path) -> str:
         return _LOCK[d.name].get("source", "unknown")
     if d.name in _PROV:
         return _PROV[d.name].get("repository", "unknown")
-    if s.get("origin") == "local-migrated":
+    if s.get("origin") in ("local", "local-migrated"):
         return "local"
     return "unknown"
 
@@ -1478,6 +1478,130 @@ def set_ticks(changes: dict[int, bool]) -> None:
 
 
 # ───────────────────────────── CLI ─────────────────────────────
+# ---------------------------------------------------------------- audit / verify / new
+
+def _audit_targets(target: str | Path | None) -> list[Path]:
+    """A skill dir, a project (its .agents/skills), or the whole library (target None)."""
+    if target is None:
+        if not SKILLS.is_dir():
+            raise SkillError(f"no library skills dir at {SKILLS}")
+        return sorted(p for p in SKILLS.iterdir() if p.is_dir() and not p.name.startswith("."))
+    t = Path(target).expanduser()
+    if (t / "SKILL.md").is_file() and not (t / "SKILL.md").is_symlink():
+        return [t]
+    sk = t / ".agents" / "skills"
+    if sk.is_dir():  # symlinked skill dirs are kept so audit() can flag them
+        return sorted(p for p in sk.iterdir() if (p.is_dir() or p.is_symlink()) and not p.name.startswith("."))
+    raise SkillError(f"{t}: not a skill dir and no .agents/skills inside")
+
+
+AUDIT_LEVELS = ["ok", "info", "review", "error"]
+
+
+def _scan_text(d: Path, files: list[Path], skip: set[Path]) -> list[str]:
+    """SUSPICIOUS patterns in every small text file not already covered by check_skill()."""
+    out = []
+    for f in files:
+        if f in skip or f.is_symlink() or not f.is_file() or f.stat().st_size > 2_000_000:
+            continue
+        raw = f.read_bytes()
+        if b"\0" in raw[:8192]:
+            continue  # binary
+        body = raw.decode("utf-8", errors="ignore")
+        out += [f"{label} in {f.relative_to(d)}" for rx, label in SUSPICIOUS if re.search(rx, body, re.I)]
+    return out
+
+
+def audit(target: str | Path | None = None) -> list[dict]:
+    """Static risk scan (offline): validation errors, risk patterns in every text file, symlinks, executables."""
+    out = []
+    for d in _audit_targets(target):
+        if d.is_symlink():
+            out.append({"name": d.name, "path": str(d), "level": "review", "errors": [],
+                        "review": [f"skill dir is a symlink -> {os.readlink(d)} (not scanned)"], "executables": []})
+            continue
+        errors, warns, _ = check_skill(d)
+        review = [w[len("REVIEW: "):] for w in warns if w.startswith("REVIEW:")]
+        files = sorted(d.rglob("*"))
+        covered = {d / "SKILL.md", *d.glob("scripts/*")}  # already scanned by check_skill
+        review += _scan_text(d, files, covered)
+        review += [f"symlink inside skill: {f.relative_to(d)}" for f in files if f.is_symlink()]
+        exe = [str(f.relative_to(d)) for f in files
+               if f.is_file() and not f.is_symlink() and (f.suffix in SCRIPT_EXT or os.access(f, os.X_OK))]
+        level = "error" if errors else "review" if review else "info" if exe else "ok"
+        out.append({"name": d.name, "path": str(d), "level": level, "errors": errors, "review": review, "executables": exe})
+    return out
+
+
+def audit_failed(rep: list[dict], fail_on: str) -> bool:
+    if fail_on == "never":
+        return False
+    bar = AUDIT_LEVELS.index(fail_on)
+    return any(AUDIT_LEVELS.index(r["level"]) >= bar for r in rep)
+
+
+def verify_project(d: Path) -> list[tuple[str, bool, str]]:
+    """Frozen check for CI: committed copies must match the manifest hashes. Needs no library."""
+    d = Path(d)
+    man = read_manifest(d)
+    sk = d / ".agents" / "skills"
+    on_disk = ({p.name for p in sk.iterdir() if (p.is_dir() or p.is_symlink()) and not p.name.startswith(".")}
+               if sk.is_dir() else set())
+    res = []
+    for name in sorted(set(man["skills"]) | on_disk):
+        e, dest = man["skills"].get(name), _dest(d, name)
+        if e is None:
+            res.append((name, False, "untracked: on disk but not in the manifest (run: skillcore.py adopt)"))
+        elif dest.is_symlink() or not (dest / "SKILL.md").is_file():
+            res.append((name, False, "missing, or not a real directory"))
+        elif not _link_ok(d, name):
+            res.append((name, False, "broken .claude/skills link (run: skillcore.py repair-links)"))
+        elif tree_hash(dest) != e.get("tree_hash"):
+            if e.get("pinned"):
+                res.append((name, True, "pinned, edited locally"))
+            else:
+                res.append((name, False, "content differs from the manifest hash (edited? pin it, or run update)"))
+        else:
+            res.append((name, True, "ok"))
+    return res
+
+
+SKILL_TEMPLATE = """---
+name: {name}
+description: {description}
+---
+
+# {title}
+
+## When to use
+- The situations in which an agent should load this skill.
+
+## Steps
+1. Short, concrete instructions. Put long reference material in files next to this one and link them.
+
+## Checks
+- How the agent verifies the job is done.
+"""
+
+
+def new_skill(name: str, description: str = "") -> Path:
+    """Scaffold a local skill in the library (no upstream, never touched by update-library)."""
+    check_name(name)
+    d = SKILLS / name
+    if d.exists():
+        raise SkillError(f"{name} already exists in the library")
+    desc = " ".join(description.split()) or f"TODO: what {name} does and when an agent should use it."
+    if len(desc) > 1024:
+        raise SkillError("description is longer than 1024 characters")
+    d.mkdir(parents=True)
+    atomic_write(d / "SKILL.md", SKILL_TEMPLATE.format(name=name, description=json.dumps(desc, ensure_ascii=False),
+                                                       title=name.replace("-", " ").capitalize()))
+    atomic_write(d / "SOURCE.json", json.dumps({"origin": "local", "repo": None, "subpath": None, "commit": None,
+                                                "created_at": now(), "tier": "local"}, indent=2) + "\n")
+    rebuild_index()
+    return d
+
+
 def _print_results(res) -> int:
     rc = 0
     for name, ok, msg in res:
@@ -1541,6 +1665,14 @@ def main(argv=None) -> int:
     p.add_argument("action", choices=["list", "restore", "empty"]); p.add_argument("id", nargs="?")
     p.add_argument("--yes", action="store_true")
     sp.add_parser("rebuild-index", help="validate library and rebuild INDEX")
+    p = sp.add_parser("audit", help="offline risk scan of a project's skills, one skill dir, or --library")
+    p.add_argument("target", nargs="?"); p.add_argument("--library", action="store_true")
+    p.add_argument("--fail-on", choices=["review", "error", "never"], default="review")
+    p.add_argument("--json", action="store_true"); p.add_argument("-q", action="store_true", help="only list findings")
+    p = sp.add_parser("verify", help="CI check: project skills match the manifest (no library needed)")
+    p.add_argument("dir", nargs="?", default=".")
+    p = sp.add_parser("new", help="scaffold a local skill in the library"); p.add_argument("name")
+    p.add_argument("-d", "--description", default="")
     a = ap.parse_args(argv)
 
     try:
@@ -1678,6 +1810,33 @@ def main(argv=None) -> int:
             if not a.yes:
                 raise SkillError("refusing to empty trash without --yes")
             print(f"deleted {empty_trash()} trash entries"); return 0
+        if a.cmd == "audit":
+            if a.library and a.target:
+                raise SkillError("give either a target or --library, not both")
+            rep = audit(None if a.library else resolve_project(a.target or "."))
+            if a.json:
+                print(json.dumps(rep, indent=1))
+                return 1 if audit_failed(rep, a.fail_on) else 0
+            icon = {"ok": "✓", "info": "·", "review": "!", "error": "✗"}
+            cnt = {lv: sum(r["level"] == lv for r in rep) for lv in AUDIT_LEVELS}
+            for r in rep:
+                if a.q and r["level"] in ("ok", "info"):
+                    continue
+                print(f"{icon[r['level']]} {r['name']}" + (f"  ({len(r['executables'])} executable files)" if r["executables"] else ""))
+                for m in r["errors"]:
+                    print(f"    error: {m}")
+                for m in r["review"]:
+                    print(f"    review: {m}")
+            print(f"{len(rep)} skills: " + ", ".join(f"{k}={v}" for k, v in cnt.items()))
+            return 1 if audit_failed(rep, a.fail_on) else 0
+        if a.cmd == "verify":
+            d = resolve_project(a.dir)
+            if not (d / ".agents" / "skill-manifest.json").is_file():
+                raise SkillError(f"no .agents/skill-manifest.json in {d}")
+            return _print_results(verify_project(d))
+        if a.cmd == "new":
+            d = new_skill(a.name, a.description)
+            print(f"✓ created {d}/SKILL.md — edit it, then: skill-add {a.name}"); return 0
         if a.cmd == "rebuild-index":
             rows, e, w = rebuild_index()
             print(f"skills={len(rows)} errors={len(e)} warnings={len(w)}  (details: {LIB / 'VALIDATION.md'})")
