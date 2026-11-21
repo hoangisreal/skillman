@@ -1,0 +1,347 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 834" font-family="'JetBrains Mono','Fira Code','DejaVu Sans Mono',Menlo,Consolas,monospace" font-size="14" xml:space="preserve">
+<!-- rendered from a real skillman TUI frame by internal/tui/screenshots_test.go -->
+<rect width="100%" height="100%" rx="8" fill="#282828"/>
+<circle cx="18" cy="14" r="5" fill="#ea6962"/><circle cx="36" cy="14" r="5" fill="#d8a657"/><circle cx="54" cy="14" r="5" fill="#a9b665"/>
+<text x="724" y="18" fill="#928374" text-anchor="middle">Packs: composites via extends, token cost per pack</text>
+<text x="10.0" y="34.0" fill="#d4be98" textLength="168.0" lengthAdjust="spacingAndGlyphs"> 1 Library  2 Browse</text>
+<rect x="186.4" y="20.5" width="76.1" height="18" fill="#d4be98"/>
+<text x="186.4" y="34.0" fill="#282828" font-weight="bold" textLength="67.2" lengthAdjust="spacingAndGlyphs"> 3 Packs</text>
+<text x="262.0" y="34.0" fill="#d4be98" textLength="470.4" lengthAdjust="spacingAndGlyphs"> 4 Project  5 Updates  6 Upstream  7 Validation  8 Trash</text>
+<text x="1295.2" y="34.0" fill="#d4be98" opacity="0.6" textLength="134.4" lengthAdjust="spacingAndGlyphs"> ~/skill-library</text>
+<text x="10.0" y="52.0" fill="#89b482" textLength="714.0" lengthAdjust="spacingAndGlyphs">╭ Packs ────────────────────────────────────────────────────────────────────────────╮</text>
+<text x="724.0" y="52.0" fill="#665c54" textLength="714.0" lengthAdjust="spacingAndGlyphs">╭ Members ──────────────────────────────────────────────────────────────────────────╮</text>
+<text x="10.0" y="70.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="26.8" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">a</text>
+<text x="35.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="43.6" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">k</text>
+<text x="203.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="211.6" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">k</text>
+<text x="220.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="228.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="236.8" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="245.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="262.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="270.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="278.8" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="287.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">j</text>
+<text x="295.6" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="304.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="312.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="346.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="354.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="362.8" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="371.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="379.6" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="388.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="396.4" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="404.8" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="413.2" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="421.6" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="430.0" y="70.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">n</text>
+<text x="715.6" y="70.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="70.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="70.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">@web-vue: Vue 3 / Nuxt / Pinia / Vite stack</text>
+<text x="1429.6" y="70.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="88.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="88.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@ci-github            5</text>
+<text x="346.0" y="88.0" fill="#d4be98" opacity="0.6" textLength="235.2" lengthAdjust="spacingAndGlyphs">GitHub Actions + PR workflow</text>
+<text x="715.6" y="88.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="88.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="88.0" fill="#d4be98" opacity="0.6" textLength="680.4" lengthAdjust="spacingAndGlyphs">extends: - · 13 skills · ≈364 tokens · stacks: Vue / Nuxt · install: skillman add</text>
+<text x="1429.6" y="88.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="106.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="106.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@cloudflare           7</text>
+<text x="346.0" y="106.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Cloudflare Workers / Wrangler / Durable Ob…</text>
+<text x="715.6" y="106.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="106.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="106.0" fill="#d4be98" opacity="0.6" textLength="67.2" lengthAdjust="spacingAndGlyphs">@web-vue</text>
+<text x="1429.6" y="106.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="124.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="124.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@core                 4</text>
+<text x="262.0" y="124.0" fill="#a9b665" textLength="16.8" lengthAdjust="spacingAndGlyphs">ok</text>
+<text x="346.0" y="124.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Baseline engineering workflow for any proj…</text>
+<text x="715.6" y="124.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="124.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="740.8" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">k</text>
+<text x="749.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="757.6" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="766.0" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">l</text>
+<text x="959.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="967.6" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="976.0" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="984.4" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">j</text>
+<text x="992.8" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="1001.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="1009.6" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="1043.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="1051.6" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="1060.0" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">s</text>
+<text x="1068.4" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">c</text>
+<text x="1076.8" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="1085.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="1093.6" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">p</text>
+<text x="1102.0" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">t</text>
+<text x="1110.4" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="1118.8" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">o</text>
+<text x="1127.2" y="124.0" fill="#d4be98" font-weight="bold" text-decoration="underline" textLength="8.4" lengthAdjust="spacingAndGlyphs">n</text>
+<text x="1429.6" y="124.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="142.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="142.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@data-eng             12</text>
+<text x="346.0" y="142.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Data engineering: dbt, Airflow, Dagster, K…</text>
+<text x="715.6" y="142.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="142.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="732.4" y="128.5" width="697.7" height="18" fill="#665c54"/>
+<text x="732.4" y="142.0" fill="#d4be98" textLength="445.2" lengthAdjust="spacingAndGlyphs">vue                                  ⚠ not in library</text>
+<text x="1429.6" y="142.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="160.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="160.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@data-science         5</text>
+<text x="346.0" y="160.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Notebook-style analysis: sklearn, polars, …</text>
+<text x="715.6" y="160.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="160.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="160.0" fill="#d4be98" textLength="151.2" lengthAdjust="spacingAndGlyphs">vue-best-practices</text>
+<text x="959.2" y="160.0" fill="#a9b665" textLength="16.8" lengthAdjust="spacingAndGlyphs">ok</text>
+<text x="1043.2" y="160.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">MUST be used for Vue.js tasks. Strongly rec…</text>
+<text x="1429.6" y="160.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="178.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="178.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@docker               5</text>
+<text x="346.0" y="178.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Dockerfiles, Compose, build strategy, safe…</text>
+<text x="715.6" y="178.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="178.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="178.0" fill="#d4be98" textLength="210.0" lengthAdjust="spacingAndGlyphs">vue-router-best-practices</text>
+<text x="1043.2" y="178.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">Vue Router 4 patterns, navigation guards, r…</text>
+<text x="1429.6" y="178.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="196.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="196.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@docs-site            2</text>
+<text x="346.0" y="196.0" fill="#d4be98" opacity="0.6" textLength="268.8" lengthAdjust="spacingAndGlyphs">Docs sites, slides and user docs</text>
+<text x="715.6" y="196.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="196.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="196.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">vue-pinia-best-practices</text>
+<text x="959.2" y="196.0" fill="#a9b665" textLength="16.8" lengthAdjust="spacingAndGlyphs">ok</text>
+<text x="1043.2" y="196.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">Pinia stores, state management patterns, st…</text>
+<text x="1429.6" y="196.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="214.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="214.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@flutter              13</text>
+<text x="346.0" y="214.0" fill="#d4be98" opacity="0.6" textLength="117.6" lengthAdjust="spacingAndGlyphs">Flutter / Dart</text>
+<text x="715.6" y="214.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="214.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="214.0" fill="#d4be98" textLength="218.4" lengthAdjust="spacingAndGlyphs">vue-testing-best-practices</text>
+<text x="1043.2" y="214.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">Use for Vue.js testing. Covers Vitest, Vue …</text>
+<text x="1429.6" y="214.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="232.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="232.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@fullstack-react      29</text>
+<text x="346.0" y="232.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">React frontend + Node backend + Postgres +…</text>
+<text x="715.6" y="232.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="232.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="232.0" fill="#d4be98" textLength="134.4" lengthAdjust="spacingAndGlyphs">vue-debug-guides</text>
+<text x="1043.2" y="232.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">Vue 3 debugging and error handling for runt…</text>
+<text x="1429.6" y="232.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="250.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="250.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@fullstack-vue        37</text>
+<text x="346.0" y="250.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Vue frontend + Node backend + Postgres + D…</text>
+<text x="715.6" y="250.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="250.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="250.0" fill="#d4be98" textLength="218.4" lengthAdjust="spacingAndGlyphs">create-adaptable-composab…</text>
+<text x="1043.2" y="250.0" fill="#d4be98" opacity="0.6" textLength="369.6" lengthAdjust="spacingAndGlyphs">Create a library-grade Vue composable that …</text>
+<text x="1429.6" y="250.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="268.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="268.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@iac                  8</text>
+<text x="346.0" y="268.0" fill="#d4be98" opacity="0.6" textLength="352.8" lengthAdjust="spacingAndGlyphs">Infrastructure as code: Terraform + Pulumi</text>
+<text x="715.6" y="268.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="268.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="268.0" fill="#d4be98" textLength="33.6" lengthAdjust="spacingAndGlyphs">nuxt</text>
+<text x="1043.2" y="268.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="268.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="286.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="286.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@jvm                  2</text>
+<text x="346.0" y="286.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Java / Kotlin backend (Spring Boot, Quarku…</text>
+<text x="715.6" y="286.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="286.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="286.0" fill="#d4be98" textLength="42.0" lengthAdjust="spacingAndGlyphs">nitro</text>
+<text x="1043.2" y="286.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="286.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="304.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="304.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@k8s-gitops           3</text>
+<text x="346.0" y="304.0" fill="#d4be98" opacity="0.6" textLength="226.8" lengthAdjust="spacingAndGlyphs">Kubernetes GitOps with Flux</text>
+<text x="715.6" y="304.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="304.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="304.0" fill="#d4be98" textLength="42.0" lengthAdjust="spacingAndGlyphs">pinia</text>
+<text x="1043.2" y="304.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="304.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="322.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="322.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@llm-apps             13</text>
+<text x="346.0" y="322.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">LLM apps / agents / RAG (Claude API, MCP, …</text>
+<text x="715.6" y="322.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="322.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="322.0" fill="#d4be98" textLength="33.6" lengthAdjust="spacingAndGlyphs">vite</text>
+<text x="1043.2" y="322.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="322.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="340.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="340.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@ml-project           17</text>
+<text x="346.0" y="340.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">End-to-end ML project: Python + training +…</text>
+<text x="715.6" y="340.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="340.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="340.0" fill="#d4be98" textLength="50.4" lengthAdjust="spacingAndGlyphs">vitest</text>
+<text x="1043.2" y="340.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="340.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="358.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="358.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@ml-serve             8</text>
+<text x="346.0" y="358.0" fill="#d4be98" opacity="0.6" textLength="352.8" lengthAdjust="spacingAndGlyphs">Model serving: vLLM, BentoML, local models</text>
+<text x="715.6" y="358.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="358.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="732.4" y="358.0" fill="#d4be98" textLength="50.4" lengthAdjust="spacingAndGlyphs">unocss</text>
+<text x="1043.2" y="358.0" fill="#d8a657" textLength="134.4" lengthAdjust="spacingAndGlyphs">⚠ not in library</text>
+<text x="1429.6" y="358.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="376.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="376.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@ml-tracking          6</text>
+<text x="346.0" y="376.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Experiment tracking + LLM eval/tracing (W&amp;…</text>
+<text x="715.6" y="376.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="376.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="376.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="394.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="394.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@ml-train             8</text>
+<text x="346.0" y="394.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Model training / fine-tuning (PyTorch, Hug…</text>
+<text x="715.6" y="394.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="394.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="394.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="412.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="412.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@mobile-rn            12</text>
+<text x="346.0" y="412.0" fill="#d4be98" opacity="0.6" textLength="159.6" lengthAdjust="spacingAndGlyphs">Expo / React Native</text>
+<text x="715.6" y="412.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="412.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="412.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="430.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="430.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@node-backend         12</text>
+<text x="346.0" y="430.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Node/TS backend: NestJS, Hono, Prisma, Gra…</text>
+<text x="715.6" y="430.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="430.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="430.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="448.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="448.0" fill="#d4be98" textLength="201.6" lengthAdjust="spacingAndGlyphs">@nosql                10</text>
+<text x="346.0" y="448.0" fill="#d4be98" opacity="0.6" textLength="176.4" lengthAdjust="spacingAndGlyphs">Redis, MongoDB, Neo4j</text>
+<text x="715.6" y="448.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="448.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="448.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="466.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="466.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@office-docs          4</text>
+<text x="346.0" y="466.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Office files: docx, pptx, xlsx, pdf, slides</text>
+<text x="715.6" y="466.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="466.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="466.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="484.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="484.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@postgres             7</text>
+<text x="346.0" y="484.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">PostgreSQL design, migrations, search, tun…</text>
+<text x="715.6" y="484.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="484.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="484.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="502.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="502.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@python               3</text>
+<text x="346.0" y="502.0" fill="#d4be98" opacity="0.6" textLength="302.4" lengthAdjust="spacingAndGlyphs">Modern Python projects and packaging</text>
+<text x="715.6" y="502.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="502.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="502.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="520.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="520.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@qt                   6</text>
+<text x="346.0" y="520.0" fill="#d4be98" opacity="0.6" textLength="117.6" lengthAdjust="spacingAndGlyphs">Qt / QML / C++</text>
+<text x="715.6" y="520.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="520.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="520.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="538.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="538.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@research-writing     2</text>
+<text x="346.0" y="538.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Research papers: find, read, cite, write, …</text>
+<text x="715.6" y="538.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="538.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="538.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="556.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="556.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@security             7</text>
+<text x="346.0" y="556.0" fill="#d4be98" opacity="0.6" textLength="268.8" lengthAdjust="spacingAndGlyphs">Security review, SAST, hardening</text>
+<text x="715.6" y="556.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="556.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="556.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="574.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="574.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@skill-authoring      4</text>
+<text x="346.0" y="574.0" fill="#d4be98" opacity="0.6" textLength="285.6" lengthAdjust="spacingAndGlyphs">Writing and reviewing agent skills</text>
+<text x="715.6" y="574.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="574.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="574.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="592.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="592.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@vision               6</text>
+<text x="346.0" y="592.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Computer vision (YOLO / Ultralytics, HF vi…</text>
+<text x="715.6" y="592.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="592.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="592.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="610.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="610.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@web-quality          4</text>
+<text x="346.0" y="610.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Frontend quality: UI guidelines, web perf,…</text>
+<text x="715.6" y="610.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="610.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="610.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="628.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="628.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@web-react            5</text>
+<text x="346.0" y="628.0" fill="#d4be98" opacity="0.6" textLength="252.0" lengthAdjust="spacingAndGlyphs">React / Next.js / shadcn stack</text>
+<text x="715.6" y="628.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="628.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="628.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="646.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="646.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@web-svelte           4</text>
+<text x="346.0" y="646.0" fill="#d4be98" opacity="0.6" textLength="151.2" lengthAdjust="spacingAndGlyphs">Svelte / SvelteKit</text>
+<text x="715.6" y="646.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="646.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="646.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="664.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="18.4" y="650.5" width="697.7" height="18" fill="#d4be98"/>
+<text x="18.4" y="664.0" fill="#282828" textLength="604.8" lengthAdjust="spacingAndGlyphs">@web-vue              13               Vue 3 / Nuxt / Pinia / Vite stack</text>
+<text x="715.6" y="664.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="664.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="664.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="682.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="18.4" y="682.0" fill="#d4be98" textLength="193.2" lengthAdjust="spacingAndGlyphs">@web3                 6</text>
+<text x="346.0" y="682.0" fill="#d4be98" opacity="0.6" textLength="361.2" lengthAdjust="spacingAndGlyphs">Smart contracts: Solidity, Solana, Sui (Op…</text>
+<text x="715.6" y="682.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="682.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="682.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="700.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="715.6" y="700.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="700.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="700.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="718.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="715.6" y="718.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="718.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="718.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="736.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="715.6" y="736.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="736.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="736.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="754.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="715.6" y="754.0" fill="#89b482" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="724.0" y="754.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="1429.6" y="754.0" fill="#665c54" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="10.0" y="772.0" fill="#89b482" textLength="714.0" lengthAdjust="spacingAndGlyphs">╰───────────────────────────────────────────────────────────────────────────────────╯</text>
+<text x="724.0" y="772.0" fill="#665c54" textLength="714.0" lengthAdjust="spacingAndGlyphs">╰───────────────────────────────────────────────────────────────────────────────────╯</text>
+<text x="1228.0" y="790.0" fill="#d4be98" opacity="0.6" textLength="210.0" lengthAdjust="spacingAndGlyphs"> project: ~/code/shop-web</text>
+<text x="10.0" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">i</text>
+<text x="18.4" y="808.0" fill="#d4be98" textLength="67.2" lengthAdjust="spacingAndGlyphs"> install</text>
+<text x="102.4" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">u</text>
+<text x="110.8" y="808.0" fill="#d4be98" textLength="168.0" lengthAdjust="spacingAndGlyphs"> remove from project</text>
+<text x="295.6" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">n</text>
+<text x="304.0" y="808.0" fill="#d4be98" textLength="33.6" lengthAdjust="spacingAndGlyphs"> new</text>
+<text x="354.4" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">a</text>
+<text x="362.8" y="808.0" fill="#d4be98" textLength="84.0" lengthAdjust="spacingAndGlyphs"> add skill</text>
+<text x="463.6" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">x</text>
+<text x="472.0" y="808.0" fill="#d4be98" textLength="109.2" lengthAdjust="spacingAndGlyphs"> remove skill</text>
+<text x="598.0" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">e</text>
+<text x="606.4" y="808.0" fill="#d4be98" textLength="100.8" lengthAdjust="spacingAndGlyphs"> description</text>
+<text x="724.0" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">E</text>
+<text x="732.4" y="808.0" fill="#d4be98" textLength="67.2" lengthAdjust="spacingAndGlyphs"> extends</text>
+<text x="816.4" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">r</text>
+<text x="824.8" y="808.0" fill="#d4be98" textLength="58.8" lengthAdjust="spacingAndGlyphs"> rename</text>
+<text x="900.4" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">d</text>
+<text x="908.8" y="808.0" fill="#d4be98" textLength="58.8" lengthAdjust="spacingAndGlyphs"> delete</text>
+<text x="984.4" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">v</text>
+<text x="992.8" y="808.0" fill="#d4be98" textLength="109.2" lengthAdjust="spacingAndGlyphs"> vendor packs</text>
+<text x="1118.8" y="808.0" fill="#89b482" font-weight="bold" textLength="8.4" lengthAdjust="spacingAndGlyphs">?</text>
+<text x="1127.2" y="808.0" fill="#d4be98" textLength="42.0" lengthAdjust="spacingAndGlyphs"> help</text>
+<text x="1186.0" y="808.0" fill="#89b482" font-weight="bold" textLength="50.4" lengthAdjust="spacingAndGlyphs">ctrl+p</text>
+<text x="1236.4" y="808.0" fill="#d4be98" textLength="75.6" lengthAdjust="spacingAndGlyphs"> commands</text>
+</svg>

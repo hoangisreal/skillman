@@ -9,30 +9,31 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@v5
-      - name: Install test dependencies
-        run: python -m pip install pyyaml textual==8.2.8
-      - name: Lint
-        run: uvx ruff@0.8.4 check .
+          go-version-file: go.mod
+      - name: Format
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: Vet
+        run: go vet ./...
+      - name: Tests (core compat goldens, project lifecycle, upstream updates, safety gates, CLI, TUI model)
+        run: go test -race -count=1 ./...
+      - name: Build
+        run: go build -o skillman ./cmd/skillman
       - name: Shell syntax
-        run: bash -n bin/skill-add bin/skill-search install.sh
-      - name: Core tests (packs, projects, upstream updates, safety gates)
-        run: python tests/test_skillcore.py
-      - name: TUI tests (Textual pilot)
-        run: python tests/test_tui.py
+        run: bash -n install.sh
       - name: Installer (temp HOME, idempotent)
         run: |
           export HOME="$RUNNER_TEMP/home" BIN_DIR="$RUNNER_TEMP/home/bin" SKILL_LIBRARY="$RUNNER_TEMP/home/lib"
           mkdir -p "$HOME" && ./install.sh && ./install.sh >/dev/null
-          test -L "$BIN_DIR/skillman" && test -d "$SKILL_LIBRARY/skills" && test -e "$SKILL_LIBRARY/packs/web-vue.yaml"
-          python3 scripts/skillcore.py audit "$SKILL_LIBRARY/skills/skillman"   # shipped agent skill is valid and clean
+          test -x "$BIN_DIR/skillman" && test -L "$BIN_DIR/skill-add" && test -e "$SKILL_LIBRARY/packs/web-vue.yaml"
+          test -L "$HOME/.claude/skills/skillman" && test -L "$HOME/.agents/skills/skillman"
+          ls "$BIN_DIR" | grep -c bak && exit 1 || true
+          "$BIN_DIR/skillman" audit "$SKILL_LIBRARY/skills/skillman"   # shipped agent skill is valid and clean

@@ -1,8 +1,7 @@
-__pycache__/
-*.pyc
 .cache/
-.venv/
-.ruff_cache/
 .claude/
 .mcp.json
 .dev-lib/
+/skillman
+*.test
+*.out

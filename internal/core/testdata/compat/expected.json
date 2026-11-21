@@ -1,0 +1,736 @@
+{
+ "tree_hash": {
+  "Bad_Name": "f1fd7818f780ba3d",
+  "badyaml": "19404bba6412d906",
+  "basic": "b1f929ed6e7bac1c",
+  "dupkeys": "2c403032f4dcf8e4",
+  "envread": "0a454e7629b24cb8",
+  "envsample": "59c2d5f732f10a19",
+  "links": "a6b341e6c8be2246",
+  "nodesc": "591a8fd8a7cbc1e1",
+  "nofm": "0ad2cb43f53928fe",
+  "risky": "426a694b7b8b5307",
+  "sortcase": "00658b8baa897119",
+  "toolslist": "94a8eede00ccb48e",
+  "wrong-name": "ab76eb3cfbbcd747"
+ },
+ "check": {
+  "Bad_Name": {
+   "errors": [
+    "directory name is not kebab-case"
+   ],
+   "warns": [],
+   "row": {
+    "name": "Bad_Name",
+    "tags": [
+     "general"
+    ],
+    "description": "y",
+    "lines": 5,
+    "has_scripts": false
+   }
+  },
+  "badyaml": {
+   "errors": [
+    "invalid YAML: while parsing a flow sequence",
+    "frontmatter name None != directory",
+    "missing description"
+   ],
+   "warns": [],
+   "row": {
+    "name": "badyaml",
+    "tags": [
+     "general"
+    ],
+    "description": "",
+    "lines": 4,
+    "has_scripts": false
+   }
+  },
+  "basic": {
+   "errors": [],
+   "warns": [],
+   "row": {
+    "name": "basic",
+    "tags": [
+     "web",
+     "testing"
+    ],
+    "description": "Builds Vue 3 apps with Pinia and Vitest.",
+    "lines": 7,
+    "has_scripts": true
+   }
+  },
+  "dupkeys": {
+   "errors": [],
+   "warns": [],
+   "row": {
+    "name": "dupkeys",
+    "tags": [
+     "general"
+    ],
+    "description": "second wins",
+    "lines": 7,
+    "has_scripts": false
+   }
+  },
+  "envread": {
+   "errors": [],
+   "warns": [
+    "REVIEW: reads .env in SKILL.md"
+   ],
+   "row": {
+    "name": "envread",
+    "tags": [
+     "general"
+    ],
+    "description": "x",
+    "lines": 6,
+    "has_scripts": false
+   }
+  },
+  "envsample": {
+   "errors": [],
+   "warns": [],
+   "row": {
+    "name": "envsample",
+    "tags": [
+     "general"
+    ],
+    "description": "reads cat .env.example only, and source .env.template",
+    "lines": 7,
+    "has_scripts": false
+   }
+  },
+  "links": {
+   "errors": [],
+   "warns": [],
+   "row": {
+    "name": "links",
+    "tags": [
+     "general"
+    ],
+    "description": "has links",
+    "lines": 5,
+    "has_scripts": false
+   }
+  },
+  "nodesc": {
+   "errors": [
+    "missing description"
+   ],
+   "warns": [],
+   "row": {
+    "name": "nodesc",
+    "tags": [
+     "general"
+    ],
+    "description": "",
+    "lines": 4,
+    "has_scripts": false
+   }
+  },
+  "nofm": {
+   "errors": [
+    "frontmatter must start on line 1 with ---",
+    "frontmatter name None != directory",
+    "missing description"
+   ],
+   "warns": [],
+   "row": {
+    "name": "nofm",
+    "tags": [
+     "general"
+    ],
+    "description": "",
+    "lines": 2,
+    "has_scripts": false
+   }
+  },
+  "risky": {
+   "errors": [],
+   "warns": [
+    "description 1162 chars > 1024",
+    "SKILL.md has 530 lines > 500",
+    "broken link: references/nope.md",
+    "REVIEW: frontmatter registers hooks",
+    "REVIEW: broad allowed-tools: Bash Read",
+    "REVIEW: pipe download to shell in SKILL.md",
+    "REVIEW: reads .env in SKILL.md",
+    "REVIEW: reads credential dir in scripts/x.py"
+   ],
+   "row": {
+    "name": "risky",
+    "tags": [
+     "general"
+    ],
+    "description": "Ünïcode désc word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word wo",
+    "lines": 530,
+    "has_scripts": true
+   }
+  },
+  "sortcase": {
+   "errors": [],
+   "warns": [],
+   "row": {
+    "name": "sortcase",
+    "tags": [
+     "general"
+    ],
+    "description": "ordering",
+    "lines": 5,
+    "has_scripts": false
+   }
+  },
+  "toolslist": {
+   "errors": [],
+   "warns": [
+    "REVIEW: broad allowed-tools: Read Bash(*)"
+   ],
+   "row": {
+    "name": "toolslist",
+    "tags": [
+     "cloud-devops"
+    ],
+    "description": "Deploys Docker and Kubernetes with Terraform",
+    "lines": 8,
+    "has_scripts": false
+   }
+  },
+  "wrong-name": {
+   "errors": [
+    "frontmatter name 'other' != directory"
+   ],
+   "warns": [],
+   "row": {
+    "name": "wrong-name",
+    "tags": [
+     "general"
+    ],
+    "description": "x",
+    "lines": 5,
+    "has_scripts": false
+   }
+  }
+ },
+ "tokens": {
+  "Bad_Name": 10,
+  "badyaml": 8,
+  "basic": 19,
+  "dupkeys": 12,
+  "envread": 10,
+  "envsample": 23,
+  "links": 11,
+  "nodesc": 9,
+  "nofm": 8,
+  "risky": 299,
+  "sortcase": 12,
+  "toolslist": 21,
+  "wrong-name": 9
+ },
+ "pack_yaml": [
+  {
+   "pack": {
+    "name": "p0",
+    "description": "Vue 3 / Nuxt / Pinia / Vite stack",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": []
+   },
+   "yaml": "name: p0\ndescription: Vue 3 / Nuxt / Pinia / Vite stack\nextends:\n- core\n- web-vue\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p1",
+    "description": "Baseline engineering workflow for any project (keep small: loaded every session)",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p1\ndescription: 'Baseline engineering workflow for any project (keep small: loaded every session)'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p2",
+    "description": "",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p2\ndescription: ''\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p3",
+    "description": "yes",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p3\ndescription: 'yes'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p4",
+    "description": "123",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p4\ndescription: '123'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p5",
+    "description": "1.5",
+    "extends": [],
+    "skills": []
+   },
+   "yaml": "name: p5\ndescription: '1.5'\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p6",
+    "description": "null",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p6\ndescription: 'null'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p7",
+    "description": "2026-11-21",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p7\ndescription: '2026-11-21'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p8",
+    "description": "- leading dash",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p8\ndescription: '- leading dash'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p9",
+    "description": "# hash",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p9\ndescription: '# hash'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p10",
+    "description": "has # inside",
+    "extends": [],
+    "skills": []
+   },
+   "yaml": "name: p10\ndescription: 'has # inside'\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p11",
+    "description": "a: b",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p11\ndescription: 'a: b'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p12",
+    "description": "ends with:",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p12\ndescription: 'ends with:'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p13",
+    "description": "it's fine",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p13\ndescription: it's fine\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p14",
+    "description": "'quoted'",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p14\ndescription: '''quoted'''\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p15",
+    "description": " leading space",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": []
+   },
+   "yaml": "name: p15\ndescription: ' leading space'\nextends:\n- core\n- web-vue\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p16",
+    "description": "trailing space ",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p16\ndescription: 'trailing space '\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p17",
+    "description": "Ünïcode – dash",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p17\ndescription: Ünïcode – dash\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p18",
+    "description": "@at",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p18\ndescription: '@at'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p19",
+    "description": "`tick`",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p19\ndescription: '`tick`'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p20",
+    "description": "50% off",
+    "extends": [],
+    "skills": []
+   },
+   "yaml": "name: p20\ndescription: 50% off\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p21",
+    "description": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x ",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p21\ndescription: 'x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x\n  x x x x x x x x x x x x x x x x x x x x x x x x x x '\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p22",
+    "description": "LLM apps / agents / RAG (Claude API, MCP, LangChain, vector DBs) with a very long tail of words that keeps going",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p22\ndescription: LLM apps / agents / RAG (Claude API, MCP, LangChain, vector DBs) with a very long tail of\n  words that keeps going\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p23",
+    "description": "Long description: with colon and words and words and words and words and words and words and words and words and words and words and words and words and words and words and words ",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p23\ndescription: 'Long description: with colon and words and words and words and words and words and words\n  and words and words and words and words and words and words and words and words and words '\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p24",
+    "description": "tab\tinside",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p24\ndescription: \"tab\\tinside\"\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p25",
+    "description": "[brackets]",
+    "extends": [],
+    "skills": []
+   },
+   "yaml": "name: p25\ndescription: '[brackets]'\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p26",
+    "description": "{braces}",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p26\ndescription: '{braces}'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p27",
+    "description": "a,b",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p27\ndescription: a,b\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p28",
+    "description": "?q",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p28\ndescription: ?q\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p29",
+    "description": "?",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p29\ndescription: '?'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p30",
+    "description": ":",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": []
+   },
+   "yaml": "name: p30\ndescription: ':'\nextends:\n- core\n- web-vue\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p31",
+    "description": "-",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p31\ndescription: '-'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p32",
+    "description": "~",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p32\ndescription: '~'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p33",
+    "description": "=",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p33\ndescription: '='\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p34",
+    "description": "<<",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p34\ndescription: '<<'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p35",
+    "description": "0x1F",
+    "extends": [],
+    "skills": []
+   },
+   "yaml": "name: p35\ndescription: '0x1F'\nskills: []\n"
+  },
+  {
+   "pack": {
+    "name": "p36",
+    "description": "+1",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p36\ndescription: '+1'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p37",
+    "description": "TRUE",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p37\ndescription: 'TRUE'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p38",
+    "description": "On",
+    "extends": [],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p38\ndescription: 'On'\nskills:\n- alpha\n- beta-gamma\n"
+  },
+  {
+   "pack": {
+    "name": "p39",
+    "description": "a\nb",
+    "extends": [
+     "core",
+     "web-vue"
+    ],
+    "skills": [
+     "alpha",
+     "beta-gamma"
+    ]
+   },
+   "yaml": "name: p39\ndescription: 'a\n\n  b'\nextends:\n- core\n- web-vue\nskills:\n- alpha\n- beta-gamma\n"
+  }
+ ],
+ "diff": {
+  "ab": "--- library/SKILL.md\n+++ project/SKILL.md\n@@ -3,7 +3,7 @@\n line 2\n line 3\n line 4\n-line 5\n+line five\n line 6\n line 7\n line 8\n@@ -23,7 +23,6 @@\n line 22\n line 23\n line 24\n-line 25\n line 26\n line 27\n line 28\n--- library/gone.txt\n+++ project/gone.txt\n@@ -1 +0,0 @@\n-only in a\n--- library/new.txt\n+++ project/new.txt\n@@ -0,0 +1,2 @@\n+only in b\n+no newline",
+  "labels": "--- current/SKILL.md\n+++ upstream/SKILL.md\n@@ -3,7 +3,7 @@\n line 2\n line 3\n line 4\n-line 5\n+line five\n line 6\n line 7\n line 8\n@@ -23,7 +23,6 @@\n line 22\n line 23\n line 24\n-line 25\n line 26\n line 27\n line 28\n--- current/gone.txt\n+++ upstream/gone.txt\n@@ -1 +0,0 @@\n-only in a\n--- current/new.txt\n+++ upstream/new.txt\n@@ -0,0 +1,2 @@\n+only in b\n+no newline",
+  "same": "(no differences)\n"
+ }
+}

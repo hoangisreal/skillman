@@ -2,7 +2,7 @@
 
 ```
 upstream repos ──verify──▶ candidates ──import (gates)──▶ ~/skill-library   (cold: no agent scans it)
-                                                            │  skills/ · packs/ · git history
+                                                            │  skills/ · packs/ · taxonomy.yaml · git history
                              skill-add @web-vue @postgres ──┘
                                                             ▼
                     your-project/.agents/skills/<skill>/              real copy, committed (Codex, OpenCode)
@@ -14,23 +14,19 @@ upstream repos ──verify──▶ candidates ──import (gates)──▶ ~/
 
 ```
 skillman/                          this repository (MIT, tooling only)
-├── bin/
-│   ├── skillman                   Textual TUI: PEP 723 script, dependencies locked in skillman.lock
-│   ├── skill-add                  installer wrapper around skillcore.py install
-│   └── skill-search               awk search over INDEX.md
-├── scripts/
-│   ├── skillcore.py               all logic (stdlib + PyYAML): packs, projects, trash, updates, audit
-│   ├── verify-repos.py            sparse clone of upstream repos → staging/CANDIDATES.md
-│   ├── tick-candidates.py         tick candidates by pack, tier or repo
-│   ├── import-skills.py           import ticked candidates through the safety pipeline
-│   ├── validate-library.py        validate the library, rebuild the index
-│   ├── build-packs.py             regenerate vendor packs, create missing stack packs
-│   └── systemd/                   optional weekly update timer
-├── skills/skillman/               a skill that teaches agents to use these tools
+├── cmd/skillman/                  main: one binary (TUI + CLI); invoked as skill-add / skill-search via links
+├── internal/
+│   ├── core/                      all logic: index, validation, packs, projects, trash, audit, verify,
+│   │                              upstream updates, import pipeline, taxonomy (+ embedded taxonomy.yaml)
+│   ├── search/                    in-memory search index and query language
+│   ├── cli/                       every command, text and --json output
+│   └── tui/                       Bubble Tea v2 UI: 8 tabs, virtualized tables, Markdown preview, modals
+├── assets.go                      embeds packs/, staging/repos.txt and skills/skillman for `skillman init`
+├── skills/skillman/               a skill that teaches agents to use skillman
 ├── packs/                         34 starter packs
 ├── staging/repos.txt              curated upstream list: tier, group, owner/repo, subpath hint
-├── tests/                         offline tests: fake git upstream, Textual pilot
-├── tools/make_screenshots.py      renders docs/screenshots from a copy of a real library
+├── contrib/systemd/               optional weekly update timer
+├── install.sh                     go build + links + init + agent-setup
 └── docs/                          this documentation
 ```
 
@@ -41,10 +37,10 @@ skillman/                          this repository (MIT, tooling only)
 ├── skills/<name>/                 SKILL.md, SOURCE.json, UPSTREAM-LICENSE.txt, resources
 ├── packs/*.yaml, packs/vendor/    your packs
 ├── staging/                       repos.txt, candidates, verify log
-├── .cache/                        gitignored: blob-less clones, staged and pending updates
-├── INDEX.md|json, VALIDATION.md   generated
-├── IMPORT_LOG.md, UPDATE_LOG.md   generated
-└── scripts → skillman/scripts     installed by install.sh
+├── .cache/                        gitignored: blob-less clones, staged/pending updates, classify.json
+├── taxonomy.yaml                  optional: your domain/stack overrides (see taxonomy.md)
+├── INDEX.md|json, VALIDATION.md   generated (INDEX.json rows carry domain and stacks)
+└── IMPORT_LOG.md, UPDATE_LOG.md   generated
 ```
 
 ## Project manifest
@@ -83,11 +79,30 @@ copies go to `~/.local/state/skillman/trash/`. If that directory is not writable
   skills are committed with it. The manifest hash is what keeps copies manageable.
 - **Cold by default.** Global skill folders stay small. Per-project skills load only where they are relevant, which
   keeps the description budget, and the agent's attention, for the skills that matter.
-- **One core, thin shells.** `skillcore.py` is importable and scriptable. The TUI, `skill-add`, the timer and the
-  tests all drive the same functions.
+- **One core, thin shells.** `internal/core` holds every operation; the CLI, the TUI, `skill-add`, the timer and
+  the tests all call the same functions, so anything the TUI can do an agent can do from the command line.
+- **Compatible on disk.** The Go port reproduces the Python version's formats byte for byte where it matters
+  (content hashes, `INDEX.json`, pack YAML, manifests, `VALIDATION.md`); golden tests generated from the Python
+  version keep it that way.
 - **Git for history, trash for the rest.** Library changes are commits you can revert. Project removals are moves
   you can restore. Nothing is deleted without an explicit "empty trash".
 - **Refuse rather than guess.** Symlinked `.agents/` or `.claude/skills/` folders, real folders where a link
   belongs, invalid names, path traversal in names and a dirty library working tree are refused with a message.
-- **Locks and atomic writes.** Manifest and pack writes take an `fcntl` lock and go through a temp file plus rename,
+- **Locks and atomic writes.** Manifest and pack writes take an `flock` lock and go through a temp file plus rename,
   so the TUI and a CLI run at the same time cannot corrupt each other's state.
+
+## Performance design
+
+The 0.1 TUI rebuilt the whole table and re-rendered the Markdown preview on every keystroke and cursor move
+(80 ms per key, 0.4–1.5 s per cursor move on 718 skills). 0.2 keeps every frame cheap:
+
+- **Prebuilt search index**: lower-cased haystacks, pack and stack membership and project states are computed once;
+  a query is a linear scan with early exits, about a millisecond for 1000 skills.
+- **Virtualized tables**: only visible rows are rendered; cells are produced lazily.
+- **Cached preview**: SKILL.md is rendered by a small built-in Markdown renderer (first 16 KB), cached per skill and
+  width.
+- **Cached classification**: domain/stack regexes run at index time; `.cache/classify.json` is keyed by a hash of
+  the taxonomy and every pack, so start-up only reads JSON (24 ms on 718 skills).
+- **Nothing slow on the UI goroutine**: project status (tree hashing), upstream checks, staging, imports and
+  installs run in commands that report progress; tabs other than Library load when first opened.
+- `SKILLMAN_TRACE=<file>` logs the duration of every Update and View to check this on your machine.

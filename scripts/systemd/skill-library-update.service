@@ -1,9 +1,0 @@
-[Unit]
-Description=Check upstream skill updates and apply the safe ones (cold skill library)
-
-[Service]
-Type=oneshot
-WorkingDirectory=%h/skill-library
-ExecStart=/usr/bin/python3 %h/skill-library/scripts/skillcore.py update-library --auto-safe
-ExecStartPost=-/usr/bin/sh -c 'find %h/skill-library/UPDATE_LOG.md -mmin -15 2>/dev/null | grep -q . && notify-send "skill-library" "Upstream skill updates applied/pending — open skillman, tab 4" || true'
-Nice=10
