@@ -9,40 +9,43 @@ git clone https://github.com/hoangisreal/skillman && cd skillman
 SKILL_LIBRARY=$PWD/.dev-lib ./install.sh   # a scratch library, so your real one is untouched
 ```
 
-Python 3.11 or newer with PyYAML and git are the only runtime requirements. The TUI and its tests also need
-Textual 8.2.8, which `uv` provides without touching your system Python.
+Go 1.26 or newer and git are the only requirements.
 
 ## Tests
 
 ```bash
-uv run --no-project --with pyyaml python tests/test_skillcore.py
-uv run --no-project --with textual==8.2.8 --with pyyaml python tests/test_tui.py
-uvx ruff@0.8.4 check .
-bash -n bin/skill-add bin/skill-search install.sh
+gofmt -l . && go vet ./... && go test -race ./...
 ```
 
-The tests are fully offline. `tests/fixtures.py` points `SKILL_LIBRARY`, `SKILLMAN_STATE` and `SKILLCORE_GIT_BASE` at a
-temp dir **before** importing `skillcore`, builds a fake upstream as a bare git repo served over `file://` with
+The tests are fully offline. Each test points `SKILL_LIBRARY`, `SKILLMAN_STATE`, `SKILLCORE_GIT_BASE` and `HOME` at a
+temp dir and calls `core.Configure()`, builds a fake upstream as a bare git repo served over `file://` with
 partial-clone support, and imports from it. They cover:
 
-- pack expansion and cycles;
-- install, update, conflict, adopt and pin flows;
-- trash round-trips;
+- golden outputs of the Python version (`internal/core/testdata/compat`): content hashes, validation, tokens, pack
+  YAML and diffs must stay byte-identical;
+- pack expansion and cycles; install, update, conflict, adopt and pin flows; trash round-trips;
 - refusal of path traversal and symlinks;
-- tree-OID change detection, safe and risky updates, license removal, symlink inlining and rollback;
-- `new`, `verify` and `audit`;
-- the TUI, driven key by key with Textual's pilot.
+- tree-OID change detection, safe and risky updates, license removal, symlink inlining, rollback;
+- taxonomy classification, overrides and `recommend`;
+- the CLI as an agent uses it (`internal/cli`), and the TUI driven key by key and click by click (`internal/tui`).
 
-CI runs them on Python 3.11, 3.12 and 3.13.
+Optional checks against a real library (not run in CI):
+
+```bash
+SKILLMAN_BENCH_LIBRARY=~/skill-library go test ./internal/tui -run LatencyReport -v     # per-key latency
+SKILLMAN_SCREENSHOTS=docs/screenshots SKILLMAN_BENCH_LIBRARY=~/skill-library go test ./internal/tui -run Screenshots
+```
+
+The screenshot test reads the library but never modifies it (the demo project lives in a temp dir).
 
 ## Guidelines
 
-- Logic goes in `scripts/skillcore.py`. The TUI and `skill-add` only call it.
+- Logic goes in `internal/core`. The CLI and the TUI only call it; every TUI action must also be a CLI command.
 - Every write to user data needs a test. Anything that removes data must move it to the trash.
-- New risk signals go in `SUSPICIOUS` or `assess()`, with a test that shows them being caught.
-- Do not add runtime dependencies beyond PyYAML.
-- Screenshots: `uv run --no-project --with textual==8.2.8 --with pyyaml python tools/make_screenshots.py [library]`
-  renders them from a copy of a library, so the library itself is never modified.
+- On-disk formats are shared with existing libraries and projects: keep them compatible (and the golden tests green).
+- New risk signals go in `Suspicious` or `Assess()`, with a test that shows them being caught.
+- Nothing slow on the TUI's Update path: use `m.async` for disk-heavy or network work.
+- Keep dependencies minimal (Bubble Tea, Lip Gloss, x/ansi, go-yaml, go-difflib).
 
 ## Adding upstream repositories
 

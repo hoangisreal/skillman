@@ -13,7 +13,7 @@ skills: []
 | Field | |
 |---|---|
 | `name` | kebab-case; must match the file name. `vendor/<owner>` for generated vendor packs |
-| `description` | One line, shown by `skill-add --packs` and in the TUI |
+| `description` | One line, shown by `skillman pack list` and in the TUI |
 | `extends` | Other packs to include. Cycles are rejected when the pack is saved |
 | `skills` | Library skill names |
 
@@ -38,7 +38,7 @@ The repository ships 34 stack packs in `packs/`, and `install.sh` copies any you
 
 ## Vendor packs
 
-`scripts/build-packs.py` writes `packs/vendor/<owner>.yaml` for every upstream owner with at least three skills, so
+`skillman library build-packs` writes `packs/vendor/<owner>.yaml` for every upstream owner with at least three skills, so
 `@vendor/trailofbits` installs everything you imported from that owner. Vendor packs are regenerated on every run.
 Stack packs are created only when they are missing, so your edits always win.
 
@@ -50,11 +50,19 @@ packs that match, always starting with `@core`.
 
 ## Removing
 
-`skillcore.py uninstall -C . @web-vue` removes the skills that came only from that pack. Skills that another installed
+`skillman remove @web-vue` removes the skills that came only from that pack. Skills that another installed
 pack also uses, or that you added by name, stay. Removed copies go to the trash.
 
 ## Budget
 
 Every installed skill's name and description is loaded into each agent session. `doctor` estimates that cost
 (about `(name + description) / 4 + 8` tokens per skill, project and global skills together) and warns past
-`SKILL_TOKEN_BUDGET` (default 2000). The Packs tab shows the cost of each pack before you install it.
+`SKILL_TOKEN_BUDGET` (default 2000). The Packs tab, `pack show` and `recommend` show the cost of each pack before you install it.
+
+## Editing packs
+
+In the TUI: Packs tab (`n` new, `a`/`x` add/remove a skill, `e` description, `E` extends, `r` rename, `d` delete),
+or select skills in Library/Browse and press `p` (add to a pack, or create one from the selection). From the CLI:
+`skillman pack create|add|rm|describe|extends|rename|delete`. Files are written in the same YAML style as before,
+so git diffs stay minimal. Each starter pack is mapped to a stack in the [taxonomy](taxonomy.md), which is how
+`recommend` and the Browse tab connect a detected stack to its curated skills.

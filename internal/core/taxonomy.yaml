@@ -1,0 +1,353 @@
+# skillman taxonomy: domains → stacks, used by the Browse tab, `skillman browse` and `skillman recommend`.
+#
+# Override or extend it in $SKILL_LIBRARY/taxonomy.yaml:
+#   domains:            a domain with an existing id replaces that domain; new ids are appended
+#   skills:             per-skill overrides, e.g.  my-skill: {domain: backend, stacks: [go]}
+#
+# Each stack is matched against a skill by
+#   packs   the skill is listed in one of these packs        (strongest signal)
+#   name    regex on the skill name (kebab-case, as is)
+#   match   regex on "<name with spaces> <description>", lower-cased
+#   not     regex that vetoes match/name
+# Stack ids are global (unique across domains).
+
+domains:
+  - id: web-frontend
+    title: Web frontend
+    stacks:
+      - id: vue
+        title: Vue / Nuxt
+        packs: [web-vue]
+        match: '\b(vue|vuex|nuxt|pinia|vitepress|vue router|vueuse)\b'
+      - id: react
+        title: React / Next.js
+        packs: [web-react]
+        match: '\b(react|next\.?js|jsx|shadcn|remix|react router|tanstack|zustand|redux)\b'
+        not: '\breact[ -]native\b'
+      - id: svelte
+        title: Svelte / SvelteKit
+        packs: [web-svelte]
+        match: '\b(svelte|sveltekit)\b'
+      - id: angular
+        title: Angular
+        match: '\b(angular|rxjs|ngrx)\b'
+      - id: css-ui
+        title: CSS / Tailwind / UI kits
+        match: '\b(css|tailwind|unocss|sass|scss|styled-components|html|ui components?)\b'
+      - id: web-build
+        title: Vite / bundlers / monorepos
+        name: '^(vite|vitest|pnpm|turborepo|bun|webpack|rollup|esbuild|nx)(-|$)'
+        match: '\b(vite|webpack|rollup|esbuild|rolldown|turborepo|pnpm|monorepos?|bundl(er|ing))\b'
+      - id: web-quality
+        title: Web perf / a11y / SEO
+        packs: [web-quality]
+        match: '\b(accessibility|a11y|web vitals|lighthouse|web perf\w*|seo|wcag)\b'
+      - id: static-sites
+        title: Astro / static sites
+        match: '\b(astro|eleventy|hugo|jekyll|gatsby|static site)\b'
+
+  - id: backend
+    title: Backend & APIs
+    stacks:
+      - id: node
+        title: Node / TypeScript backend
+        packs: [node-backend]
+        match: '\b(node\.?js|nestjs|express|fastify|hono|koa|deno|prisma|drizzle)\b'
+      - id: python-web
+        title: Python web (FastAPI / Django)
+        match: '\b(fastapi|django|flask|starlette|pydantic|uvicorn|litestar)\b'
+      - id: jvm
+        title: Java / Kotlin (Spring, Quarkus)
+        packs: [jvm]
+        match: '\b(java|spring|spring boot|quarkus|jpa|hibernate|gradle|maven|micronaut|testcontainers)\b'
+      - id: dotnet
+        title: .NET / C#
+        packs: [dotnet]
+        match: '(\.net\b|\bdotnet\b|(^|\W)c#|\bcsharp\b|\basp\.net\b|\bef core\b|\bblazor\b|\bnuget\b|\bmaui\b)'
+      - id: go
+        title: Go
+        name: '(^|-)(go|golang)(-|$)'
+        match: '\b(golang|goroutines?|go modules?|go code|go services?|gin framework)\b'
+      - id: php
+        title: PHP / Laravel
+        match: '\b(php|laravel|symfony|livewire|wordpress|filament)\b'
+      - id: ruby
+        title: Ruby / Rails
+        match: '\b(ruby|rails|rspec|hotwire)\b'
+      - id: api-design
+        title: API design / GraphQL / gRPC
+        match: '\b(graphql|apollo|grpc|protobuf|openapi|swagger|rest(ful)? apis?|api design|trpc|webhooks?)\b'
+
+  - id: mobile
+    title: Mobile
+    stacks:
+      - id: react-native
+        title: React Native / Expo
+        packs: [mobile-rn]
+        match: '\b(react[ -]native|expo|eas|react navigation)\b'
+      - id: flutter
+        title: Flutter / Dart
+        packs: [flutter]
+        match: '\b(flutter|dart)\b'
+      - id: ios
+        title: Swift / iOS / Apple
+        match: '\b(swift|swiftui|ios|xcode|uikit|appkit|watchos|visionos|macos apps?)\b'
+      - id: android
+        title: Android / Kotlin
+        match: '\b(android|jetpack compose|compose multiplatform|kotlin multiplatform|kmp)\b'
+
+  - id: database
+    title: Databases
+    stacks:
+      - id: postgres
+        title: PostgreSQL
+        packs: [postgres]
+        match: '\b(postgres|postgresql|pgvector|psql|supabase|neon|timescale\w*)\b'
+      - id: sql-general
+        title: SQL / ORMs / migrations
+        match: '\b(sql|mysql|mariadb|sqlite|libsql|orms?|sqlalchemy|drizzle|prisma|(database|schema|db) migrations?|schema design)\b'
+      - id: nosql
+        title: Redis / MongoDB / Neo4j
+        packs: [nosql]
+        match: '\b(redis|valkey|mongodb|mongo|neo4j|cypher|dynamodb|cassandra|firestore|couchbase)\b'
+      - id: vector-db
+        title: Vector databases
+        match: '\b(vector (database|db|store|search)|qdrant|milvus|pinecone|weaviate|chroma|pgvector|lancedb)\b'
+
+  - id: data
+    title: Data engineering & analytics
+    stacks:
+      - id: data-pipelines
+        title: Pipelines (dbt, Airflow, Dagster)
+        packs: [data-eng]
+        match: '\b(dbt|airflow|dagster|prefect|etl|elt|dags?|spark|pyspark|data pipelines?|data warehouse)\b'
+      - id: streaming
+        title: Streaming (Kafka, Flink)
+        match: '\b(kafka|flink|kinesis|pulsar|schema registry|event streaming)\b'
+      - id: analytics
+        title: Analysis / notebooks / viz
+        packs: [data-science]
+        match: '\b(pandas|polars|numpy|jupyter|notebooks?|data analysis|data vi[sz]\w*|matplotlib|plotly|seaborn|duckdb|clickhouse|bigquery|snowflake)\b'
+
+  - id: ml-ai
+    title: Machine learning
+    stacks:
+      - id: ml-training
+        title: Training / fine-tuning
+        packs: [ml-train]
+        match: '\b(pytorch|torch|tensorflow|jax|fine-?tun\w*|trl|peft|lora|unsloth|deepspeed|hugging ?face|transformers|training (runs?|jobs?|scripts?))\b'
+      - id: ml-serving
+        title: Model serving / inference
+        packs: [ml-serve]
+        match: '\b(vllm|bentoml|triton|onnx\w*|inference servers?|model serving|llama\.cpp|ollama|gguf|sglang)\b'
+      - id: ml-tracking
+        title: Experiment tracking
+        packs: [ml-tracking]
+        match: '\b(wandb|weights (&|and) biases|mlflow|weave|trackio|experiment tracking)\b'
+      - id: vision
+        title: Computer vision
+        packs: [vision]
+        match: '\b(yolo|ultralytics|computer vision|object detection|image classification|segmentation|opencv)\b'
+      - id: classic-ml
+        title: Classic ML (scikit-learn)
+        match: '\b(scikit-learn|sklearn|xgboost|lightgbm|feature engineering)\b'
+
+  - id: llm
+    title: LLM apps & agents
+    stacks:
+      - id: claude-api
+        title: Claude / Anthropic API
+        match: '\b(claude api|anthropic|claude sdk|messages api|agent sdk)\b'
+      - id: mcp
+        title: MCP servers
+        name: '(^|-)mcp(-|$)'
+        match: '\b(mcp|model context protocol)\b'
+      - id: agent-frameworks
+        title: Agent frameworks (LangChain, LlamaIndex)
+        packs: [llm-apps]
+        match: '\b(langchain|langgraph|langsmith|llama ?index|llamaparse|crewai|autogen|multi-agent|ai sdk|openai agents)\b'
+      - id: rag
+        title: RAG / embeddings / search
+        match: '\b(rag|retrieval|embeddings?|semantic (search|cache)|hybrid search|rerank\w*)\b'
+      - id: llm-evals
+        title: Prompts / evals / guardrails
+        match: '\b(prompt engineering|prompt design|llm eval\w*|evals|llm-as-a?-judge|guardrails|red[- ]team\w*|prompt injection)\b'
+
+  - id: cloud-devops
+    title: Cloud & DevOps
+    stacks:
+      - id: docker
+        title: Docker / containers
+        packs: [docker]
+        match: '\b(docker\w*|compose|container images?|podman|buildkit)\b'
+      - id: kubernetes
+        title: Kubernetes / GitOps
+        packs: [k8s-gitops]
+        match: '\b(kubernetes|k8s|helm|kustomize|flux|argo ?cd|gitops|kubectl)\b'
+      - id: iac
+        title: Terraform / Pulumi (IaC)
+        packs: [iac]
+        match: '\b(terraform|pulumi|opentofu|cloudformation|cdk|ansible|packer|bicep|infrastructure as code)\b'
+      - id: ci-cd
+        title: CI/CD / GitHub Actions
+        packs: [ci-github]
+        name: '^(gh|ci|gha)-'
+        match: '\b(github actions|gha|ci/cd|ci pipelines?|gitlab ci|circleci|jenkins|buildkite|continuous integration|ci failures?)\b'
+      - id: cloud-providers
+        title: AWS / GCP / Azure
+        match: '\b(aws|amazon web services|gcp|google cloud|azure|s3|ec2|lambda|cloud run)\b'
+      - id: edge
+        title: Cloudflare / edge / serverless
+        packs: [cloudflare]
+        match: '\b(cloudflare|workers|wrangler|durable objects|vercel|netlify|serverless|edge functions?)\b'
+      - id: observability
+        title: Observability
+        match: '\b(observability|opentelemetry|otel|prometheus|grafana|datadog|sentry|monitoring|alerting)\b'
+
+  - id: security
+    title: Security
+    stacks:
+      - id: appsec
+        title: AppSec / code scanning
+        packs: [security]
+        match: '\b(security|owasp|vulnerabilit\w*|xss|csrf|sql injection|sast|semgrep|codeql|secure coding|hardening)\b'
+      - id: auth
+        title: Auth / identity
+        match: '\b(authentication|authorization|oauth\w*|oidc|jwt|sso|passkeys?|better-auth|clerk|auth0)\b'
+      - id: supply-chain
+        title: Secrets / supply chain
+        match: '\b(secrets? (management|scanning)|supply chain|sbom|dependency (audit|scanning)|sigstore|provenance)\b'
+      - id: offensive
+        title: Fuzzing / RE / audits
+        match: '\b(fuzz\w*|reverse engineer\w*|exploit\w*|ctf|binary analysis|malware|variant analysis|pentest\w*|threat model\w*)\b'
+
+  - id: languages
+    title: Languages & systems
+    stacks:
+      - id: python
+        title: Python (tooling, packaging)
+        packs: [python]
+        match: '\b(python|uv|pip|poetry|pyproject|mypy|ruff|pypi|pyright)\b'
+      - id: typescript
+        title: TypeScript / JavaScript
+        match: '\b(typescript|javascript|eslint|biome|tsconfig|type-?safe)\b'
+      - id: rust
+        title: Rust
+        match: '\b(rust|cargo|tokio|axum|actix|clippy|crates?)\b'
+      - id: cpp
+        title: C / C++
+        match: '((^|\W)(c\+\+|cpp)(\W|$)|\b(cmake|clang|llvm|gcc)\b)'
+      - id: low-level
+        title: Embedded / kernel / Zig
+        match: '\b(embedded|firmware|microcontrollers?|arduino|esp32|rtos|zig|kernel|ebpf|assembly)\b'
+      - id: shell
+        title: Shell / Linux / CLI
+        match: '\b(bash|shell scripts?|zsh|linux|systemd|posix|cli tools?|command[- ]line)\b'
+
+  - id: testing
+    title: Testing & QA
+    stacks:
+      - id: unit-tests
+        title: Unit / TDD / property tests
+        match: '\b(unit tests?|vitest|jest|pytest|junit|xunit|mocha|tdd|test-driven|property-based|hypothesis|mocks?|mocking|test coverage)\b'
+      - id: e2e
+        title: E2E / browser testing
+        match: '\b(playwright|cypress|selenium|puppeteer|e2e|end-to-end|browser (testing|automation)|webapp testing)\b'
+      - id: perf-testing
+        title: Load / benchmarks / profiling
+        match: '\b(load test\w*|k6|locust|benchmark\w*|profil(e|er|ing))\b'
+
+  - id: design
+    title: Design & UX
+    stacks:
+      - id: ui-ux
+        title: UI / UX / design systems
+        match: '\b(ui design|ux|user experience|interface design|design systems?|visual design|typography|color palettes?|figma|frontend design)\b'
+      - id: motion-creative
+        title: Animation / 3D / creative
+        match: '\b(animations?|motion|3d|three\.js|canvas|webgl|shaders?|generative art|p5\.js|svg)\b'
+
+  - id: docs
+    title: Docs, writing & office
+    stacks:
+      - id: tech-docs
+        title: Docs sites / technical docs
+        packs: [docs-site]
+        match: '\b(documentation|docs|readme|api docs|technical writing|docusaurus|vitepress|mkdocs|slidev)\b'
+      - id: research
+        title: Research papers
+        packs: [research-writing]
+        match: '\b(papers?|arxiv|citations?|literature review|research|latex|bibtex|academic)\b'
+      - id: office
+        title: Office files / slides / PDF
+        packs: [office-docs]
+        match: '\b(docx|pptx|xlsx|pdfs?|word documents?|excel|spreadsheets?|powerpoint|slides?|presentations?)\b'
+      - id: writing
+        title: Writing / editing
+        match: '\b(writing|prose|copywriting|copy editing|blog posts?|style guides?|tone of voice)\b'
+
+  - id: workflow
+    title: Agent workflow
+    stacks:
+      - id: core-workflow
+        title: Planning / debugging / verification
+        packs: [core]
+        match: '\b(plan(ning|s)?|debug\w*|verification|verify|brainstorm\w*|investigat\w*|root cause|systematic)\b'
+      - id: git-review
+        title: Git / PRs / code review
+        name: '(^|-)(git|commit|pr|review)(-|$)'
+        match: '\b(git|commits?|pull requests?|code reviews?|branches|changelogs?|release notes)\b'
+      - id: architecture
+        title: Architecture / refactoring
+        match: '\b(refactor\w*|clean code|code smells?|software architecture|design patterns?|ddd|domain-driven|system design|tech debt)\b'
+      - id: skill-authoring
+        title: Skills / agent config
+        packs: [skill-authoring]
+        name: '(^|-)(skill-(creator|writer|scanner|authoring|reviewer?)|(review|validate|auditing|good)-skills?|agents-md|claude-md|subagents?)(-|$)'
+        match: '\b(skill authoring|writing skills|create (a |new )?skills?|skill creator|skill\.md|agent skills|subagents?|slash commands?|agents\.md|claude\.md)\b'
+
+  - id: web3
+    title: Web3 / smart contracts
+    stacks:
+      - id: evm
+        title: Ethereum / Solidity
+        packs: [web3]
+        match: '\b(solidity|ethereum|evm|foundry|hardhat|openzeppelin|erc-?\d+|defi|viem|wagmi)\b'
+      - id: solana
+        title: Solana
+        match: '\b(solana|anchor framework|spl tokens?)\b'
+      - id: move
+        title: Sui / Aptos / Move / Cairo
+        match: '\b(sui|aptos|move language|cairo|starknet)\b'
+
+  - id: desktop
+    title: Desktop & games
+    stacks:
+      - id: qt
+        title: Qt / QML
+        packs: [qt]
+        match: '\b(qt|qml|pyside\d?|pyqt\d?)\b'
+      - id: desktop-apps
+        title: Electron / Tauri
+        match: '\b(electron|tauri|desktop apps?)\b'
+      - id: games
+        title: Game development
+        match: '\b(game dev\w*|games?|unity|godot|unreal|bevy|phaser)\b'
+
+# legacy INDEX tags -> domain, used when no stack matches
+tag_domains:
+  web: web-frontend
+  mobile: mobile
+  backend: backend
+  database: database
+  data: data
+  ml-ai: ml-ai
+  cloud-devops: cloud-devops
+  security: security
+  systems: languages
+  testing: testing
+  design: design
+  docs-research: docs
+  workflow: workflow
+
+skills: {}
