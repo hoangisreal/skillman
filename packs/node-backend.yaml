@@ -1,0 +1,15 @@
+name: node-backend
+description: 'Node/TS backend: NestJS, Hono, Prisma, GraphQL'
+skills:
+- nestjs
+- nestjs-testing
+- nestjs-data
+- nestjs-auth
+- hono
+- prisma-orm-setup
+- prisma-client-api
+- prisma-cli
+- apollo-server
+- graphql-schema
+- graphql-operations
+- api-and-interface-design

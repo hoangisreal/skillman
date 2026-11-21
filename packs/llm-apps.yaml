@@ -1,0 +1,16 @@
+name: llm-apps
+description: LLM apps / agents / RAG (Claude API, MCP, LangChain, vector DBs)
+skills:
+- claude-api
+- mcp-builder
+- langchain-build-agent
+- langchain-agent-tracing
+- langsmith-trace
+- langsmith-evaluator
+- llamaparse
+- qdrant-advisor
+- qdrant-hybrid-search
+- milvus
+- pgvector-semantic-search
+- redis-semantic-cache
+- llm-security

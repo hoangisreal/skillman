@@ -1,0 +1,11 @@
+name: ml-serve
+description: 'Model serving: vLLM, BentoML, local models'
+skills:
+- vllm-deploy-simple
+- vllm-deploy-docker
+- vllm-deploy-k8s
+- vllm-bench-serve
+- bentoml-create-bento
+- bentoml-containerize
+- huggingface-local-models
+- hf-cloud-serving-image-selection

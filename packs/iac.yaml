@@ -1,0 +1,11 @@
+name: iac
+description: 'Infrastructure as code: Terraform + Pulumi'
+skills:
+- terraform-style-guide
+- terraform-test
+- refactor-module
+- terraform-search-import
+- pulumi-best-practices
+- pulumi-overview
+- pulumi-debug-failed-operation
+- pulumi-component

@@ -1,0 +1,13 @@
+name: nosql
+description: Redis, MongoDB, Neo4j
+skills:
+- redis-core
+- redis-connections
+- redis-search
+- mongodb
+- mongodb-schema-design
+- mongodb-query-optimizer
+- mongodb-connection
+- neo4j-getting-started-skill
+- neo4j-cypher-skill
+- neo4j-modeling-skill

@@ -1,0 +1,7 @@
+name: web-quality
+description: 'Frontend quality: UI guidelines, web perf, browser testing'
+skills:
+- web-design-guidelines
+- web-perf
+- webapp-testing
+- playwright-cli

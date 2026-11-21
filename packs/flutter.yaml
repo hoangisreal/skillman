@@ -1,0 +1,16 @@
+name: flutter
+description: Flutter / Dart
+skills:
+- flutter-apply-architecture-best-practices
+- flutter-build-responsive-layout
+- flutter-fix-layout-issues
+- flutter-add-widget-test
+- flutter-add-integration-test
+- flutter-setup-declarative-routing
+- flutter-implement-json-serialization
+- flutter-use-http-package
+- flutter-setup-localization
+- dart-run-static-analysis
+- dart-fix-runtime-errors
+- dart-use-pattern-matching
+- dart-add-unit-test

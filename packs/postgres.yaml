@@ -1,0 +1,10 @@
+name: postgres
+description: PostgreSQL design, migrations, search, tuning
+skills:
+- postgres
+- postgres-best-practices
+- design-postgres-tables
+- postgres-database-migration
+- postgres-hybrid-text-search
+- pgvector-semantic-search
+- schema-exploration

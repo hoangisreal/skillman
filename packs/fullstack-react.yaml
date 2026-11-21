@@ -1,0 +1,8 @@
+name: fullstack-react
+description: React frontend + Node backend + Postgres + Docker
+extends:
+- web-react
+- node-backend
+- postgres
+- docker
+skills: []

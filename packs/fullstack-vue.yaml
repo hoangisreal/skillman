@@ -1,0 +1,8 @@
+name: fullstack-vue
+description: Vue frontend + Node backend + Postgres + Docker
+extends:
+- web-vue
+- node-backend
+- postgres
+- docker
+skills: []

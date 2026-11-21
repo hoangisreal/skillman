@@ -1,0 +1,8 @@
+name: docker
+description: Dockerfiles, Compose, build strategy, safe docker ops
+skills:
+- docker-project-foundations
+- docker-build-strategies
+- docker-compose-patterns
+- docker-destructive-guardrails
+- docker-docs

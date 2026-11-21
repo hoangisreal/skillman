@@ -1,0 +1,8 @@
+name: ci-github
+description: GitHub Actions + PR workflow
+skills:
+- github-actions
+- gha-security-review
+- iterate-pr
+- pr-writer
+- commit

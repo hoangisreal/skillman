@@ -1,0 +1,10 @@
+name: cloudflare
+description: Cloudflare Workers / Wrangler / Durable Objects
+skills:
+- cloudflare
+- workers-best-practices
+- workers-development
+- wrangler
+- durable-objects
+- frameworks-on-cloudflare
+- cf-cli

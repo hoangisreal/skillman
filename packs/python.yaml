@@ -1,0 +1,6 @@
+name: python
+description: Modern Python projects and packaging
+skills:
+- modern-python
+- property-based-testing
+- fastapi

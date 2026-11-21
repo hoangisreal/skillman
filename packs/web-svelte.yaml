@@ -1,0 +1,7 @@
+name: web-svelte
+description: Svelte / SvelteKit
+skills:
+- svelte-code-writer
+- svelte-core-bestpractices
+- vite
+- vitest

@@ -1,0 +1,104 @@
+# tier group owner/repo [subpath-hint]
+official core vercel-labs/agent-skills
+official core anthropics/skills
+official core microsoft/playwright-cli skills/playwright-cli
+official core dotnet/skills
+official core Kotlin/kotlin-agent-skills
+official core dart-lang/skills
+official core flutter/skills
+official core expo/skills
+official core callstackincubator/agent-skills
+official core vuejs-ai/skills
+official core sveltejs/ai-tools tools/skills
+official core shadcn-ui/ui skills/shadcn
+official core fastapi/fastapi fastapi/.agents/skills
+official core nestjs/agent-skills
+official core honojs/skills
+official core laravel/boost .ai/laravel/skill
+official core apollographql/skills
+official core TheQtCompanyRnD/agent-skills
+community core mattpocock/skills
+community core obra/superpowers skills
+community core addyosmani/agent-skills skills
+community core addyosmani/web-quality-skills
+community core samber/cc-skills-golang
+community core leonardomso/rust-skills
+community core zigcc/skills
+community core twostraws/swiftui-agent-skill
+community core AvdLee/Swift-Concurrency-Agent-Skill
+community core haidrrrry/compose-kotlin-agent-skills
+community core Amplicode/spring-skills
+community core vintasoftware/django-ai-plugins skills
+community core palkan/layered-rails-skills
+community core deckardger/tanstack-agent-skills
+community core onmax/nuxt-skills
+official data supabase/agent-skills
+official data neondatabase/postgres-skills
+official data timescale/pg-aiguide
+official data ClickHouse/agent-skills
+official data duckdb/duckdb-skills
+official data redis/agent-skills
+official data mongodb/agent-skills
+official data qdrant/skills
+official data zilliztech/milvus-skill
+official data neo4j-contrib/neo4j-skills
+official data elastic/agent-skills
+official data minio/skills
+official data prisma/skills
+official data meta-pytorch/skills
+official data huggingface/skills
+official data vllm-project/vllm-skills
+official data ultralytics/skills
+official data polars-inc/skills
+official data langchain-ai/langchain-skills
+official data langchain-ai/langsmith-skills
+official data pydantic/skills
+official data run-llama/llamaparse-agent-skills
+official data dbt-labs/dbt-agent-skills
+official data databricks/databricks-agent-skills
+official data astronomer/agents
+official data dagster-io/skills
+official data confluentinc/agent-skills
+official data redpanda-data/skills
+official data mlflow/skills
+official data wandb/skills
+official data bentoml/BentoML skills
+official data feast-dev/feast .claude/skills
+community data Orchestra-Research/AI-research-SKILLs
+community data muratcankoylan/Agent-Skills-for-Context-Engineering
+community data gordonmurray/data-engineering-skills
+community data timwukp/MLOps-agent-skills
+official ops docker/skills skills
+official ops hashicorp/agent-skills plugins
+official ops pulumi/agent-skills
+official ops fluxcd/agent-skills skills
+official ops grafana/skills skills
+official ops cloudflare/skills skills
+official ops cloudflare/security-audit-skill skills
+official ops trailofbits/skills plugins
+official ops semgrep/skills skills
+official ops getsentry/skills skills
+official ops NVIDIA/skills
+official ops amd/skills
+official ops bufbuild/claude-plugins plugins/protobuf/skills
+official ops vercel/turborepo skills
+official ops nrwl/nx .agents/skills
+official ops OpenZeppelin/openzeppelin-skills
+official ops solana-foundation/solana-dev-skill
+official ops Qiskit/skills
+cherry ops google/skills
+cherry ops microsoft/azure-skills skills
+cherry ops awslabs/agent-plugins plugins
+cherry ops openai/plugins plugins
+cherry ops K-Dense-AI/scientific-agent-skills
+community ops mohitmishra786/low-level-dev-skills
+community ops dbwls99706/ros2-engineering-skills
+community ops beriberikix/zephyr-agent-skills
+community ops CloudAI-X/threejs-skills
+community ops dgreenheck/webgpu-claude-skill
+community ops rudybear/renderdoc-skill
+community ops o11y-dev/opentelemetry-skill
+community ops agamm/claude-code-owasp .claude/skills/owasp-security
+community ops ForceInjection/domain-driven-design-skills
+community ops pinchen147/system-design-skill
+community ops austintgriffith/ethskills

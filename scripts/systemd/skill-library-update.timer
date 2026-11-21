@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly upstream update check for ~/skill-library
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

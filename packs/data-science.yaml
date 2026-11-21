@@ -1,0 +1,8 @@
+name: data-science
+description: 'Notebook-style analysis: sklearn, polars, duckdb, plots'
+skills:
+- scikit-learn
+- polars
+- query
+- read-file
+- attach-db

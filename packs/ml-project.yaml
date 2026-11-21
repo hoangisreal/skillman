@@ -1,0 +1,7 @@
+name: ml-project
+description: 'End-to-end ML project: Python + training + tracking'
+extends:
+- python
+- ml-train
+- ml-tracking
+skills: []

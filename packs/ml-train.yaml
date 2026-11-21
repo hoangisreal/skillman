@@ -1,0 +1,11 @@
+name: ml-train
+description: Model training / fine-tuning (PyTorch, Hugging Face, TRL, Unsloth)
+skills:
+- hf-cli
+- huggingface-best
+- huggingface-datasets
+- huggingface-llm-trainer
+- trl-training
+- unsloth
+- profile-model
+- debug-graph-breaks

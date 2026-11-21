@@ -1,0 +1,6 @@
+name: k8s-gitops
+description: Kubernetes GitOps with Flux
+skills:
+- gitops-knowledge
+- gitops-repo-audit
+- gitops-cluster-debug

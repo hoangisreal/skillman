@@ -1,0 +1,7 @@
+name: office-docs
+description: 'Office files: docx, pptx, xlsx, pdf, slides'
+skills:
+- docx
+- pptx
+- xlsx
+- pdf

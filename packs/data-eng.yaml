@@ -1,0 +1,15 @@
+name: data-eng
+description: 'Data engineering: dbt, Airflow, Dagster, Kafka, ClickHouse, DuckDB'
+skills:
+- using-dbt-for-analytics-engineering
+- running-dbt-commands
+- adding-dbt-unit-test
+- dagster-expert
+- airflow
+- authoring-dags
+- testing-dags
+- debugging-dags
+- developing-kafka-python-client
+- kafka-schema-registry
+- clickhouse-best-practices
+- query

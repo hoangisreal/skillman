@@ -1,0 +1,7 @@
+name: core
+description: 'Baseline engineering workflow for any project (keep small: loaded every session)'
+skills:
+- tdd
+- diagnosing-bugs
+- verification-before-completion
+- review-pr

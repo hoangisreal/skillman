@@ -1,0 +1,9 @@
+name: web3
+description: 'Smart contracts: Solidity, Solana, Sui (OpenZeppelin)'
+skills:
+- develop-secure-contracts
+- setup-solidity-contracts
+- upgrade-solidity-contracts
+- solana-dev
+- review-sui-contracts
+- setup-sui-contracts

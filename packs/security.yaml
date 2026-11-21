@@ -1,0 +1,10 @@
+name: security
+description: Security review, SAST, hardening
+skills:
+- code-security
+- semgrep
+- variant-analysis
+- find-bugs
+- secret-serialization
+- security-model
+- security-audit

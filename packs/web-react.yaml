@@ -1,0 +1,8 @@
+name: web-react
+description: React / Next.js / shadcn stack
+skills:
+- react-best-practices
+- shadcn
+- vite
+- vitest
+- turborepo

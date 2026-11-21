@@ -1,0 +1,5 @@
+name: jvm
+description: Java / Kotlin backend (Spring Boot, Quarkus, JPA, Testcontainers)
+skills:
+- kotlin-backend-jpa-entity-mapping
+- kotlin-tooling-java-to-kotlin

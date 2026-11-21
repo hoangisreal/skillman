@@ -1,0 +1,9 @@
+name: ml-tracking
+description: Experiment tracking + LLM eval/tracing (W&B, Weave, MLflow, Trackio)
+skills:
+- wandb-primary
+- weave-instrument
+- mlflow-onboarding
+- mlflow-evaluation
+- mlflow-trace-instrumentation
+- huggingface-trackio

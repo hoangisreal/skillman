@@ -1,0 +1,7 @@
+name: skill-authoring
+description: Writing and reviewing agent skills
+skills:
+- skill-creator
+- skill-writer
+- skill-scanner
+- review-skill

@@ -1,0 +1,5 @@
+name: docs-site
+description: Docs sites, slides and user docs
+skills:
+- writing-user-docs
+- document-api-endpoint

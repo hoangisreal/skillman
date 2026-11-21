@@ -1,0 +1,9 @@
+name: qt
+description: Qt / QML / C++
+skills:
+- qt-qml
+- qt-qml-review
+- qt-qml-test
+- qt-cpp-review
+- qt-cmake-project
+- qt-ui-design

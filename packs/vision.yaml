@@ -1,0 +1,9 @@
+name: vision
+description: Computer vision (YOLO / Ultralytics, HF vision trainer)
+skills:
+- yolo
+- yolo-training
+- yolo-datasets
+- yolo-inference
+- yolo-export
+- huggingface-vision-trainer

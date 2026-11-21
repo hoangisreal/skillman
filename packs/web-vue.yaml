@@ -1,0 +1,16 @@
+name: web-vue
+description: Vue 3 / Nuxt / Pinia / Vite stack
+skills:
+- vue
+- vue-best-practices
+- vue-router-best-practices
+- vue-pinia-best-practices
+- vue-testing-best-practices
+- vue-debug-guides
+- create-adaptable-composable
+- nuxt
+- nitro
+- pinia
+- vite
+- vitest
+- unocss
