@@ -23,6 +23,27 @@ type Recommendation struct {
 	Message     string   `json:"message,omitempty"`
 }
 
+// Match most of a task's keywords. A two-word query still needs both words,
+// while a longer request can include a verb absent from the skill metadata.
+func taskMatch(doc Doc, words []string) (int, []string) {
+	score := 0
+	var matched []string
+	for _, word := range words {
+		points := doc.score([]string{word})
+		if points == 0 && len(word) > 4 && strings.HasSuffix(word, "s") {
+			points = doc.score([]string{strings.TrimSuffix(word, "s")})
+		}
+		if points > 0 {
+			score += points
+			matched = append(matched, word)
+		}
+	}
+	if 3*len(matched) < 2*len(words) {
+		return 0, nil
+	}
+	return score, matched
+}
+
 // Recommend ranks the entire local stack before truncating the detailed group view.
 func Recommend(project string, rows []core.IndexRow, task string, limit, extra int) Recommendation {
 	r := Recommendation{Recommendation: core.Recommend(project, rows, -1), Shortlist: []Choice{}, InstallArgs: []string{}}
@@ -43,7 +64,7 @@ func Recommend(project string, rows []core.IndexRow, task string, limit, extra i
 				continue
 			}
 			c := Choice{RecSkill: s, Evidence: g.Reason, Reason: strings.Join(g.Stacks, ", "), AddedTokens: s.Tokens}
-			if s.State != "" && s.State != "missing" {
+			if !core.NeedsProjectCopy(s.State) {
 				c.AddedTokens = 0
 			}
 			if s.InPack {
@@ -54,15 +75,13 @@ func Recommend(project string, rows []core.IndexRow, task string, limit, extra i
 				c.score += 4
 			}
 			doc := Doc{name: s.Name, desc: strings.ToLower(s.Description), src: strings.ToLower(s.Source)}
-			// Every task word must match (same semantics as `skillman search`),
-			// so one common word cannot flood the shortlist on its own.
 			if len(words) > 0 {
-				if ts := doc.score(words); ts > 0 {
-					c.score += 2000 + ts
-					c.Reason += " · " + strings.Join(words, ", ")
-				} else {
+				ts, matched := taskMatch(doc, words)
+				if ts == 0 {
 					continue
 				}
+				c.score += ts
+				c.Reason += " · " + strings.Join(matched, ", ")
 			}
 			if prev, ok := best[s.Name]; !ok || c.score > prev.score {
 				best[s.Name] = c
@@ -87,7 +106,7 @@ func Recommend(project string, rows []core.IndexRow, task string, limit, extra i
 		r.Message = "No matching local skills. Browse the library or preview a starter pack with skillman bootstrap --pack <pack> --dry-run."
 	}
 	for _, c := range r.Shortlist {
-		if c.State != "" {
+		if !core.NeedsProjectCopy(c.State) {
 			continue
 		}
 		if len(r.InstallArgs) == 0 {

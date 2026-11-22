@@ -535,7 +535,7 @@ func cmdAdd(a *Args) int {
 			p := plan{Name: it.Name, Pack: it.Pack, State: st[it.Name], InLibrary: core.IsFile(filepath.Join(src, "SKILL.md"))}
 			if p.InLibrary {
 				p.Tokens = core.SkillTokens(src)
-				if p.State == "" {
+				if core.NeedsProjectCopy(p.State) {
 					tok += p.Tokens
 				}
 			}
@@ -555,6 +555,8 @@ func cmdAdd(a *Args) int {
 			switch {
 			case !p.InLibrary:
 				what = "NOT IN LIBRARY"
+			case p.State == "missing":
+				what = "restore missing copy"
 			case p.State != "":
 				what = "already " + p.State
 			}

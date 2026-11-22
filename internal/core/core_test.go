@@ -533,6 +533,80 @@ func TestBootstrapPinnedSource(t *testing.T) {
 	}
 }
 
+func TestInstallRollback(t *testing.T) {
+	f, _ := newFixture(t, nil, []string{"alpha", "beta"})
+	project := filepath.Join(f.root, "app")
+	items := []Item{{Name: "alpha"}}
+	rs, err := Install(project, items, false)
+	if err != nil || !allOK(rs) {
+		t.Fatal(rs, err)
+	}
+	active := filepath.Join(Dest(project, "alpha"), "SKILL.md")
+	appendFile(active, "local edit\n")
+	local := TreeHash(Dest(project, "alpha"))
+	manifest := filepath.Join(project, ".agents", Manifest)
+	before, err := os.ReadFile(manifest)
+	must(t, err)
+
+	claude := filepath.Join(project, ".claude")
+	must(t, os.Rename(claude, claude+".save"))
+	must(t, os.WriteFile(claude, []byte("reserved"), 0644))
+	rs, err = Install(project, items, true)
+	if err != nil || allOK(rs) || TreeHash(Dest(project, "alpha")) != local {
+		t.Fatal("lost local copy after link error", rs, err)
+	}
+	after, err := os.ReadFile(manifest)
+	must(t, err)
+	if string(before) != string(after) || len(ListTrash(project)) != 0 {
+		t.Fatal("failed install changed manifest or trash")
+	}
+
+	must(t, os.Remove(claude))
+	must(t, os.Rename(claude+".save", claude))
+	src := filepath.Join(SKILLS, "beta", "SKILL.md")
+	must(t, os.Rename(src, src+".save"))
+	must(t, os.Symlink("SKILL.md.save", src))
+	rs, err = Install(project, []Item{{Name: "beta"}}, false)
+	if err != nil || allOK(rs) || Lexists(LinkP(project, "beta")) || Lexists(Dest(project, "beta")) {
+		t.Fatal("orphan copy/link", rs, err)
+	}
+	must(t, os.Remove(src))
+	must(t, os.Rename(src+".save", src))
+
+	// Make the manifest rename fail after both copies and links have been published.
+	must(t, os.Rename(manifest, manifest+".save"))
+	must(t, os.Mkdir(manifest, 0755))
+	lp := LinkP(project, "alpha")
+	must(t, os.Remove(lp))
+	must(t, os.Symlink("previous-link", lp))
+	_, err = Install(project, []Item{{Name: "alpha"}, {Name: "beta"}}, true)
+	target, readErr := os.Readlink(lp)
+	if err == nil || readErr != nil || target != "previous-link" || TreeHash(Dest(project, "alpha")) != local ||
+		Lexists(LinkP(project, "beta")) || Lexists(Dest(project, "beta")) {
+		t.Fatal("incomplete batch rollback", err, readErr, target)
+	}
+}
+
+func TestBootstrapAuditOverride(t *testing.T) {
+	f, _ := newFixture(t, nil, nil)
+	dir := mkskill(t, filepath.Join(f.up, "skills"), "example", "Test skill", "", nil)
+	md := filepath.Join(dir, "SKILL.md")
+	must(t, os.WriteFile(md, []byte("---\nname: example\ndescription: Test skill\nhooks: {}\n---\nTest.\n"), 0644))
+	source := StarterSource{"acme/skills", f.push("review fixture"), "skills/example", "community"}
+	if _, err := importStarter("example", source, false); err == nil || !strings.Contains(err.Error(), "audit review") || Lexists(filepath.Join(SKILLS, "example")) {
+		t.Fatal(err)
+	}
+	note, err := importStarter("example", source, true)
+	if err != nil || !strings.Contains(note, "audit review") || !IsFile(filepath.Join(SKILLS, "example", "SKILL.md")) {
+		t.Fatal(note, err)
+	}
+	must(t, os.WriteFile(md, []byte("---\nname: example\nhooks: {}\n---\nMissing description.\n"), 0644))
+	source.Commit = f.push("validation error fixture")
+	if _, err := importStarter("invalid-example", source, true); err == nil || !strings.Contains(err.Error(), "audit error") || Lexists(filepath.Join(SKILLS, "invalid-example")) {
+		t.Fatal(err)
+	}
+}
+
 func TestPackYAMLRoundTrip(t *testing.T) {
 	newFixture(t, nil, []string{"a"})
 	pk := &Pack{Name: "x", Description: "Desc: with colon # and hash", Extends: []string{"core"}, Skills: []string{"a", "b"}}

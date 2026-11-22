@@ -229,6 +229,23 @@ func TestTaskSelection(t *testing.T) {
 		if rec.Shortlist[0].AddedTokens != 0 || slices.Contains(rec.InstallArgs, tc.want) {
 			t.Fatal(rec)
 		}
+		if err := os.RemoveAll(core.Dest(project, tc.want)); err != nil {
+			t.Fatal(err)
+		}
+		rec = search.Recommendation{}
+		runJSON(t, &rec, "recommend", project, "--task", tc.task, "--limit", "1")
+		if len(rec.Shortlist) != 1 || rec.Shortlist[0].State != "missing" || !slices.Contains(rec.InstallArgs, tc.want) {
+			t.Fatal(rec)
+		}
+		var dry struct {
+			Added int `json:"added_tokens"`
+		}
+		if rc := runJSON(t, &dry, append(slices.Clone(rec.InstallArgs), "--dry-run")...); rc != 0 || dry.Added == 0 || dry.Added != rec.Shortlist[0].AddedTokens {
+			t.Fatal(rec, dry)
+		}
+		if rc := runJSON(t, &result, rec.InstallArgs...); rc != 0 || result.Summary.Installed != 1 {
+			t.Fatal(result)
+		}
 	}
 	var rec search.Recommendation
 	runJSON(t, &rec, "recommend", project, "--task", "zzzznothing")
@@ -261,6 +278,9 @@ func TestAddOutcomesAndPackOwners(t *testing.T) {
 	}
 	if rc := add("review-pr"); rc != 0 || result.Summary.Present != 1 {
 		t.Fatal(result)
+	}
+	if rc, _, e := run(t, "pack", "add", "second", "tdd"); rc != 0 {
+		t.Fatal(e)
 	}
 	if rc, _, _ := run(t, "remove", "-C", p, "@first"); rc != 0 {
 		t.Fatal(rc)

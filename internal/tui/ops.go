@@ -58,7 +58,7 @@ func (m *Model) installItems(items []core.Item, label string, after func()) tea.
 			missing = append(missing, it.Name)
 			continue
 		}
-		if m.d.state(it.Name) != "" {
+		if !core.NeedsProjectCopy(m.d.state(it.Name)) {
 			have++
 			continue
 		}

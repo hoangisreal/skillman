@@ -33,7 +33,7 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | Command | Description |
 |---|---|
 | `add <name\|@pack>… [dir] [--force] [--dry-run] [--json]` | Copy skills and whole packs into a project, link them, record them in the manifest. A pack member that is not in the library yet is reported as skipped; an explicitly named one fails |
-| `remove <name\|@pack>…` | Remove skills or a pack (skills still needed by another pack or added manually stay). Goes to trash |
+| `remove <name\|@pack>…` | Remove skills or a pack to trash. Project manifest ownership determines which shared or manually added copies stay. For older manifests missing an association, re-add the pack you want to keep before removing the other one. |
 | `status [dir] [--json]` | State of every project skill (see [states](#project-skill-states)) |
 | `doctor [dir] [--json]` | Links, drift, shadowing by global skills, description token budget, packs with missing skills |
 | `diff <name>` | Unified diff library → project copy |
@@ -87,7 +87,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `library build-packs` | Regenerate `packs/vendor/*` (one pack per upstream owner with ≥ 3 skills) |
 | `trash list \| restore <id> \| empty --yes [ids]` | Removed project copies and deleted packs |
 | `init` | Create or refresh the library: starter packs, `repos.txt`, the `skillman` skill, `.gitignore`, git |
-| `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. License or audit failures are reported per skill. Rerun to retry missing members. |
+| `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--allow-risky] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. After inspecting audit findings, `--allow-risky` accepts review-level findings. Validation errors and missing licenses still block import. |
 | `agent-setup [--dry-run] [--remove] [--no-claude] [--no-codex]` | Link the `skillman` skill into `~/.claude/skills` and `~/.agents/skills` |
 
 ## Import pipeline

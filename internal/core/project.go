@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,9 +59,14 @@ func Dest(d, name string) string  { return filepath.Join(d, ".agents", "skills",
 func LinkP(d, name string) string { return filepath.Join(d, ".claude", "skills", name) }
 
 func link(d, name string) error {
-	lp := LinkP(d, name)
-	os.MkdirAll(filepath.Dir(lp), 0o755)
-	target := "../../.agents/skills/" + name
+	return setSkillLink(LinkP(d, name), "../../.agents/skills/"+name)
+}
+
+func setSkillLink(lp, target string) error {
+	dir := filepath.Dir(lp)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 	if IsSymlink(lp) {
 		if t, _ := os.Readlink(lp); t == target {
 			return nil
@@ -70,7 +76,16 @@ func link(d, name string) error {
 		return errf("%s exists and is not a symlink; refusing to overwrite", lp)
 	}
 	if IsSymlink(lp) {
-		os.Remove(lp)
+		tmp, err := os.MkdirTemp(dir, ".link-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmp)
+		next := filepath.Join(tmp, "link")
+		if err := os.Symlink(target, next); err != nil {
+			return err
+		}
+		return os.Rename(next, lp)
 	}
 	return os.Symlink(target, lp)
 }
@@ -109,6 +124,9 @@ type InstallSummary struct {
 	Failed    int `json:"failed"`
 }
 
+// NeedsProjectCopy reports whether installing a skill adds its description to the project.
+func NeedsProjectCopy(state string) bool { return state == "" || state == "missing" }
+
 func (s InstallSummary) OK() bool {
 	return s.Failed == 0 && s.Installed+s.Present > 0
 }
@@ -137,6 +155,7 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		return nil, err
 	}
 	var out []Result
+	var changes []installChange
 	man := ReadManifest(d)
 	for _, it := range items {
 		name := it.Name
@@ -172,14 +191,6 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 			case TreeHash(src) == TreeHash(dest):
 				state = "already up to date"
 			case force:
-				if _, err := toTrashSkill(d, name, prev, "replaced by --force"); err != nil {
-					out = append(out, res(name, false, "%v", err))
-					continue
-				}
-				if err := CopyTree(src, dest, nil); err != nil {
-					out = append(out, res(name, false, "%v", err))
-					continue
-				}
 				state = "replaced (--force)"
 			case prev != nil && prev.TreeHash == TreeHash(dest):
 				out = append(out, res(name, false, "outdated (library is newer) — run: skillman update -C <dir> %s", name))
@@ -189,27 +200,14 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 				continue
 			}
 		} else {
-			os.MkdirAll(filepath.Dir(dest), 0o755)
-			if err := CopyTree(src, dest, nil); err != nil {
-				out = append(out, res(name, false, "%v", err))
-				continue
-			}
 			state = "copied"
 		}
-		if err := link(d, name); err != nil {
-			if state == "copied" {
-				os.RemoveAll(dest) // fresh copy: do not leave an untracked orphan behind
-			}
+		change, err := installFiles(d, name, src, state != "already up to date", man.Skills[name])
+		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
-		if !LinkOK(d, name) {
-			if state == "copied" {
-				os.RemoveAll(dest)
-			}
-			out = append(out, res(name, false, "link does not resolve: %s", lp))
-			continue
-		}
+		changes = append(changes, change)
 		entry := newEntry(src, it.Pack, man.Skills[name])
 		entry.Manual = entry.Manual || it.Manual
 		for _, p := range it.OtherPacks {
@@ -231,12 +229,97 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		return out, nil
 	}
 	err = WriteManifest(d, man)
-	unlock()
 	if err != nil {
+		for i := len(changes) - 1; i >= 0; i-- {
+			err = errors.Join(err, changes[i].rollback())
+		}
+		unlock()
 		return out, err
 	}
+	unlock()
 	RegisterProject(d)
 	return out, nil
+}
+
+// Keep the old copy in trash on success. On failure restore both paths while
+// the project lock is still held, including if the final manifest write fails.
+type installChange struct {
+	dest, link, previousLink, trash string
+	copied, linked                  bool
+}
+
+func (c installChange) rollback() error {
+	var linkErr error
+	if c.linked {
+		if c.previousLink == "" {
+			linkErr = os.Remove(c.link)
+		} else {
+			linkErr = setSkillLink(c.link, c.previousLink)
+		}
+	}
+	if c.copied {
+		if err := os.RemoveAll(c.dest); err != nil {
+			return errors.Join(linkErr, err)
+		}
+	}
+	if c.trash != "" {
+		if err := Move(filepath.Join(c.trash, filepath.Base(c.dest)), c.dest); err != nil {
+			return errors.Join(linkErr, err)
+		}
+		return errors.Join(linkErr, os.RemoveAll(c.trash))
+	}
+	return linkErr
+}
+
+func installFiles(d, name, src string, copyNeeded bool, previous *Entry) (c installChange, err error) {
+	c.dest, c.link = Dest(d, name), LinkP(d, name)
+	if IsSymlink(c.link) {
+		c.previousLink, err = os.Readlink(c.link)
+		if err != nil {
+			return c, err
+		}
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, c.rollback())
+		}
+	}()
+	if copyNeeded {
+		parent := filepath.Dir(c.dest)
+		if err = os.MkdirAll(parent, 0755); err != nil {
+			return c, err
+		}
+		tmp, err := os.MkdirTemp(parent, ".install-")
+		if err != nil {
+			return c, err
+		}
+		defer os.RemoveAll(tmp)
+		staged := filepath.Join(tmp, name)
+		if err := CopyTree(src, staged, nil); err != nil {
+			return c, err
+		}
+		if IsSymlink(filepath.Join(staged, "SKILL.md")) || !IsFile(filepath.Join(staged, "SKILL.md")) {
+			return c, errf("%s: expected a regular SKILL.md", name)
+		}
+		if Lexists(c.dest) {
+			c.trash, err = toTrashSkill(d, name, previous, "replaced by --force")
+			if err != nil {
+				return c, err
+			}
+		}
+		if err := os.Rename(staged, c.dest); err != nil {
+			return c, err
+		}
+		c.copied = true
+	}
+	if err := link(d, name); err != nil {
+		return c, err
+	}
+	c.linked = c.previousLink != "../../.agents/skills/"+name
+	if !LinkOK(d, name) {
+		return c, errf("link does not resolve: %s", c.link)
+	}
+	return c, nil
 }
 
 func toTrashSkill(d, name string, entry *Entry, reason string) (string, error) {
@@ -334,18 +417,6 @@ func UninstallPack(d, pack string) ([]Result, error) {
 	if !used {
 		return []Result{res(pack, false, "pack not installed in this project")}, nil
 	}
-	// Older manifests stored only the first owner of a shared skill in a batch add.
-	// Recover associations we can substantiate from the remaining installed packs.
-	remaining := map[string][]string{}
-	for _, other := range man.PackNames() {
-		if other == pack {
-			continue
-		}
-		names, _ := ExpandPack(other)
-		for _, n := range names {
-			remaining[n] = append(remaining[n], other)
-		}
-	}
 	var victims []string
 	var kept []Result
 	for _, name := range man.SkillNames() {
@@ -363,11 +434,6 @@ func UninstallPack(d, pack string) ([]Result, error) {
 			ps = []string{}
 		}
 		e.Packs = ps
-		for _, other := range remaining[name] {
-			if !e.HasPack(other) {
-				e.Packs = append(e.Packs, other)
-			}
-		}
 		if len(e.Packs) == 0 && !e.Manual {
 			e.Packs = []string{pack} // retain ownership until moving this copy succeeds
 			victims = append(victims, name)

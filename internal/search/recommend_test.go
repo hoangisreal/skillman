@@ -20,7 +20,7 @@ func mkskill(t *testing.T, lib, name, desc string) {
 	}
 }
 
-func TestRecommendTaskRequiresEveryWord(t *testing.T) {
+func TestRecommendTaskCoverage(t *testing.T) {
 	root := t.TempDir()
 	lib := filepath.Join(root, "lib")
 	proj := filepath.Join(root, "app")
@@ -34,13 +34,14 @@ func TestRecommendTaskRequiresEveryWord(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(lib, "staging"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mkskill(t, lib, "vue-testing-best-practices", "Unit tests for Vue components")
+	mkskill(t, lib, "vue-testing-best-practices", "Use for Vue.js testing. Covers Vitest, Vue Test Utils, component testing, mocking, testing patterns, and Playwright for E2E testing.")
 	mkskill(t, lib, "vue-best-practices", "Vue 3 composition API best practices")
 	mkskill(t, lib, "postgres-best-practices", "PostgreSQL schema and query best practices")
+	mkskill(t, lib, "postgres-database-migration", "Use this skill for planning, testing, and safely executing PostgreSQL schema migrations — especially when working with production data or shared databases.")
 	if err := core.SavePack(&core.Pack{Name: "web-vue", Skills: []string{"vue-best-practices", "vue-testing-best-practices"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := core.SavePack(&core.Pack{Name: "postgres", Skills: []string{"postgres-best-practices"}}); err != nil {
+	if err := core.SavePack(&core.Pack{Name: "postgres", Skills: []string{"postgres-best-practices", "postgres-database-migration"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := core.RebuildIndex(true); err != nil {
@@ -54,11 +55,15 @@ func TestRecommendTaskRequiresEveryWord(t *testing.T) {
 	}
 	rows := core.LoadIndex()
 
-	rec := Recommend(proj, rows, "vue components", 5, 0)
+	rec := Recommend(proj, rows, "test Vue components", 5, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" {
 		t.Fatalf("task shortlist: %+v", rec.Shortlist)
 	}
-	// A single common word must not flood: every word has to match.
+	rec = Recommend(proj, rows, "review database migrations", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "postgres-database-migration" {
+		t.Fatal(rec.Shortlist)
+	}
+	// One generic match alone still cannot fill the shortlist.
 	rec = Recommend(proj, rows, "vue zzzmissing", 5, 0)
 	if len(rec.Shortlist) != 0 || rec.Message == "" {
 		t.Fatalf("unmatched task should be empty: %+v", rec.Shortlist)

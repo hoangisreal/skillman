@@ -51,7 +51,8 @@ Then, as needed: `skillman browse --stack postgres --json`, `skillman search "po
 `skillman info <skill> --json` (add `--body` to read it). The agent proposes a short list with token costs, checks it
 with `skillman add -C <project> <selected names> --dry-run --json`, installs the selected names, and confirms with
 `status -C <project> --json` and `verify -C <project> --json`. Pass `install_args` directly as arguments when the
-whole proposed selection is wanted. An empty array means there are no new skills to add from this shortlist.
+whole proposed selection is wanted. These arguments include missing tracked copies that can be restored.
+An empty array means every shortlisted copy is present or the shortlist is empty.
 For an untracked copy, inspect `diff` before `adopt`. When the library needs content, preview the pinned sources
 with `bootstrap --pack core --dry-run --json`. Each import reports its own outcome.
 
