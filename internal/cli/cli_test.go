@@ -179,6 +179,10 @@ func TestTaskSelection(t *testing.T) {
 	if err := os.Rename(original, project); err != nil {
 		t.Fatal(err)
 	}
+	resolvedProject, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mkskill(t, lib, "postgres-database-migration", "Review database migrations for PostgreSQL")
 	mkskill(t, lib, "golang-testing", "Testing Go modules")
 	for path, data := range map[string]string{"go.mod": "module example.test/sample", ".claude/worktrees/demo/pyproject.toml": "[project]"} {
@@ -214,7 +218,7 @@ func TestTaskSelection(t *testing.T) {
 			Project string
 			Skills  []struct{ Name string }
 		}
-		if rc := runJSON(t, &planned, append(rec.InstallArgs, "--dry-run")...); rc != 0 || planned.Project != project || planned.Skills[0].Name != tc.want {
+		if rc := runJSON(t, &planned, append(rec.InstallArgs, "--dry-run")...); rc != 0 || planned.Project != resolvedProject || planned.Skills[0].Name != tc.want {
 			t.Fatal(planned)
 		}
 		var result struct {
