@@ -306,8 +306,11 @@ func TestTUIFlow(t *testing.T) {
 	tm, ok = m.modals[0].(*textModal)
 	check(t, ok && strings.HasPrefix(tm.title, "audit") && strings.Contains(tm.text, "alpha"), "audit view")
 	d.press("esc", "s")
-	_, ok = m.modals[0].(*pickModal)
-	check(t, ok, "suggest picker")
+	picker, ok := m.modals[0].(*pickModal)
+	check(t, ok && picker.pickMany != nil, "shortlist picker")
+	d.press("space", "enter")
+	_, ok = m.modals[0].(*confirmModal)
+	check(t, ok, "shortlist selection previews install")
 	d.press("esc")
 
 	// Trash: restore

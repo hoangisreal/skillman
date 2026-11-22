@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/hoangisreal/skillman"
@@ -26,10 +27,10 @@ func init() {
 	reg("browse", "[--domain D] [--stack S] [-C dir] [--json]",
 		"Skills grouped by domain › stack (the TUI Browse tab). Stacks used by the project are marked ★.",
 		[]string{"domain", "stack", "C"}, cmdBrowse)
-	reg("recommend", "[dir] [--extra N] [--json]",
+	reg("recommend", "[dir] [--task words] [--limit N] [--extra N] [--json]",
 		"Recommend skills for a project: detected packs with their skills, plus up to N (default 5, -1 = all)\n"+
 			"other library skills of the same stacks. Shows what is installed and the token cost.",
-		[]string{"extra", "C"}, cmdRecommend)
+		[]string{"task", "limit", "extra", "C"}, cmdRecommend)
 	reg("suggest", "[dir] [--json]", "Suggest packs from the project's manifests (package.json, pyproject.toml, go.mod, …).",
 		[]string{"C"}, cmdSuggest)
 	reg("taxonomy", "[--default] [--json]",
@@ -96,6 +97,7 @@ func init() {
 	// setup
 	reg("init", "", "Create or refresh the library at $SKILL_LIBRARY: starter packs, repos.txt, the skillman skill, git.",
 		nil, cmdInit)
+	reg("bootstrap", "--pack <core|web-vue|postgres> [--dry-run] [--json]", "Preview or import missing starter skills into the library from pinned sources.", []string{"pack"}, cmdBootstrap)
 	reg("agent-setup", "[--dry-run] [--remove] [--no-claude] [--no-codex]",
 		"Link the skillman skill into ~/.claude/skills (Claude Code, OpenCode) and ~/.agents/skills (Codex),\n"+
 			"so coding agents can use skillman in any project. Never overwrites a real directory.", nil, cmdAgentSetup)
@@ -306,7 +308,7 @@ func cmdBrowse(a *Args) int {
 	}
 	tax := core.LoadTaxonomy()
 	proj, _ := core.ResolveProject(a.Str("C", "."), false)
-	det := core.DetectedStacks(core.SuggestPacks(proj), tax)
+	det := core.DetectedStacks(core.ProjectSignals(proj), tax)
 	tree := core.BuildTree(rows, tax, det, core.PacksBySkill())
 	dom, stk := a.Str("domain", ""), a.Str("stack", "")
 	var sel []core.DomainNode
@@ -381,12 +383,22 @@ func cmdRecommend(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	rec := core.Recommend(d, rows, a.Int("extra", 5))
+	limit, err := strconv.Atoi(a.Str("limit", "5"))
+	if err != nil || limit < 1 || (a.Has("limit") && a.Str("limit", "") == "") {
+		return usage("--limit requires a positive integer")
+	}
+	rec := search.Recommend(d, rows, a.Str("task", ""), limit, a.Int("extra", 5))
 	if a.Has("json") {
 		printJSON(rec)
 		return 0
 	}
 	outf("project: %s\n", d)
+	if rec.Message != "" {
+		outf("%s\n", rec.Message)
+	}
+	for _, c := range rec.Shortlist {
+		outf("  %-32s +%dt · %s (%s) %s\n", c.Name, c.AddedTokens, c.Reason, c.Evidence, c.State)
+	}
 	if len(rec.Groups) == 0 {
 		outf("no stack detected (try: skillman browse, skillman search <words>)\n")
 		return 0
@@ -396,7 +408,13 @@ func cmdRecommend(a *Args) int {
 		if g.Installed {
 			mark = " [installed]"
 		}
-		outf("\n@%s%s — %s (%s)\n", g.Pack, mark, g.Description, g.Reason)
+		label := g.Pack
+		if label != "" {
+			label = "@" + label
+		} else {
+			label = strings.Join(g.Stacks, ", ")
+		}
+		outf("\n%s%s — %s (%s)\n", label, mark, g.Description, g.Reason)
 		for _, s := range g.Skills {
 			tag := "  "
 			if !s.InPack {
@@ -549,10 +567,15 @@ func cmdAdd(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	if a.Has("json") {
-		return resultsOut(a, rs, nil)
-	}
+	summary := core.SummarizeInstall(rs)
 	rc := 0
+	if !summary.OK() {
+		rc = 1
+	}
+	if a.Has("json") {
+		printJSON(map[string]any{"ok": summary.OK(), "results": rs, "summary": summary})
+		return rc
+	}
 	for _, r := range rs {
 		if r.OK {
 			if strings.HasPrefix(r.Message, "skipped:") {
@@ -831,6 +854,37 @@ func cmdProjects(a *Args) int {
 
 // ───────────── setup ─────────────
 
+func cmdBootstrap(a *Args) int {
+	pack := a.Str("pack", "")
+	if pack == "" || len(a.Pos) > 0 {
+		return usage("skillman bootstrap --pack <core|web-vue|postgres> [--dry-run] [--json]")
+	}
+	items, err := core.Bootstrap(pack, a.Has("dry-run"))
+	if err != nil {
+		return fail(err)
+	}
+	ok := true
+	for _, it := range items {
+		if it.Status == "failed" || it.Status == "unavailable" {
+			ok = false
+		}
+		if !a.Has("json") {
+			source := ""
+			if it.Source != nil {
+				source = fmt.Sprintf("%s@%s:%s", it.Source.Repo, it.Source.Commit, it.Source.Subpath)
+			}
+			outf("%-32s %-16s %s %s\n", it.Name, it.Status, source, it.Detail)
+		}
+	}
+	if a.Has("json") {
+		printJSON(map[string]any{"pack": pack, "ok": ok, "skills": items, "dry_run": a.Has("dry-run")})
+	}
+	if !ok {
+		return 1
+	}
+	return 0
+}
+
 func cmdInit(a *Args) int {
 	for _, d := range []string{core.SKILLS, core.PACKS, core.STAGING} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -888,6 +942,7 @@ func cmdInit(a *Args) int {
 		return fail(err)
 	}
 	outf("library ready at %s (%d skills)\n", core.LIB, len(core.LibraryNames()))
+	outf("Preview starter sources: skillman bootstrap --pack core --dry-run\n")
 	return 0
 }
 

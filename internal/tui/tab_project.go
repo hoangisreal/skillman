@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/hoangisreal/skillman/internal/core"
+	"github.com/hoangisreal/skillman/internal/search"
 )
 
 // ───────────── 4 Project ─────────────
@@ -153,29 +154,24 @@ func (t *projectTab) actions(m *Model) []action {
 			return t.run(m, map[bool]string{true: "pinned", false: "unpinned"}[pin], func() ([]core.Result, error) { return core.SetPin(p, names, pin) })
 		}},
 		{key: "s", label: "suggest", run: func(m *Model) tea.Cmd {
-			sg := core.SuggestPacks(p)
-			if len(sg) == 0 {
-				return m.notify("no stack detected — browse domains in tab 2", false)
+			rec := search.Recommend(p, m.d.rows, "", 5, 0)
+			if len(rec.Shortlist) == 0 {
+				return m.notify(rec.Message, false)
 			}
-			var all []string
-			opts := []option{{"__all__", ""}}
-			for _, s := range sg {
-				all = append(all, "@"+s.Pack)
-				n, _ := core.ExpandPack(s.Pack)
-				opts = append(opts, option{s.Pack, fmt.Sprintf("(%s) · %d skills", s.Reason, len(n))})
+			var options []option
+			for _, c := range rec.Shortlist {
+				options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, c.Evidence, c.AddedTokens, c.State)})
 			}
-			opts[0].label = "install all suggested: " + strings.Join(all, " ")
-			m.push(pick("Suggested packs for this project", opts, func(m *Model, v string) tea.Cmd {
-				sel := []string{"@" + v}
-				if v == "__all__" {
-					sel = all
-				}
-				items, err := core.ExpandItems(sel)
+			picker := pick("Suggested project skills", options, nil)
+			picker.filter.placeholder = "type to filter · space/click to mark · enter to preview"
+			picker.pickMany = func(m *Model, names []string) tea.Cmd {
+				items, err := core.ExpandItems(names)
 				if err != nil {
 					return m.notify(err.Error(), true)
 				}
-				return m.installItems(items, strings.Join(sel, " "), nil)
-			}))
+				return m.installItems(items, strings.Join(names, ", "), nil)
+			}
+			m.push(picker)
 			return nil
 		}},
 		{key: "o", label: "doctor", run: func(m *Model) tea.Cmd {

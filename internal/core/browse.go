@@ -2,7 +2,6 @@ package core
 
 import (
 	"sort"
-	"strings"
 )
 
 // StackNode is one stack of the Browse tree with the skills classified into it.
@@ -114,6 +113,9 @@ func BuildTree(rows []IndexRow, tax *Taxonomy, detected map[string]bool, packs m
 func DetectedStacks(sugg []Suggestion, tax *Taxonomy) map[string]bool {
 	out := map[string]bool{}
 	for _, s := range sugg {
+		if s.Stack != "" {
+			out[s.Stack] = true
+		}
 		for _, st := range tax.StacksForPack(s.Pack) {
 			out[st.ID] = true
 		}
@@ -146,7 +148,6 @@ type Recommendation struct {
 	Project      string     `json:"project"`
 	Groups       []RecGroup `json:"groups"`
 	Budget       Budget     `json:"budget"`
-	InstallHint  string     `json:"install_hint"`
 	ProjectState []string   `json:"installed"`
 }
 
@@ -155,39 +156,49 @@ type Recommendation struct {
 // extra caps the non-pack skills per group (0 = none, -1 = all).
 func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 	tax := LoadTaxonomy()
-	sugg := SuggestPacks(d)
-	st := StatusMap(ProjectStatus(d))
+	sugg := ProjectSignals(d)
+	status := ProjectStatus(d)
+	st := StatusMap(status)
 	man := ReadManifest(d)
 	byName := map[string]*IndexRow{}
 	for i := range rows {
 		byName[rows[i].Name] = &rows[i]
 	}
 	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}}
-	for _, s := range ProjectStatus(d) {
+	for _, s := range status {
 		rec.ProjectState = append(rec.ProjectState, s.Name)
 	}
-	var hint []string
 	for _, sg := range sugg {
 		g := RecGroup{Pack: sg.Pack, Reason: sg.Reason, Stacks: []string{}, Skills: []RecSkill{}, Installed: man.Packs.Has(sg.Pack)}
-		if pk, err := LoadPack(sg.Pack); err == nil {
-			g.Description = pk.Description
+		var members []string
+		if sg.Pack != "" {
+			if pk, err := LoadPack(sg.Pack); err == nil {
+				g.Description = pk.Description
+			}
+			members, _ = ExpandPack(sg.Pack)
 		}
 		stackIDs := map[string]bool{}
+		if sg.Stack != "" {
+			g.Stacks = []string{sg.Stack}
+			if stack := tax.Stack(sg.Stack); stack != nil {
+				g.Description = stack.Title
+			}
+			stackIDs[sg.Stack] = true
+		}
 		for _, s := range tax.StacksForPack(sg.Pack) {
 			g.Stacks = append(g.Stacks, s.ID)
 			stackIDs[s.ID] = true
 		}
 		mk := func(name string, inPack bool) RecSkill {
 			r := RecSkill{Name: name, InPack: inPack, State: st[name].State}
-			if row := byName[name]; row != nil {
+			if row := byName[name]; row != nil && KEBAB.MatchString(name) && IsFile(SKILLS+"/"+name+"/SKILL.md") {
 				r.Description, r.Source, r.InLibrary = row.Description, row.Source, true
+				r.Tokens = SkillTokens(SKILLS + "/" + name)
 			} else {
 				r.Description = "⚠ not in library"
 			}
-			r.Tokens = SkillTokens(SKILLS + "/" + name)
 			return r
 		}
-		members, _ := ExpandPack(sg.Pack)
 		seen := map[string]bool{}
 		for _, m := range members {
 			seen[m] = true
@@ -213,15 +224,9 @@ func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 			}
 		}
 		rec.Groups = append(rec.Groups, g)
-		if !g.Installed {
-			hint = append(hint, "@"+sg.Pack)
-		}
 	}
 	if rec.Groups == nil {
 		rec.Groups = []RecGroup{}
-	}
-	if len(hint) > 0 {
-		rec.InstallHint = "skillman add " + strings.Join(hint, " ")
 	}
 	return rec
 }

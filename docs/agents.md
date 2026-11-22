@@ -19,8 +19,13 @@ it per project only, skip agent-setup and run `skill-add skillman` in the projec
 
 ## The workflow the skill teaches
 
+Ask the agent to select skills **from your local Skillman library for this project**. For explicit invocation use
+`$skillman` in Codex or `/skillman` in Claude Code. External discovery tools such as find-skills can research
+public sources. Personal Codex installs use skill-installer. For an external skill approved for a managed project,
+import its source into the library and install the project copy through Skillman.
+
 ```bash
-skillman recommend . --json
+skillman recommend . --task "postgres migration" --json
 ```
 
 ```json
@@ -34,20 +39,28 @@ skillman recommend . --json
           "in_pack": true, "in_library": true, "state": "", "tokens": 52 },
         { "name": "connect-cdc-postgres", "in_pack": false, "in_library": true, "tokens": 61, "…": "…" } ] } ],
   "budget": { "total": 410, "budget": 2000, "…": "…" },
-  "install_hint": "skillman add @core @web-vue @postgres @docker"
+  "shortlist": [
+    { "name": "postgres-best-practices", "reason": "@postgres · postgres", "evidence": "package.json", "added_tokens": 52, "…": "…" }
+  ],
+  "install_args": ["add", "-C", "/home/me/code/shop", "postgres-best-practices"],
+  "install_hint": "skillman add -C '/home/me/code/shop' postgres-best-practices"
 }
 ```
 
 Then, as needed: `skillman browse --stack postgres --json`, `skillman search "postgres migration" --json`,
 `skillman info <skill> --json` (add `--body` to read it). The agent proposes a short list with token costs, checks it
-with `skillman add … --dry-run --json`, installs after the user agrees, and confirms with `status --json` and
-`doctor --json`.
+with `skillman add -C <project> <selected names> --dry-run --json`, installs the selected names, and confirms with
+`status -C <project> --json` and `verify -C <project> --json`. Pass `install_args` directly as arguments when the
+whole proposed selection is wanted. An empty array means there are no new skills to add from this shortlist.
+For an untracked copy, inspect `diff` before `adopt`. When the library needs content, preview the pinned sources
+with `bootstrap --pack core --dry-run --json`. Each import reports its own outcome.
 
 ## JSON shapes
 
 | Command | Output |
 |---|---|
-| `add`, `remove`, `update`, `adopt`, `pin`, `verify`, `library pin` | `{"ok": bool, "results": [{"name", "ok", "message"}]}` |
+| `remove`, `update`, `adopt`, `pin`, `verify`, `library pin` | `{"ok": bool, "results": [{"name", "ok", "message"}]}` |
+| `add` | Same result fields plus `summary` with `installed`, `already_present`, `skipped`, `failed`. Exit 1 when every requested member is unavailable. |
 | `add --dry-run` | `{"project", "skills": [{"name", "pack", "state", "in_library", "tokens"}], "added_tokens", "budget_after", "budget"}` |
 | `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?}]` |
 | `doctor` | `{"project", "ok", "checks": [{"level": "ok\|warn\|error", "message"}]}` |

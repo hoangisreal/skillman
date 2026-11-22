@@ -16,7 +16,7 @@ Exit codes: `0` success, `1` a check failed or an item could not be processed, `
 
 | Command | Description |
 |---|---|
-| `recommend [dir] [--extra N] [--json]` | Detected stacks → packs with their curated skills plus up to N (default 5, `-1` all) other skills of the same stacks, each with project state, `in_library` and token cost, plus an install hint |
+| `recommend [dir] [--task words] [--limit N] [--extra N] [--json]` | Up to N local choices (default 5), each with stack evidence, matching task keywords, source, state and estimated added description tokens. Detailed groups include curated members plus `--extra` additional skills per stack. Install arguments include the target directory. |
 | `suggest [dir] [--json]` | Packs for the project's stack and the file that triggered each |
 | `search <words…> [--domain D] [--stack S] [--limit N] [-C dir] [--json]` | Ranked search (exact name, name prefix, name, description, source) |
 | `info <skill> [--body] [-C dir] [--json]` | Description, source and commit, domain/stacks, packs, tokens, validation findings, state in the project |
@@ -87,6 +87,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `library build-packs` | Regenerate `packs/vendor/*` (one pack per upstream owner with ≥ 3 skills) |
 | `trash list \| restore <id> \| empty --yes [ids]` | Removed project copies and deleted packs |
 | `init` | Create or refresh the library: starter packs, `repos.txt`, the `skillman` skill, `.gitignore`, git |
+| `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. License or audit failures are reported per skill. Rerun to retry missing members. |
 | `agent-setup [--dry-run] [--remove] [--no-claude] [--no-codex]` | Link the `skillman` skill into `~/.claude/skills` and `~/.agents/skills` |
 
 ## Import pipeline

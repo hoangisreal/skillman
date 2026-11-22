@@ -179,7 +179,7 @@ func TestLifecycle(t *testing.T) {
 	for _, s := range ProjectStatus(proj) {
 		check(t, s.State == "ok", "all ok after install: %s=%s", s.Name, s.State)
 	}
-	rs, _ = Install(proj, []Item{{"alpha", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "alpha", Pack: ""}}, false)
 	check(t, rs[0].Message == "already up to date", "reinstall up to date")
 
 	appendFile(filepath.Join(proj, ".agents/skills/alpha/SKILL.md"), "edit\n")
@@ -188,7 +188,7 @@ func TestLifecycle(t *testing.T) {
 	check(t, !rs[0].OK, "update refuses modified without force")
 	appendFile(filepath.Join(f.lib, "skills/beta/SKILL.md"), "lib change\n")
 	check(t, state(proj, "beta") == "outdated", "library change -> outdated")
-	rs, _ = Install(proj, []Item{{"beta", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "beta", Pack: ""}}, false)
 	check(t, !rs[0].OK && strings.Contains(rs[0].Message, "outdated"), "install of outdated copy points to update")
 	SetPin(proj, []string{"beta"}, true)
 	rs, _ = UpdateProject(proj, nil, false)
@@ -220,7 +220,7 @@ func TestLifecycle(t *testing.T) {
 	// refusals
 	os.MkdirAll(filepath.Join(proj, ".claude/skills/realdir"), 0o755)
 	mkskill(t, filepath.Join(f.lib, "skills"), "realdir", "", "", nil)
-	rs, _ = Install(proj, []Item{{"realdir", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "realdir", Pack: ""}}, false)
 	check(t, !rs[0].OK && strings.Contains(rs[0].Message, "not a symlink"), "refuse when .claude/skills/<name> is a real dir")
 	check(t, !Exists(filepath.Join(proj, ".agents/skills/realdir")), "nothing copied on refusal")
 	rs, _ = Uninstall(proj, []string{"../../etc"})
@@ -233,12 +233,12 @@ func TestLifecycle(t *testing.T) {
 	os.MkdirAll(evil, 0o755)
 	os.MkdirAll(elsewhere, 0o755)
 	os.Symlink(elsewhere, filepath.Join(evil, ".agents"))
-	_, err = Install(evil, []Item{{"alpha", ""}}, false)
+	_, err = Install(evil, []Item{{Name: "alpha", Pack: ""}}, false)
 	ents, _ := os.ReadDir(elsewhere)
 	check(t, err != nil && len(ents) == 0, "refuse symlinked .agents (nothing written outside)")
 
 	// uninstall pack keeps shared/manual skills
-	Install(proj, []Item{{"loc", "big"}}, false)
+	Install(proj, []Item{{Name: "loc", Pack: "big"}}, false)
 	UninstallPack(proj, "big")
 	left := ReadManifest(proj).Skills
 	_, hasLoc := left["loc"]
@@ -487,9 +487,50 @@ func TestTaxonomyAndRecommend(t *testing.T) {
 		packs = append(packs, g.Pack)
 	}
 	check(t, reflect.DeepEqual(packs, []string{"core", "web-vue"}), "recommend groups: %v", packs)
-	check(t, strings.Contains(rec.InstallHint, "@web-vue"), "install hint: %s", rec.InstallHint)
+
 	det := DetectedStacks(SuggestPacks(proj), LoadTaxonomy())
 	check(t, det["vue"] && det["core-workflow"], "detected stacks: %v", det)
+}
+
+func TestBootstrapPinnedSource(t *testing.T) {
+	f, commit := newFixture(t, []string{"alpha"}, nil)
+	source := StarterSource{"acme/skills", commit, "skills/alpha", "community"}
+	sources := map[string]StarterSource{"example": source}
+	names := []string{"example", "alpha", "unknown"}
+	if err := os.MkdirAll(STAGING, 0755); err != nil {
+		t.Fatal(err)
+	}
+	queue := filepath.Join(STAGING, "CANDIDATES.md")
+	if err := os.WriteFile(queue, []byte("existing selections"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	items, err := bootstrapSkills(names, sources, true)
+	if err != nil || items[0].Status != "planned" || items[1].Status != "already_present" || items[2].Status != "unavailable" || Exists(filepath.Join(SKILLS, "example")) {
+		t.Fatal(items, err)
+	}
+	items, err = bootstrapSkills(names, sources, false)
+	if err != nil || items[0].Status != "imported" {
+		t.Fatal(items, err)
+	}
+	dir := filepath.Join(SKILLS, "example")
+	if !IsFile(filepath.Join(dir, "UPSTREAM-LICENSE.txt")) || LoadMap(filepath.Join(dir, "SOURCE.json"))["commit"] != commit {
+		t.Fatal("missing provenance")
+	}
+	items, err = bootstrapSkills(names, sources, false)
+	if err != nil || items[0].Status != "already_present" {
+		t.Fatal(items, err)
+	}
+	if data, err := os.ReadFile(queue); err != nil || string(data) != "existing selections" {
+		t.Fatal("queue changed")
+	}
+	project := filepath.Join(f.root, "fresh-project")
+	if err := os.Mkdir(project, 0755); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Install(project, []Item{{Name: "example"}}, false)
+	if err != nil || !allOK(results) || !allOK(Verify(project)) {
+		t.Fatal(results, err)
+	}
 }
 
 func TestPackYAMLRoundTrip(t *testing.T) {

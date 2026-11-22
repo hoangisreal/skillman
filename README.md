@@ -69,6 +69,11 @@ skillman                    # browse, install, update and remove in the TUI
    `staging/repos.txt` lists 103 curated upstream repos. Verify them, tick what you want and import:
 
    ```sh
+   # For a first project, preview and import just one starter pack:
+   skillman bootstrap --pack web-vue --dry-run
+   skillman bootstrap --pack web-vue
+
+   # To explore the broader collection:
    skillman upstream verify -j 8                    # sparse clones, lists ~3000 candidates
    skillman upstream tick --pack core web-vue postgres
    skillman upstream tick --tier official --max-per-repo 40   # or in bulk
@@ -121,7 +126,7 @@ Re-file a skill or add your own domains in `~/skill-library/taxonomy.yaml` ([gui
 ### Add skills to a project
 
 ```sh
-skillman recommend .                  # detected stacks → packs and extra skills, installed state, tokens
+skillman recommend . --task "vue test" # ranked local choices, evidence, state and added tokens
 skill-add @postgres vitest --dry-run  # what would be copied and what it costs per session
 skill-add @postgres vitest            # copy, link and record
 ```

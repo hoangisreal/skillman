@@ -102,6 +102,34 @@ func newEntry(src, pack string, prev *Entry) *Entry {
 	return e
 }
 
+type InstallSummary struct {
+	Installed int `json:"installed"`
+	Present   int `json:"already_present"`
+	Skipped   int `json:"skipped"`
+	Failed    int `json:"failed"`
+}
+
+func (s InstallSummary) OK() bool {
+	return s.Failed == 0 && s.Installed+s.Present > 0
+}
+
+func SummarizeInstall(results []Result) InstallSummary {
+	var s InstallSummary
+	for _, r := range results {
+		switch {
+		case !r.OK:
+			s.Failed++
+		case strings.HasPrefix(r.Message, "skipped:"):
+			s.Skipped++
+		case r.Message == "already up to date":
+			s.Present++
+		default:
+			s.Installed++
+		}
+	}
+	return s
+}
+
 // Install copies skills from the library into d, links them for Claude Code and records them.
 func Install(d string, items []Item, force bool) ([]Result, error) {
 	unlock, err := ProjectLock(d)
@@ -118,7 +146,7 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		}
 		src := filepath.Join(SKILLS, name)
 		if !IsFile(filepath.Join(src, "SKILL.md")) {
-			if it.Pack != "" { // a pack may list skills not imported yet: report, don't fail the pack
+			if it.Pack != "" && !it.Manual {
 				out = append(out, res(name, true, "skipped: not in the library yet (listed by @%s; import it: skillman upstream tick --pack %s)", it.Pack, it.Pack))
 				continue
 			}
@@ -138,6 +166,9 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		if Exists(dest) {
 			prev := man.Skills[name]
 			switch {
+			case prev == nil && !force:
+				out = append(out, res(name, false, "untracked project copy: inspect with skillman diff, then use skillman adopt"))
+				continue
 			case TreeHash(src) == TreeHash(dest):
 				state = "already up to date"
 			case force:
@@ -173,11 +204,25 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 			out = append(out, res(name, false, "link does not resolve: %s", lp))
 			continue
 		}
-		man.Skills[name] = newEntry(src, it.Pack, man.Skills[name])
-		if it.Pack != "" && !man.Packs.Has(it.Pack) {
-			man.Packs.Set(it.Pack, map[string]string{"installed_at": Now()})
+		entry := newEntry(src, it.Pack, man.Skills[name])
+		entry.Manual = entry.Manual || it.Manual
+		for _, p := range it.OtherPacks {
+			if !entry.HasPack(p) {
+				entry.Packs = append(entry.Packs, p)
+			}
+		}
+		man.Skills[name] = entry
+		for _, p := range entry.Packs {
+			if !man.Packs.Has(p) {
+				man.Packs.Set(p, map[string]string{"installed_at": Now()})
+			}
 		}
 		out = append(out, res(name, true, "%s", state))
+	}
+	summary := SummarizeInstall(out)
+	if summary.Installed+summary.Present == 0 {
+		unlock()
+		return out, nil
 	}
 	err = WriteManifest(d, man)
 	unlock()
@@ -213,7 +258,10 @@ func Uninstall(d string, names []string) ([]Result, error) {
 		return nil, err
 	}
 	defer unlock()
-	man := ReadManifest(d)
+	return uninstallLocked(d, names, ReadManifest(d))
+}
+
+func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, error) {
 	var out []Result
 	for _, name := range names {
 		if !KEBAB.MatchString(name) {
@@ -271,14 +319,26 @@ func UninstallPack(d, pack string) ([]Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer unlock()
 	man := ReadManifest(d)
 	used := man.Packs.Has(pack)
 	for _, e := range man.Skills {
 		used = used || e.HasPack(pack)
 	}
 	if !used {
-		unlock()
 		return []Result{res(pack, false, "pack not installed in this project")}, nil
+	}
+	// Older manifests stored only the first owner of a shared skill in a batch add.
+	// Recover associations we can substantiate from the remaining installed packs.
+	remaining := map[string][]string{}
+	for _, other := range man.PackNames() {
+		if other == pack {
+			continue
+		}
+		names, _ := ExpandPack(other)
+		for _, n := range names {
+			remaining[n] = append(remaining[n], other)
+		}
 	}
 	var victims []string
 	var kept []Result
@@ -297,23 +357,23 @@ func UninstallPack(d, pack string) ([]Result, error) {
 			ps = []string{}
 		}
 		e.Packs = ps
-		if len(ps) == 0 && !e.Manual {
+		for _, other := range remaining[name] {
+			if !e.HasPack(other) {
+				e.Packs = append(e.Packs, other)
+			}
+		}
+		if len(e.Packs) == 0 && !e.Manual {
+			e.Packs = []string{pack} // retain ownership until moving this copy succeeds
 			victims = append(victims, name)
 		} else {
-			why := strings.Join(ps, ", ")
+			why := strings.Join(e.Packs, ", ")
 			if why == "" {
 				why = "manual add"
 			}
 			kept = append(kept, res(name, true, "kept (still used by %s)", why))
 		}
 	}
-	man.Packs.Delete(pack)
-	err = WriteManifest(d, man)
-	unlock()
-	if err != nil {
-		return nil, err
-	}
-	r, err := Uninstall(d, victims)
+	r, err := uninstallLocked(d, victims, man)
 	return append(r, kept...), err
 }
 

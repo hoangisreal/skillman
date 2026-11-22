@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/hoangisreal/skillman/internal/core"
+	"github.com/hoangisreal/skillman/internal/search"
 )
 
 func mkskill(t *testing.T, lib, name, desc string) {
@@ -168,6 +170,119 @@ func TestAgentWorkflow(t *testing.T) {
 	stdout = os.Stdout
 	if !core.Exists(filepath.Join(proj, ".agents/skills/tdd")) {
 		t.Errorf("skill-add name dir: %s", o.String())
+	}
+}
+
+func TestTaskSelection(t *testing.T) {
+	lib, original := setup(t)
+	project := filepath.Join(filepath.Dir(original), "repo 'with spaces'")
+	if err := os.Rename(original, project); err != nil {
+		t.Fatal(err)
+	}
+	mkskill(t, lib, "postgres-database-migration", "Review database migrations for PostgreSQL")
+	mkskill(t, lib, "golang-testing", "Testing Go modules")
+	for path, data := range map[string]string{"go.mod": "module example.test/sample", ".claude/worktrees/demo/pyproject.toml": "[project]"} {
+		file := filepath.Join(project, path)
+		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(data), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ task, want, evidence string }{
+		{"test Vue components", "vue-testing-best-practices", "package.json"},
+		{"review database migrations", "postgres-database-migration", "package.json"},
+		{"golang", "golang-testing", "go.mod"},
+	} {
+		var rec search.Recommendation
+		if rc := runJSON(t, &rec, "recommend", project, "--task", tc.task, "--limit", "3", "--extra", "0"); rc != 0 {
+			t.Fatal(rc)
+		}
+		if len(rec.Shortlist) == 0 || len(rec.Shortlist) > 3 || rec.Shortlist[0].Name != tc.want || rec.Shortlist[0].Evidence != tc.evidence {
+			t.Fatalf("%s: %+v", tc.task, rec.Shortlist)
+		}
+		for _, g := range rec.Groups {
+			if g.Pack == "python" {
+				t.Fatal("detected another worktree")
+			}
+		}
+		var planned struct {
+			Project string
+			Skills  []struct{ Name string }
+		}
+		if rc := runJSON(t, &planned, append(rec.InstallArgs, "--dry-run")...); rc != 0 || planned.Project != project || planned.Skills[0].Name != tc.want {
+			t.Fatal(planned)
+		}
+		var result struct {
+			OK      bool
+			Summary core.InstallSummary
+		}
+		if rc := runJSON(t, &result, "add", "-C", project, tc.want); rc != 0 || result.Summary.Installed != 1 {
+			t.Fatal(result)
+		}
+		rec = search.Recommendation{}
+		runJSON(t, &rec, "recommend", project, "--task", tc.task)
+		if rec.Shortlist[0].AddedTokens != 0 || slices.Contains(rec.InstallArgs, tc.want) {
+			t.Fatal(rec)
+		}
+	}
+	var rec search.Recommendation
+	runJSON(t, &rec, "recommend", project, "--task", "zzzznothing")
+	if len(rec.Shortlist) != 0 || rec.Message == "" || len(rec.InstallArgs) != 0 {
+		t.Fatal(rec)
+	}
+}
+
+func TestAddOutcomesAndPackOwners(t *testing.T) {
+	lib, p := setup(t)
+	for _, pack := range []core.Pack{
+		{Name: "empty-lib", Skills: []string{"absent"}},
+		{Name: "first", Skills: []string{"tdd", "vitest", "review-pr"}},
+		{Name: "second", Skills: []string{"vitest", "review-pr"}},
+	} {
+		if err := core.SavePack(&pack); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var result struct {
+		OK      bool
+		Summary core.InstallSummary
+	}
+	add := func(args ...string) int { return runJSON(t, &result, append([]string{"add", "-C", p}, args...)...) }
+	if rc := add("@empty-lib"); rc != 1 || result.OK || result.Summary.Skipped != 1 {
+		t.Fatal(result)
+	}
+	if rc := add("review-pr", "@first", "@second", "@empty-lib"); rc != 0 || result.Summary.Installed != 3 || result.Summary.Skipped != 1 {
+		t.Fatal(result)
+	}
+	if rc := add("review-pr"); rc != 0 || result.Summary.Present != 1 {
+		t.Fatal(result)
+	}
+	if rc, _, _ := run(t, "remove", "-C", p, "@first"); rc != 0 {
+		t.Fatal(rc)
+	}
+	man := core.ReadManifest(p)
+	if man.Skills["tdd"] != nil || !man.Skills["vitest"].HasPack("second") || !man.Skills["review-pr"].Manual {
+		t.Fatal(man.Skills)
+	}
+	if rc, _, _ := run(t, "remove", "-C", p, "@second"); rc != 0 {
+		t.Fatal(rc)
+	}
+	if !core.IsDir(core.Dest(p, "review-pr")) || core.IsDir(core.Dest(p, "vitest")) {
+		t.Fatal("incorrect retained skills")
+	}
+	if err := core.CopyTree(filepath.Join(lib, "skills", "vitest"), core.Dest(p, "vitest"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if rc := add("vitest"); rc != 1 || result.Summary.Failed != 1 || core.ReadManifest(p).Skills["vitest"] != nil {
+		t.Fatal(result)
+	}
+	if rc, _, _ := run(t, "adopt", "vitest", "-C", p); rc != 0 {
+		t.Fatal(rc)
 	}
 }
 
