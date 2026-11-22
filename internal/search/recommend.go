@@ -54,18 +54,15 @@ func Recommend(project string, rows []core.IndexRow, task string, limit, extra i
 				c.score += 4
 			}
 			doc := Doc{name: s.Name, desc: strings.ToLower(s.Description), src: strings.ToLower(s.Source)}
-			var matches []string
-			for _, w := range words {
-				if score := doc.score([]string{w}); score > 0 {
-					matches = append(matches, w)
-					c.score += 2000 + score
+			// Every task word must match (same semantics as `skillman search`),
+			// so one common word cannot flood the shortlist on its own.
+			if len(words) > 0 {
+				if ts := doc.score(words); ts > 0 {
+					c.score += 2000 + ts
+					c.Reason += " · " + strings.Join(words, ", ")
+				} else {
+					continue
 				}
-			}
-			if len(words) > 0 && len(matches) == 0 {
-				continue
-			}
-			if len(matches) > 0 {
-				c.Reason += " · " + strings.Join(matches, ", ")
 			}
 			if prev, ok := best[s.Name]; !ok || c.score > prev.score {
 				best[s.Name] = c

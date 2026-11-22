@@ -197,10 +197,16 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 			state = "copied"
 		}
 		if err := link(d, name); err != nil {
+			if state == "copied" {
+				os.RemoveAll(dest) // fresh copy: do not leave an untracked orphan behind
+			}
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
 		if !LinkOK(d, name) {
+			if state == "copied" {
+				os.RemoveAll(dest)
+			}
 			out = append(out, res(name, false, "link does not resolve: %s", lp))
 			continue
 		}

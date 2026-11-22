@@ -504,11 +504,11 @@ func TestBootstrapPinnedSource(t *testing.T) {
 	if err := os.WriteFile(queue, []byte("existing selections"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	items, err := bootstrapSkills(names, sources, true)
+	items, err := bootstrapSkills(names, sources, true, false)
 	if err != nil || items[0].Status != "planned" || items[1].Status != "already_present" || items[2].Status != "unavailable" || Exists(filepath.Join(SKILLS, "example")) {
 		t.Fatal(items, err)
 	}
-	items, err = bootstrapSkills(names, sources, false)
+	items, err = bootstrapSkills(names, sources, false, false)
 	if err != nil || items[0].Status != "imported" {
 		t.Fatal(items, err)
 	}
@@ -516,7 +516,7 @@ func TestBootstrapPinnedSource(t *testing.T) {
 	if !IsFile(filepath.Join(dir, "UPSTREAM-LICENSE.txt")) || LoadMap(filepath.Join(dir, "SOURCE.json"))["commit"] != commit {
 		t.Fatal("missing provenance")
 	}
-	items, err = bootstrapSkills(names, sources, false)
+	items, err = bootstrapSkills(names, sources, false, false)
 	if err != nil || items[0].Status != "already_present" {
 		t.Fatal(items, err)
 	}

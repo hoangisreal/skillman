@@ -97,7 +97,7 @@ func init() {
 	// setup
 	reg("init", "", "Create or refresh the library at $SKILL_LIBRARY: starter packs, repos.txt, the skillman skill, git.",
 		nil, cmdInit)
-	reg("bootstrap", "--pack <core|web-vue|postgres> [--dry-run] [--json]", "Preview or import missing starter skills into the library from pinned sources.", []string{"pack"}, cmdBootstrap)
+	reg("bootstrap", "--pack <core|web-vue|postgres> [--dry-run] [--allow-risky] [--json]", "Preview or import missing starter skills into the library from pinned sources.", []string{"pack"}, cmdBootstrap)
 	reg("agent-setup", "[--dry-run] [--remove] [--no-claude] [--no-codex]",
 		"Link the skillman skill into ~/.claude/skills (Claude Code, OpenCode) and ~/.agents/skills (Codex),\n"+
 			"so coding agents can use skillman in any project. Never overwrites a real directory.", nil, cmdAgentSetup)
@@ -857,9 +857,9 @@ func cmdProjects(a *Args) int {
 func cmdBootstrap(a *Args) int {
 	pack := a.Str("pack", "")
 	if pack == "" || len(a.Pos) > 0 {
-		return usage("skillman bootstrap --pack <core|web-vue|postgres> [--dry-run] [--json]")
+		return usage("skillman bootstrap --pack <core|web-vue|postgres> [--dry-run] [--allow-risky] [--json]")
 	}
-	items, err := core.Bootstrap(pack, a.Has("dry-run"))
+	items, err := core.Bootstrap(pack, a.Has("dry-run"), a.Has("allow-risky"))
 	if err != nil {
 		return fail(err)
 	}
