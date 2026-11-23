@@ -132,27 +132,35 @@ func importIgnore(dir string, names []string) map[string]bool {
 }
 
 // inlineRepoLinks: upstream symlinks are replaced by the target's content if it stays inside the repo, else dropped.
-func inlineRepoLinks(clone, commit, wt, sdir, staged, work string) (inlined, dropped []string) {
+func inlineRepoLinks(clone, commit, wt, sdir, staged, work string, links map[string]bool, ignore IgnoreFunc) (inlined, dropped []string) {
 	for _, e := range Rglob(sdir) {
-		if !e.IsSymlink() {
+		if !links[e.Path] {
 			continue
 		}
 		if hasIgnoredPart(e.Rel, ExcludeDirs) || ExcludeFiles[path.Base(e.Rel)] {
 			continue
 		}
-		tgt, _ := os.Readlink(e.Path)
+		tgt, err := os.Readlink(e.Path)
+		if err != nil {
+			b, err := os.ReadFile(e.Path)
+			if err != nil {
+				dropped = append(dropped, e.Rel)
+				continue
+			}
+			tgt = string(b)
+		}
 		relToWT, _ := filepath.Rel(wt, e.Path)
 		repoRel := path.Clean(path.Join(path.Dir(filepath.ToSlash(relToWT)), tgt))
-		if path.IsAbs(tgt) || repoRel == ".." || strings.HasPrefix(repoRel, "../") {
+		if strings.ContainsAny(tgt, "\\\\:") || path.IsAbs(tgt) || repoRel == ".." || strings.HasPrefix(repoRel, "../") {
 			dropped = append(dropped, e.Rel)
 			continue
 		}
-		Git([]string{"--literal-pathspecs", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
+		Git([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
 			"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 		src := filepath.Join(wt, filepath.FromSlash(repoRel))
 		real, err := filepath.EvalSymlinks(src)
 		wtReal, _ := filepath.EvalSymlinks(wt)
-		if IsSymlink(src) || !Exists(src) || err != nil || !(real == wtReal || strings.HasPrefix(real, wtReal+string(os.PathSeparator))) {
+		if links[src] || IsSymlink(src) || !Exists(src) || err != nil || !(real == wtReal || strings.HasPrefix(real, wtReal+string(os.PathSeparator))) {
 			dropped = append(dropped, e.Rel)
 			continue
 		}
@@ -161,7 +169,7 @@ func inlineRepoLinks(clone, commit, wt, sdir, staged, work string) (inlined, dro
 			continue
 		}
 		if IsDir(src) {
-			CopyTree(src, dest, importIgnore)
+			CopyTree(src, dest, ignore)
 		} else {
 			CopyFile(src, dest)
 		}
@@ -245,17 +253,37 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 		paths = []string{"."}
 	}
 	paths = append(paths, licRoot...)
-	r := Git(append([]string{"--literal-pathspecs", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
+	r := Git(append([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
 		"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 	if r.Code != 0 {
 		return "", nil, errf("checkout failed: %s", tail(r.Stderr, 200))
+	}
+	tree := Git([]string{"ls-tree", "-rz", commit}, clone, 180)
+	if tree.Code != 0 {
+		return "", nil, errf("cannot inspect Git file modes")
+	}
+	links := map[string]bool{}
+	for _, line := range strings.Split(tree.Stdout, "\x00") {
+		meta, file, ok := strings.Cut(line, "\t")
+		if ok && strings.HasPrefix(meta, "120000 ") {
+			links[filepath.Join(wt, filepath.FromSlash(file))] = true
+		}
+	}
+	ignore := func(dir string, names []string) map[string]bool {
+		out := importIgnore(dir, names)
+		for _, n := range names {
+			if links[filepath.Join(dir, n)] {
+				out[n] = true
+			}
+		}
+		return out
 	}
 	sdir := wt
 	if !whole {
 		sdir = filepath.Join(wt, filepath.FromSlash(subpath))
 	}
 	md := filepath.Join(sdir, "SKILL.md")
-	if IsSymlink(md) {
+	if links[md] || IsSymlink(md) {
 		return "", nil, errf("SKILL.md is a symlink (not imported by policy)")
 	}
 	if !IsFile(md) {
@@ -263,12 +291,12 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 	}
 	var licLocal, licRootP []string
 	for _, e := range SortedDir(sdir) {
-		if licenseLocalRx.MatchString(e.Name()) && e.Type().IsRegular() {
+		if licenseLocalRx.MatchString(e.Name()) && e.Type().IsRegular() && !links[filepath.Join(sdir, e.Name())] {
 			licLocal = append(licLocal, e.Name())
 		}
 	}
 	for _, p := range licRoot {
-		if !IsSymlink(filepath.Join(wt, p)) && IsFile(filepath.Join(wt, p)) {
+		if !links[filepath.Join(wt, p)] && !IsSymlink(filepath.Join(wt, p)) && IsFile(filepath.Join(wt, p)) {
 			licRootP = append(licRootP, filepath.Join(wt, p))
 		}
 	}
@@ -276,10 +304,10 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 		return "", nil, errf("no license found")
 	}
 	staged := filepath.Join(work, "out")
-	if err := CopyTree(sdir, staged, importIgnore); err != nil {
+	if err := CopyTree(sdir, staged, ignore); err != nil {
 		return "", nil, err
 	}
-	inlined, dropped := inlineRepoLinks(clone, commit, wt, sdir, staged, work)
+	inlined, dropped := inlineRepoLinks(clone, commit, wt, sdir, staged, work, links, ignore)
 	if len(licLocal) == 0 {
 		if err := CopyFile(licRootP[0], filepath.Join(staged, "UPSTREAM-LICENSE.txt")); err != nil {
 			return "", nil, err

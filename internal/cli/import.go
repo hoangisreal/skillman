@@ -157,7 +157,7 @@ func cmdImport(a *Args) int {
 			plan := core.Result{Name: it.Name, OK: true, Message: "would install"}
 			link := core.LinkP(r.Project, it.Name)
 			switch {
-			case core.Lexists(link) && !core.IsSymlink(link):
+			case core.Lexists(link) && !core.IsSymlink(link) && !core.LinkOK(r.Project, it.Name):
 				plan.OK, plan.Message = false, "project link path is occupied"
 			case state == "missing":
 				plan.Message = "would restore missing copy"

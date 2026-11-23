@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -102,27 +103,39 @@ func RestoreTrash(slot string) (string, error) {
 	if len(payload) != 1 {
 		return "", errf("corrupt trash entry")
 	}
-	os.MkdirAll(filepath.Dir(origin), 0o755)
+	kind, name := getStr(m, "kind"), getStr(m, "name")
+	proj := getStr(m, "project")
+	if kind == "skill" {
+		if err := CheckName(name); err != nil {
+			return "", err
+		}
+		if filepath.Clean(origin) != Dest(proj, name) {
+			return "", errf("invalid skill destination")
+		}
+		unlock, err := ProjectLock(proj)
+		if err != nil {
+			return "", err
+		}
+		defer unlock()
+		if Lexists(origin) || Lexists(LinkP(proj, name)) {
+			return "", errf("restore destination occupied")
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(origin), 0755); err != nil {
+		return "", err
+	}
 	if err := Move(payload[0], origin); err != nil {
 		return "", err
 	}
-	kind, name := getStr(m, "kind"), getStr(m, "name")
 	if kind == "skill" {
-		proj := getStr(m, "project")
 		if err := link(proj, name); err != nil {
-			return "", err
+			return "", errors.Join(err, Move(origin, payload[0]))
 		}
 		if me, ok := m["manifest_entry"].(map[string]any); ok && me != nil {
-			unlock, err := ProjectLock(proj)
-			if err != nil {
-				return "", err
-			}
 			man := ReadManifest(proj)
 			man.Skills[name] = entryFromMap(me)
-			err = WriteManifest(proj, man)
-			unlock()
-			if err != nil {
-				return "", err
+			if err := WriteManifest(proj, man); err != nil {
+				return "", errors.Join(err, os.RemoveAll(LinkP(proj, name)), Move(origin, payload[0]))
 			}
 		}
 	}

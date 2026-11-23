@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 )
 
@@ -185,7 +186,11 @@ type ManifestData struct {
 }
 
 func ReadManifest(d string) *ManifestData {
-	top := LoadOMap(filepath.Join(d, ".agents", Manifest))
+	file := filepath.Join(d, ".agents", Manifest)
+	top := LoadOMap(file)
+	if runtime.GOOS == "windows" && !Lexists(file) {
+		top.Set("claude_mode", "copy")
+	}
 	m := &ManifestData{Skills: map[string]*Entry{}, Packs: NewOMap(), top: top}
 	if !top.Has("version") {
 		top.Set("version", 1)

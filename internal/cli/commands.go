@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -60,7 +61,7 @@ func init() {
 	reg("pin", "<skills…> [-C dir]", "Keep a project copy as it is (skipped by update, accepted by verify).",
 		[]string{"C"}, func(a *Args) int { return cmdPin(a, true) })
 	reg("unpin", "<skills…> [-C dir]", "Undo pin.", []string{"C"}, func(a *Args) int { return cmdPin(a, false) })
-	reg("repair-links", "[dir]", "Recreate missing or broken .claude/skills links.", []string{"C"}, cmdRepairLinks)
+	reg("repair-links", "[dir] [--mode copy] [--dry-run]", "Recreate missing or broken .claude/skills links.", []string{"C", "mode"}, cmdRepairLinks)
 	reg("projects", "[--json]", "Projects registered by skillman (where skills were installed).", nil, cmdProjects)
 
 	// packs
@@ -829,7 +830,15 @@ func cmdRepairLinks(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	msgs, err := core.RepairLinks(d)
+	var msgs []string
+	switch {
+	case a.Str("mode", "") == "copy":
+		msgs, err = core.ConvertCopies(d, a.Has("dry-run"))
+	case a.Has("mode") || a.Has("dry-run"):
+		return usage("use --mode copy with --dry-run")
+	default:
+		msgs, err = core.RepairLinks(d)
+	}
 	if err != nil {
 		return fail(err)
 	}
@@ -975,6 +984,15 @@ func cmdAgentSetup(a *Args) int {
 	rc := 0
 	for _, t := range targets {
 		lp := filepath.Join(t, core.SelfSkill)
+		if runtime.GOOS == "windows" && !core.IsSymlink(lp) {
+			if err := core.SetupSkillCopy(src, lp, a.Has("remove"), dry); err != nil {
+				errfln("%s", err)
+				rc = 1
+			} else {
+				outf("%s\n", lp)
+			}
+			continue
+		}
 		switch {
 		case a.Has("remove"):
 			if core.IsSymlink(lp) {

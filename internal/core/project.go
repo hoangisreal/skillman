@@ -59,6 +59,9 @@ func Dest(d, name string) string  { return filepath.Join(d, ".agents", "skills",
 func LinkP(d, name string) string { return filepath.Join(d, ".claude", "skills", name) }
 
 func link(d, name string) error {
+	if copyMode(d) {
+		return createMirror(Dest(d, name), LinkP(d, name))
+	}
 	return setSkillLink(LinkP(d, name), "../../.agents/skills/"+name)
 }
 
@@ -92,6 +95,9 @@ func setSkillLink(lp, target string) error {
 
 func LinkOK(d, name string) bool {
 	lp := LinkP(d, name)
+	if copyMode(d) {
+		return !IsSymlink(lp) && IsFile(filepath.Join(lp, "SKILL.md")) && TreeHash(lp) == TreeHash(Dest(d, name))
+	}
 	return IsSymlink(lp) && IsFile(filepath.Join(lp, "SKILL.md")) && !IsSymlink(filepath.Join(Dest(d, name), "SKILL.md"))
 }
 
@@ -173,7 +179,7 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 			continue
 		}
 		dest, lp := Dest(d, name), LinkP(d, name)
-		if Lexists(lp) && !IsSymlink(lp) {
+		if Lexists(lp) && !IsSymlink(lp) && !managedMirror(d, name, man.Skills[name]) {
 			out = append(out, res(name, false, "%s exists and is not a symlink; refusing to overwrite", lp))
 			continue
 		}
@@ -202,7 +208,7 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		} else {
 			state = "copied"
 		}
-		change, err := installFiles(d, name, src, state != "already up to date", man.Skills[name])
+		change, err := installFiles(d, name, src, state != "already up to date", man.Skills[name], "replaced by --force")
 		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
@@ -228,6 +234,9 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		unlock()
 		return out, nil
 	}
+	if copyMode(d) {
+		man.top.Set("claude_mode", "copy")
+	}
 	err = WriteManifest(d, man)
 	if err != nil {
 		for i := len(changes) - 1; i >= 0; i-- {
@@ -235,6 +244,9 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 		}
 		unlock()
 		return out, err
+	}
+	for _, c := range changes {
+		c.finish()
 	}
 	unlock()
 	RegisterProject(d)
@@ -244,12 +256,20 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 // Keep the old copy in trash on success. On failure restore both paths while
 // the project lock is still held, including if the final manifest write fails.
 type installChange struct {
-	dest, link, previousLink, trash string
-	copied, linked                  bool
+	dest, link, previousLink, trash, mirrorBackup string
+	mirror                                        bool
+	copied, linked                                bool
 }
 
 func (c installChange) rollback() error {
 	var linkErr error
+	if c.mirror {
+		linkErr = os.RemoveAll(c.link)
+	}
+	if c.mirrorBackup != "" {
+		linkErr = errors.Join(linkErr, os.Rename(c.mirrorBackup, c.link))
+		os.Remove(filepath.Dir(c.mirrorBackup))
+	}
 	if c.linked {
 		if c.previousLink == "" {
 			linkErr = os.Remove(c.link)
@@ -271,7 +291,7 @@ func (c installChange) rollback() error {
 	return linkErr
 }
 
-func installFiles(d, name, src string, copyNeeded bool, previous *Entry) (c installChange, err error) {
+func installFiles(d, name, src string, copyNeeded bool, previous *Entry, reason string) (c installChange, err error) {
 	c.dest, c.link = Dest(d, name), LinkP(d, name)
 	if IsSymlink(c.link) {
 		c.previousLink, err = os.Readlink(c.link)
@@ -302,7 +322,7 @@ func installFiles(d, name, src string, copyNeeded bool, previous *Entry) (c inst
 			return c, errf("%s: expected a regular SKILL.md", name)
 		}
 		if Lexists(c.dest) {
-			c.trash, err = toTrashSkill(d, name, previous, "replaced by --force")
+			c.trash, err = toTrashSkill(d, name, previous, reason)
 			if err != nil {
 				return c, err
 			}
@@ -311,6 +331,22 @@ func installFiles(d, name, src string, copyNeeded bool, previous *Entry) (c inst
 			return c, err
 		}
 		c.copied = true
+	}
+	if copyMode(d) {
+		if Lexists(c.link) {
+			if !managedMirror(d, name, previous) {
+				return c, errf("modified or unmanaged Claude copy: %s", c.link)
+			}
+			if TreeHash(c.link) == TreeHash(c.dest) {
+				return c, nil
+			}
+			if err = c.backupMirror(); err != nil {
+				return c, err
+			}
+		}
+		err = createMirror(c.dest, c.link)
+		c.mirror = err == nil
+		return c, err
 	}
 	if err := link(d, name); err != nil {
 		return c, err
@@ -352,40 +388,47 @@ func Uninstall(d string, names []string) ([]Result, error) {
 
 func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, error) {
 	var out []Result
+	var changes []installChange
 	for _, name := range names {
 		if !KEBAB.MatchString(name) {
 			out = append(out, res(name, false, "invalid skill name"))
 			continue
 		}
 		dest, lp := Dest(d, name), LinkP(d, name)
-		if !Lexists(dest) {
-			hadLink := IsSymlink(lp)
-			if hadLink {
-				os.Remove(lp)
-			}
-			_, tracked := man.Skills[name]
-			delete(man.Skills, name)
-			if tracked || hadLink {
-				out = append(out, res(name, true, "removed stale manifest entry/link"))
-			} else {
-				out = append(out, res(name, false, "not installed"))
-			}
+		mirror := copyMode(d) && Lexists(lp)
+		if mirror && !managedMirror(d, name, man.Skills[name]) {
+			out = append(out, res(name, false, "modified or unmanaged Claude copy: %s", lp))
 			continue
 		}
 		if IsSymlink(dest) {
 			out = append(out, res(name, false, "%s is a symlink; refusing", dest))
 			continue
 		}
-		slot, err := toTrashSkill(d, name, man.Skills[name], "uninstall")
-		if err != nil {
-			out = append(out, res(name, false, "%v", err))
+		c := installChange{dest: dest, link: lp}
+		hadView := mirror || IsSymlink(lp)
+		if hadView {
+			if err := c.backupMirror(); err != nil {
+				out = append(out, res(name, false, "%v", err))
+				continue
+			}
+		}
+		if Lexists(dest) {
+			var err error
+			c.trash, err = toTrashSkill(d, name, man.Skills[name], "uninstall")
+			if err != nil {
+				err = errors.Join(err, c.rollback())
+				out = append(out, res(name, false, "%v", err))
+				continue
+			}
+			out = append(out, res(name, true, "moved to trash: %s", c.trash))
+		} else if man.Skills[name] != nil || hadView {
+			out = append(out, res(name, true, "removed stale manifest entry/link"))
+		} else {
+			out = append(out, res(name, false, "not installed"))
 			continue
 		}
-		if IsSymlink(lp) {
-			os.Remove(lp)
-		}
 		delete(man.Skills, name)
-		out = append(out, res(name, true, "moved to trash: %s", slot))
+		changes = append(changes, c)
 	}
 	for _, p := range man.PackNames() {
 		used := false
@@ -399,7 +442,16 @@ func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, err
 			man.Packs.Delete(p)
 		}
 	}
-	return out, WriteManifest(d, man)
+	if err := WriteManifest(d, man); err != nil {
+		for i := len(changes) - 1; i >= 0; i-- {
+			err = errors.Join(err, changes[i].rollback())
+		}
+		return out, err
+	}
+	for _, c := range changes {
+		c.finish()
+	}
+	return out, nil
 }
 
 // UninstallPack drops a pack; only skills no other pack (or manual add) still needs are removed.
@@ -606,6 +658,7 @@ func UpdateProject(d string, names []string, force bool) ([]Result, error) {
 	defer unlock()
 	man := ReadManifest(d)
 	var out []Result
+	var changes []installChange
 	for _, name := range targets {
 		r, ok := st[name]
 		switch {
@@ -626,22 +679,28 @@ func UpdateProject(d string, names []string, force bool) ([]Result, error) {
 			continue
 		}
 		src := filepath.Join(SKILLS, name)
-		if _, err := toTrashSkill(d, name, man.Skills[name], "update"); err != nil {
+		change, err := installFiles(d, name, src, true, man.Skills[name], "update")
+		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
-		if err := CopyTree(src, Dest(d, name), nil); err != nil {
-			out = append(out, res(name, false, "%v", err))
-			continue
-		}
-		link(d, name)
+		changes = append(changes, change)
 		prev := man.Skills[name]
 		e := newEntry(src, "", prev)
 		e.Manual = prev != nil && prev.Manual
 		man.Skills[name] = e
 		out = append(out, res(name, true, "updated"))
 	}
-	return out, WriteManifest(d, man)
+	if err := WriteManifest(d, man); err != nil {
+		for i := len(changes) - 1; i >= 0; i-- {
+			err = errors.Join(err, changes[i].rollback())
+		}
+		return out, err
+	}
+	for _, c := range changes {
+		c.finish()
+	}
+	return out, nil
 }
 
 // Adopt starts tracking copies that predate the manifest.

@@ -38,6 +38,20 @@ skillman                    # browse, install, update and remove in the TUI
 
 ## Installation
 
+### Download a binary
+
+Download the archive for your CPU (`amd64` or `arm64`) and `SHA256SUMS` from the same tagged [GitHub release](https://github.com/hoangisreal/skillman/releases). Compare the SHA-256 digest of the downloaded archive with its entry in that file.
+
+| System | Verify the download | Extract and start |
+|---|---|---|
+| Windows (PowerShell) | `Get-FileHash .\skillman-*.zip -Algorithm SHA256` | `Expand-Archive .\skillman-*.zip -DestinationPath .\tools` then `.\tools\skillman.exe init` |
+| macOS | `shasum -a 256 skillman-*.tar.gz` | `tar -xzf skillman-*-darwin-*.tar.gz` then `./skillman init` |
+| Linux | `sha256sum skillman-*.tar.gz` | `tar -xzf skillman-*-linux-*.tar.gz` then `./skillman init` |
+
+Place the extracted executable on your PATH. Run `skillman agent-setup` to make the bundled instructions available to local agents. Run `skillman recommend -C . --brief --json` in a project or launch `skillman` for the TUI. Git is needed for GitHub imports, upstream updates and library history.
+
+### Build from source
+
 1. **Install the binary**
 
    Requires Go 1.26+ and git.
@@ -274,7 +288,14 @@ No. Removing a skill, replacing a modified copy or deleting a pack moves it to a
 <details>
 <summary>Does it run on Windows?</summary>
 
-Not yet: it relies on POSIX file locks and symlinks. Linux and macOS are tested in CI.
+New Windows projects keep a managed Claude copy alongside the canonical `.agents/skills` tree. Both directories and `.agents/skill-manifest.json` belong in version control. Windows does not need Developer Mode for this layout. On another OS, Skillman follows the layout saved in the manifest. For an older project, preview `skillman repair-links -C . --mode copy --dry-run` and rerun without `--dry-run` to convert tracked links.
+
+Preserve the exact skill bytes across Git checkouts. Add the following rules to the project’s `.gitattributes` before committing skills, and ignore `.agents/.skillman.lock` in `.gitignore`.
+
+```gitattributes
+.agents/skills/** -text
+.claude/skills/** -text
+```
 </details>
 
 ## Alternatives

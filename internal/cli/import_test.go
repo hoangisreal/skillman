@@ -13,13 +13,17 @@ import (
 
 func TestImportWorkflow(t *testing.T) {
 	lib, p := setup(t)
+	p, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tmp := t.TempDir()
 	gitBase := filepath.Join(tmp, "upstreams")
 	repo := filepath.Join(gitBase, "acme", "skills.git")
 	if err := os.MkdirAll(repo, 0755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SKILLCORE_GIT_BASE", "file://"+gitBase+"/")
+	t.Setenv("SKILLCORE_GIT_BASE", filepath.ToSlash(gitBase)+"/")
 	core.Configure()
 	git := func(args ...string) string {
 		t.Helper()

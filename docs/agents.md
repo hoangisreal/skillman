@@ -17,6 +17,10 @@ It is a symlink to the copy in your library, so `skillman init` refreshes it. It
 each session. `skillman agent-setup --remove` undoes it; a real directory at those paths is never touched. To keep
 it per project only, skip agent-setup and run `skill-add skillman` in the project.
 
+### Cursor and GitHub Copilot CLI
+
+Both clients discover project skills under `.agents/skills` and personal skills under `~/.agents/skills`. Run `skillman agent-setup` to expose the Skillman instructions. Open the project in Cursor and check its Skills settings, or run `/skills reload` and inspect `/skills` in Copilot CLI. Ask “Trong thư viện local, skill nào phù hợp để test component Vue? Chưa cài gì.” Check that the recommendation targets this project and that only the selected name is passed to `add` after selection. [Cursor skills](https://cursor.com/docs/skills) · [Copilot CLI skills](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)
+
 ## The workflow the skill teaches
 
 Ask the agent to select skills **from your local Skillman library for this project**. For explicit invocation use
