@@ -255,8 +255,10 @@ func TestLifecycle(t *testing.T) {
 	}
 	check(t, slot != "", "uninstalled skill in trash")
 	_, err = RestoreTrash(slot)
-	_, back := ReadManifest(proj).Skills["gamma"]
+	restored := ReadManifest(proj)
+	_, back := restored.Skills["gamma"]
 	check(t, err == nil && Exists(filepath.Join(proj, ".agents/skills/gamma/SKILL.md")) && back, "restore from trash: %v", err)
+	check(t, restored.Packs.Has("big") && back && restored.Skills["gamma"].HasPack("big"), "restoring the last pack member must restore its pack")
 
 	// repair links + doctor
 	os.Remove(filepath.Join(proj, ".claude/skills/gamma"))

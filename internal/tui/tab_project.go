@@ -143,6 +143,9 @@ func (t *projectTab) actions(m *Model) []action {
 					names = append(names, n)
 				}
 			}
+			if len(names) == 0 {
+				return m.notify("select an untracked skill to adopt", false)
+			}
 			return t.run(m, "adopted", func() ([]core.Result, error) { return core.Adopt(p, names) })
 		}},
 		{key: "t", label: "pin", run: func(m *Model) tea.Cmd {

@@ -396,6 +396,28 @@ func TestTUIFlow(t *testing.T) {
 	d.press("esc")
 }
 
+func TestAdoptUsesProjectSelection(t *testing.T) {
+	e := setup(t)
+	if rs, err := core.Install(e.proj, []core.Item{{Name: "alpha"}}, false); err != nil || len(rs) != 1 || !rs[0].OK {
+		t.Fatal(rs, err)
+	}
+	mkskill(t, filepath.Dir(core.Dest(e.proj, "beta")), "beta", "local copy", "body")
+	d := newDriver(t, e.proj)
+	d.press("4")
+	pt := d.m.tabs[3].(*projectTab)
+	if pt.tbl.current() != "alpha" {
+		t.Fatal("unexpected initial selection", pt.tbl.current())
+	}
+	d.press("a")
+	if installed(e.proj)["beta"] || core.Lexists(core.LinkP(e.proj, "beta")) {
+		t.Fatal("adopt changed an unselected skill")
+	}
+	d.press("down", "a")
+	if !installed(e.proj)["beta"] {
+		t.Fatal("selected untracked skill was not adopted")
+	}
+}
+
 // BenchmarkSearchKeystroke measures one keystroke in the Library search box (filter + render).
 func BenchmarkSearchKeystroke(b *testing.B) {
 	lib := os.Getenv("SKILLMAN_BENCH_LIBRARY")

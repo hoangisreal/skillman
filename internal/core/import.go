@@ -241,7 +241,7 @@ type LibraryImport struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool) (string, string, error) {
+func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview func(name, source string)) (string, string, error) {
 	if err := CheckName(s.Name); err != nil {
 		return "", "", err
 	}
@@ -274,9 +274,15 @@ func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool) (string, s
 		if !slices.Equal(mods, strList(provenance["local_modifications"])) || !sameImport(target, staged) {
 			return "", "", errf("conflict: library copy has local modifications")
 		}
+		if preview != nil {
+			preview(s.Name, target)
+		}
 		return "reused", note, nil
 	}
 	if dry {
+		if preview != nil {
+			preview(s.Name, staged)
+		}
 		return "would_import", note, nil
 	}
 	// A direct import never replaces a populated destination.
@@ -286,18 +292,33 @@ func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool) (string, s
 	return "imported", note, nil
 }
 
-func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky bool) ([]LibraryImport, error) {
+func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky bool, project string) ([]LibraryImport, []Result, error) {
+	var plans []Result
+	var preview func(name, source string)
+	if dry && project != "" {
+		if err := CheckProjectDirs(project); err != nil {
+			return nil, nil, err
+		}
+		man, _, err := LoadProjectManifest(project)
+		if err != nil {
+			return nil, nil, err
+		}
+		preview = func(name, source string) {
+			decision := decideInstall(project, source, Item{Name: name, Manual: true}, man.Skills[name], false, man.copyMode())
+			plans = append(plans, res(name, decision.action != "blocked", "%s", decision.reason))
+		}
+	}
 	if !dry {
 		unlock, err := DirLock(SKILLS)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer unlock()
 	}
 	out := make([]LibraryImport, 0, len(selected))
 	refresh := false
 	for _, s := range selected {
-		action, detail, err := importOne(src, s, dry, allowRisky)
+		action, detail, err := importOne(src, s, dry, allowRisky, preview)
 		if err != nil {
 			action, detail = "failed", err.Error()
 		}
@@ -306,7 +327,7 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 	}
 	if !dry && refresh {
 		_, _, _, err := RebuildIndex(true)
-		return out, err
+		return out, plans, err
 	}
-	return out, nil
+	return out, plans, nil
 }

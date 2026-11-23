@@ -79,6 +79,21 @@ func TestImportWorkflow(t *testing.T) {
 	if core.Lexists(target) || core.Lexists(core.Dest(p, "example-skill")) {
 		t.Fatal("dry run changed destination")
 	}
+	t.Run("project preview refuses unreadable manifest and occupied parent", func(t *testing.T) {
+		for _, obstacle := range []string{filepath.Join(".agents", core.Manifest), filepath.Join(".agents", "skills"), ".claude"} {
+			proj := t.TempDir()
+			path := filepath.Join(proj, obstacle)
+			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			write(path, "occupied")
+			var report importReport
+			rc := runJSON(t, &report, "import", tree, "-C", proj, "--dry-run")
+			if rc != 1 || len(report.ApplyArgs) != 0 || core.Lexists(target) || core.Lexists(core.Dest(proj, "example-skill")) {
+				t.Errorf("%s: rc=%d report=%+v", obstacle, rc, report)
+			}
+		}
+	})
 	multi := invoke(0, slug, "--skill", "example-skill", "--skill", "second-skill", "--dry-run")
 	if len(multi.Library) != 2 || len(multi.Install) != 0 {
 		t.Fatal(multi)

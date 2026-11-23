@@ -203,12 +203,12 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 	copies := man.copyMode()
 	for _, it := range items {
 		name := it.Name
-		decision := decideInstall(d, it, man.Skills[name], force, copies)
+		src := filepath.Join(SKILLS, name)
+		decision := decideInstall(d, src, it, man.Skills[name], force, copies)
 		if decision.action == "blocked" || decision.action == "skipped" {
 			out = append(out, decision.result(name))
 			continue
 		}
-		src := filepath.Join(SKILLS, name)
 		change, err := installFiles(d, name, src, decision.copyNeeded, copies, man.Skills[name], "replaced by --force")
 		if err != nil {
 			out = append(out, res(name, false, "%v", err))
@@ -731,12 +731,11 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 		src := filepath.Join(SKILLS, name)
 		prev := man.Skills[name]
 		if dry {
-			lp := LinkP(d, name)
 			switch {
 			case IsSymlink(filepath.Join(src, "SKILL.md")):
 				out = append(out, res(name, false, "%s: expected a regular SKILL.md", name))
 			default:
-				if err := checkMirrorTarget(lp, prev, copies); err != nil {
+				if err := checkInstallTargets(d, name, prev, copies); err != nil {
 					out = append(out, res(name, false, "%v", err))
 				} else {
 					out = append(out, res(name, true, "would update"))

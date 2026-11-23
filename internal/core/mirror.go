@@ -11,9 +11,9 @@ func managedMirror(p string, e *Entry) bool {
 	return e != nil && regularSkill(p) && TreeHash(p) == e.TreeHash
 }
 
-func checkMirrorTarget(path string, prev *Entry, copies bool) error {
-	root := filepath.Dir(path)
-	for _, dir := range []string{filepath.Dir(root), root} {
+func checkInstallTargets(project, name string, prev *Entry, copies bool) error {
+	dest, path := Dest(project, name), LinkP(project, name)
+	for _, dir := range []string{filepath.Dir(dest), filepath.Dir(filepath.Dir(path)), filepath.Dir(path)} {
 		info, err := os.Lstat(dir)
 		if os.IsNotExist(err) {
 			continue

@@ -137,7 +137,13 @@ func RestoreTrash(slot string) (string, error) {
 			return "", errors.Join(err, Move(origin, payload[0]))
 		}
 		if me, ok := m["manifest_entry"].(map[string]any); ok && me != nil {
-			man.Skills[name] = entryFromMap(me)
+			entry := entryFromMap(me)
+			man.Skills[name] = entry
+			for _, pack := range entry.Packs {
+				if !man.Packs.Has(pack) {
+					man.Packs.Set(pack, map[string]string{"installed_at": entry.InstalledAt})
+				}
+			}
 			if err := WriteManifest(proj, man); err != nil {
 				return "", errors.Join(err, os.RemoveAll(LinkP(proj, name)), Move(origin, payload[0]))
 			}

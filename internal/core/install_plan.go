@@ -14,7 +14,7 @@ func (d installDecision) result(name string) Result {
 	return res(name, d.action != "blocked", "%s", d.message)
 }
 
-func decideInstall(project string, item Item, prev *Entry, force, copies bool) installDecision {
+func decideInstall(project, src string, item Item, prev *Entry, force, copies bool) installDecision {
 	name := item.Name
 	decision := installDecision{action: "blocked"}
 	refuse := func(format string, args ...any) installDecision {
@@ -25,7 +25,6 @@ func decideInstall(project string, item Item, prev *Entry, force, copies bool) i
 	if !KEBAB.MatchString(name) {
 		return refuse("invalid skill name")
 	}
-	src := filepath.Join(SKILLS, name)
 	decision.inLibrary = IsFile(filepath.Join(src, "SKILL.md"))
 	if !decision.inLibrary {
 		if item.Pack != "" && !item.Manual {
@@ -34,8 +33,8 @@ func decideInstall(project string, item Item, prev *Entry, force, copies bool) i
 		}
 		return refuse("not in library (try: skillman search %s)", strings.Split(name, "-")[0])
 	}
-	dest, lp := Dest(project, name), LinkP(project, name)
-	if err := checkMirrorTarget(lp, prev, copies); err != nil {
+	dest := Dest(project, name)
+	if err := checkInstallTargets(project, name, prev, copies); err != nil {
 		return refuse("%v", err)
 	}
 	if IsSymlink(dest) {
@@ -107,7 +106,7 @@ func PreviewInstall(project string, items []Item, force bool) (InstallPreview, e
 	copies := man.copyMode()
 	for _, item := range items {
 		name := item.Name
-		decision := decideInstall(project, item, man.Skills[name], force, copies)
+		decision := decideInstall(project, filepath.Join(SKILLS, name), item, man.Skills[name], force, copies)
 		results = append(results, decision.result(name))
 		row := InstallPreviewItem{
 			Name: name, Pack: item.Pack, State: states[name].State,

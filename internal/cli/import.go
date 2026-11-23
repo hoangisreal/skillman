@@ -130,7 +130,7 @@ func cmdImport(a *Args) int {
 		apply = append(apply, "--json")
 	}
 	dry := a.Has("dry-run")
-	r.Library, err = core.ImportToLibrary(src, selected, dry, a.Has("allow-risky"))
+	r.Library, r.Install, err = core.ImportToLibrary(src, selected, dry, a.Has("allow-risky"), r.Project)
 	if err != nil {
 		return r.output(a, err)
 	}
@@ -140,37 +140,18 @@ func cmdImport(a *Args) int {
 			items = append(items, core.Item{Name: s.Name, Manual: true})
 		}
 	}
-	if dry && len(items) == len(selected) {
-		r.ApplyArgs = apply
-	}
-	if r.Project == "" || len(items) == 0 {
-		return r.output(a, nil)
-	}
 	if dry {
-		if err = core.CheckProjectDirs(r.Project); err != nil {
-			r.ApplyArgs = nil
-			return r.output(a, err)
+		if len(items) == len(selected) {
+			r.ApplyArgs = apply
 		}
-		st := core.StatusMap(core.ProjectStatus(r.Project))
-		for _, it := range items {
-			state := st[it.Name].State
-			plan := core.Result{Name: it.Name, OK: true, Message: "would install"}
-			link := core.LinkP(r.Project, it.Name)
-			switch {
-			case core.Lexists(link) && !core.IsSymlink(link) && !core.LinkOK(r.Project, it.Name):
-				plan.OK, plan.Message = false, "project link path is occupied"
-			case state == "missing":
-				plan.Message = "would restore missing copy"
-			case state == "ok":
-				plan.Message = "already present"
-			case state != "":
-				plan.OK, plan.Message = false, "existing project copy is "+state
-			}
-			r.Install = append(r.Install, plan)
+		for _, plan := range r.Install {
 			if !plan.OK {
 				r.ApplyArgs = nil
 			}
 		}
+		return r.output(a, nil)
+	}
+	if r.Project == "" || len(items) == 0 {
 		return r.output(a, nil)
 	}
 	r.Install, err = core.Install(r.Project, items, false)
