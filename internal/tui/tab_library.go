@@ -84,8 +84,10 @@ type libraryTab struct {
 	lastQ string
 }
 
+const defaultLibrarySplit = 0.58
+
 func newLibraryTab(m *Model) *libraryTab {
-	t := &libraryTab{split: 0.58, focus: 1}
+	t := &libraryTab{split: defaultLibrarySplit, focus: 1}
 	t.q.placeholder = "search: words · -word · tag:web · src:redis · pack:core · domain:backend · stack:vue · nopack · installed"
 	t.tbl = newTable(column{title: " ", width: 1}, column{title: "skill", flex: 5}, column{title: "domain › stack", flex: 4},
 		column{title: "source", flex: 4}, column{title: "project", width: 9}, column{title: "packs", flex: 3})
@@ -268,7 +270,17 @@ func (t *libraryTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 		t.setFocus(0)
 	case abs(c.X-t.divX) <= 1 && c.Y > t.q.area.y:
 		x0, w := t.tbl.area.x, m.w
+		initial := t.split
 		m.dragging = func(x int) { t.split = clampF(float64(x-x0)/float64(w), 0.25, 0.85) }
+		m.endDrag = func() tea.Cmd {
+			if t.split == initial {
+				return nil
+			}
+			if err := core.SavePreference("library_split", t.split); err != nil {
+				return m.notify(m.lang.format("Could not save setting: %v", err), true)
+			}
+			return nil
+		}
 	case t.prev.v.area.has(c.X, c.Y):
 		t.setFocus(2)
 	default:

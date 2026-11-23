@@ -300,7 +300,12 @@ func (t *packsTab) actions(m *Model) []action {
 			}))
 			return nil
 		}},
-		{key: "v", label: "vendor packs", run: func(m *Model) tea.Cmd { t.showVendor = !t.showVendor; t.refresh(m); return nil }},
+		{key: "v", label: "vendor packs", run: func(m *Model) tea.Cmd {
+			return m.savePreference("packs_show_vendor", !t.showVendor, func() {
+				t.showVendor = !t.showVendor
+				t.refresh(m)
+			})
+		}},
 		{key: "enter", label: "open skill", run: func(m *Model) tea.Cmd {
 			if t.focus == 1 {
 				return m.openSkill(t.mem.current())
@@ -359,7 +364,8 @@ func (t *packsTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 
 func (t *packsTab) view(m *Model, r rect) []string {
 	lw := r.w / 2
-	left := box(m.lang.text("Packs"), t.tbl.render(m.lang, rect{r.x + 1, r.y + 1, lw - 2, r.h - 2}), lw, r.h, t.focus == 0)
+	title := m.lang.text("Packs") + " · " + m.lang.text("vendor packs") + " " + filterState(m.lang, t.showVendor)
+	left := box(title, t.tbl.render(m.lang, rect{r.x + 1, r.y + 1, lw - 2, r.h - 2}), lw, r.h, t.focus == 0)
 	info := wrapPlain(t.info, r.w-lw-2)
 	if len(info) > 4 {
 		info = info[:4]

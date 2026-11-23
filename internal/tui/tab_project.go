@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -163,6 +164,24 @@ func (t *projectTab) actions(m *Model) []action {
 			}))
 			return nil
 		}},
+		{key: "E", label: "export list", run: func(m *Model) tea.Cmd {
+			markdown, err := core.ExportMarkdown(p)
+			if err != nil {
+				return m.notify(err.Error(), true)
+			}
+			view := newMDModal(m.lang.text("Export project skills"), markdown)
+			view.accept = func(m *Model) tea.Cmd {
+				m.push(ask(m.lang.text("Save Markdown to"), filepath.Join(p, "project-skills.md"), "", func(m *Model, path string) tea.Cmd {
+					if path == "" {
+						return nil
+					}
+					return m.saveSkillExport(path, markdown, false)
+				}))
+				return nil
+			}
+			m.push(view)
+			return nil
+		}},
 		{key: "o", label: "doctor", run: func(m *Model) tea.Cmd {
 			lang := m.lang
 			return m.async(lang.text("doctor …"), func(func(string)) tea.Msg {
@@ -239,6 +258,20 @@ func (t *projectTab) actions(m *Model) []action {
 		{key: "esc", label: "clear selection", run: func(m *Model) tea.Cmd { t.tbl.sel = map[string]bool{}; return nil }, hidden: true},
 		{key: "enter", label: "open", run: func(m *Model) tea.Cmd { return m.openSkill(t.tbl.current()) }, hidden: true},
 	}
+}
+
+func (m *Model) saveSkillExport(path, markdown string, overwrite bool) tea.Cmd {
+	err := core.WriteSkillExport(path, markdown, overwrite)
+	if err == nil {
+		return m.notify(m.lang.format("Saved skill list to %s", path), false)
+	}
+	if !overwrite && os.IsExist(err) {
+		m.push(confirm(m.lang.format("Replace existing file?\n%s", path), true, func(m *Model) tea.Cmd {
+			return m.saveSkillExport(path, markdown, true)
+		}))
+		return nil
+	}
+	return m.notify(err.Error(), true)
 }
 
 func (t *projectTab) suggest(m *Model, task string, stacks []string) tea.Cmd {

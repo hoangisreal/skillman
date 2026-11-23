@@ -12,6 +12,46 @@ import (
 	"github.com/hoangisreal/skillman/internal/search"
 )
 
+func TestProjectExportAndBudget(t *testing.T) {
+	_, project := setup(t)
+	t.Setenv("SKILL_TOKEN_BUDGET", "")
+	runOK(t, "repair-links", "-C", project, "--mode", "copy")
+	runOK(t, "add", "-C", project, "vitest")
+	runOK(t, "add", "-C", project, "tdd")
+	before := core.TreeHash(project)
+	rc, markdown, err := run(t, "export", "-C", project, "--format", "markdown")
+	i := strings.Index(markdown, ".agents/skills/tdd/SKILL.md")
+	j := strings.Index(markdown, ".agents/skills/vitest/SKILL.md")
+	if rc != 0 || i < 0 || j <= i || strings.Contains(markdown, ".claude/") || core.TreeHash(project) != before {
+		t.Fatalf("unexpected export: %s %s", markdown, err)
+	}
+	file := filepath.Join(t.TempDir(), "my skill list.md")
+	if err := os.WriteFile(file, []byte("existing"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if rc, _, _ := run(t, "export", "-C", project, "--output", file); rc == 0 {
+		t.Fatal("export should require --force for an existing file")
+	}
+	if body, _ := os.ReadFile(file); string(body) != "existing" {
+		t.Fatal("an unapproved export changed the file")
+	}
+	runOK(t, "export", "-C", project, "--output", file, "--force")
+	if body, _ := os.ReadFile(file); string(body) != markdown {
+		t.Fatal("file export differs from stdout")
+	}
+	if err := core.SavePreference("token_budget", 95); err != nil {
+		t.Fatal(err)
+	}
+	var preview core.InstallPreview
+	if rc := runJSON(t, &preview, "add", "-C", project, "vitest", "--dry-run"); rc != 0 || preview.Budget != 95 {
+		t.Fatalf("personal budget: %+v", preview)
+	}
+	t.Setenv("SKILL_TOKEN_BUDGET", "40")
+	if rc := runJSON(t, &preview, "add", "-C", project, "vitest", "--dry-run"); rc != 0 || preview.Budget != 40 {
+		t.Fatalf("environment budget: %+v", preview)
+	}
+}
+
 func runOK(t *testing.T, args ...string) {
 	t.Helper()
 	if rc, out, errOut := run(t, args...); rc != 0 {

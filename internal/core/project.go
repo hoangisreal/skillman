@@ -956,7 +956,7 @@ func TokenBudgetOf(d string) Budget {
 	}
 	b.GlobalSkills = len(seen)
 	b.Total = b.ProjectTokens + b.GlobalTokens
-	b.Budget = TokenBudget
+	b.Budget, _ = DescriptionBudget()
 	return b
 }
 

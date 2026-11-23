@@ -450,7 +450,11 @@ func (t *mdModal) view(m *Model, w, h int) ([]string, rect) {
 		t.v.set(renderMarkdown(m.lang, t.raw, t.width, 0))
 	}
 	inner := t.v.render(rect{r.x + 1, r.y + 1, r.w - 2, r.h - 3})
-	inner = append(inner, stDim.Render(m.lang.text("↑↓ PgUp PgDn wheel · esc / q = close")))
+	hint := "↑↓ PgUp PgDn wheel · esc / q = close"
+	if t.accept != nil {
+		hint = "Enter to name the output file · Esc to cancel"
+	}
+	inner = append(inner, stDim.Render(m.lang.text(hint)))
 	return box(t.title, inner, r.w, r.h, true), r
 }
 
