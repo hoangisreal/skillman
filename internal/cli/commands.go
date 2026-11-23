@@ -53,8 +53,8 @@ func init() {
 		"Offline risk scan: hooks, pipe-to-shell, credential reads, broad allowed-tools, symlinks, executables.",
 		[]string{"fail-on"}, cmdAudit)
 	reg("diff", "<skill> [-C dir]", "Unified diff library → project copy.", []string{"C"}, cmdDiff)
-	reg("update", "[skills…] [-C dir] [--force] [--json]",
-		"Refresh outdated project copies from the library (--force also replaces modified ones).", []string{"C"}, cmdUpdate)
+	reg("update", "[skills…] [-C dir] [--force] [--dry-run] [--json]",
+		"Refresh outdated project copies from the library. Use --dry-run to preview and --force to allow replacing local edits.", []string{"C"}, cmdUpdate)
 	reg("update-projects", "[--dry-run] [--json]", "Refresh outdated skills in every registered project.", nil, cmdUpdateProjects)
 	reg("adopt", "[skills…] [-C dir] [--json]", "Track skills copied into .agents/skills before the manifest existed.",
 		[]string{"C"}, cmdAdopt)
@@ -766,6 +766,10 @@ func cmdUpdate(a *Args) int {
 	d, err := core.ResolveProject(a.Str("C", "."), false)
 	if err != nil {
 		return fail(err)
+	}
+	if a.Has("dry-run") {
+		rs, err := core.PreviewProjectUpdate(d, a.Pos, a.Has("force"))
+		return resultsOut(a, rs, err)
 	}
 	rs, err := core.UpdateProject(d, a.Pos, a.Has("force"))
 	return resultsOut(a, rs, err)

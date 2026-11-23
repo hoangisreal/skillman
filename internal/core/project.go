@@ -636,29 +636,48 @@ func RepairLinks(d string) ([]string, error) {
 
 // UpdateProject refreshes outdated skills (pinned skipped; modified/conflict need force).
 func UpdateProject(d string, names []string, force bool) ([]Result, error) {
-	rows := ProjectStatus(d)
+	return updateProject(d, names, force, false)
+}
+
+// PreviewProjectUpdate reports which copies can be refreshed without writing to disk.
+func PreviewProjectUpdate(d string, names []string, force bool) ([]Result, error) {
+	return updateProject(d, names, force, true)
+}
+
+func updateProject(d string, names []string, force, dry bool) ([]Result, error) {
+	for _, name := range names {
+		if err := CheckName(name); err != nil {
+			return nil, err
+		}
+	}
+	if dry {
+		if err := CheckProjectDirs(d); err != nil {
+			return nil, err
+		}
+	} else {
+		unlock, err := ProjectLock(d)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
+	}
+	man := ReadManifest(d)
+	rows := projectStatus(d, man)
 	st := StatusMap(rows)
 	targets := names
 	if len(targets) == 0 {
 		for _, r := range rows {
 			if r.State == "outdated" {
+				if err := CheckName(r.Name); err != nil {
+					return nil, err
+				}
 				targets = append(targets, r.Name)
 			}
 		}
 	}
-	for _, n := range targets {
-		if err := CheckName(n); err != nil {
-			return nil, err
-		}
-	}
-	unlock, err := ProjectLock(d)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	man := ReadManifest(d)
 	var out []Result
 	var changes []installChange
+	copies := dry && copyMode(d)
 	for _, name := range targets {
 		r, ok := st[name]
 		switch {
@@ -679,17 +698,34 @@ func UpdateProject(d string, names []string, force bool) ([]Result, error) {
 			continue
 		}
 		src := filepath.Join(SKILLS, name)
-		change, err := installFiles(d, name, src, true, man.Skills[name], "update")
+		prev := man.Skills[name]
+		if dry {
+			lp := LinkP(d, name)
+			switch {
+			case IsSymlink(filepath.Join(src, "SKILL.md")):
+				out = append(out, res(name, false, "%s: expected a regular SKILL.md", name))
+			case copies && Lexists(lp) && !managedMirror(d, name, prev):
+				out = append(out, res(name, false, "modified or unmanaged Claude copy: %s", lp))
+			case !copies && Lexists(lp) && !IsSymlink(lp):
+				out = append(out, res(name, false, "%s exists and is not a symlink; refusing to overwrite", lp))
+			default:
+				out = append(out, res(name, true, "would update"))
+			}
+			continue
+		}
+		change, err := installFiles(d, name, src, true, prev, "update")
 		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
 		changes = append(changes, change)
-		prev := man.Skills[name]
 		e := newEntry(src, "", prev)
 		e.Manual = prev != nil && prev.Manual
 		man.Skills[name] = e
 		out = append(out, res(name, true, "updated"))
+	}
+	if dry {
+		return out, nil
 	}
 	if err := WriteManifest(d, man); err != nil {
 		for i := len(changes) - 1; i >= 0; i-- {

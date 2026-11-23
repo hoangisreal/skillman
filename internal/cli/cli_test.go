@@ -174,6 +174,69 @@ func TestAgentWorkflow(t *testing.T) {
 	}
 }
 
+func TestUpdateDryRun(t *testing.T) {
+	lib, proj := setup(t)
+	if rc, out, errOut := run(t, "update", "--dry-run", "-C", proj); rc != 0 || !strings.Contains(out, "nothing to do") || core.Exists(filepath.Join(proj, ".agents")) {
+		t.Fatalf("preview of a fresh project: rc=%d, %s%s", rc, out, errOut)
+	}
+	if rc, _, errOut := run(t, "repair-links", "--mode", "copy", "-C", proj); rc != 0 {
+		t.Fatalf("set copy mode: %s", errOut)
+	}
+	if rc, _, errOut := run(t, "add", "vitest", "tdd", "-C", proj); rc != 0 {
+		t.Fatalf("add: %s", errOut)
+	}
+	before := core.TreeHash(proj)
+	mkskill(t, lib, "vitest", "Updated Vitest instructions")
+	var preview struct {
+		OK      bool          `json:"ok"`
+		Results []core.Result `json:"results"`
+	}
+	rc := runJSON(t, &preview, "update", "--dry-run", "-C", proj)
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("update --dry-run changed the project or trash")
+	}
+	if want := []core.Result{{Name: "vitest", OK: true, Message: "would update"}}; rc != 0 || !preview.OK || !slices.Equal(preview.Results, want) {
+		t.Fatalf("preview: rc=%d, %+v", rc, preview)
+	}
+	if rc, _, errOut := run(t, "pin", "vitest", "-C", proj); rc != 0 {
+		t.Fatalf("pin: %s", errOut)
+	}
+	before = core.TreeHash(proj)
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "-C", proj); rc != 1 || preview.OK || len(preview.Results) != 1 || !strings.Contains(preview.Results[0].Message, "pinned") {
+		t.Fatalf("pinned preview: rc=%d, %+v", rc, preview)
+	}
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "--force", "-C", proj); rc != 0 || !preview.OK || len(preview.Results) != 1 || preview.Results[0].Message != "would update" {
+		t.Fatalf("forced preview: rc=%d, %+v", rc, preview)
+	}
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("forced preview changed the project or trash")
+	}
+	mirror := filepath.Join(core.LinkP(proj, "vitest"), "SKILL.md")
+	original, err := os.ReadFile(mirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mirror, []byte("local Claude edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before = core.TreeHash(proj)
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "--force", "-C", proj); rc != 1 || preview.OK || len(preview.Results) != 1 || !strings.Contains(preview.Results[0].Message, "modified or unmanaged Claude copy") {
+		t.Fatalf("modified Claude copy: rc=%d, %+v", rc, preview)
+	}
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("blocked preview changed the project or trash")
+	}
+	if err := os.WriteFile(mirror, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rc, out, errOut := run(t, "update", "vitest", "--force", "-C", proj); rc != 0 || !strings.Contains(out, "vitest: updated") {
+		t.Fatalf("update: rc=%d, %s%s", rc, out, errOut)
+	}
+	if rc, _, errOut := run(t, "verify", "-C", proj); rc != 0 {
+		t.Fatalf("verify: %s", errOut)
+	}
+}
+
 func TestTaskSelection(t *testing.T) {
 	lib, original := setup(t)
 	project := filepath.Join(filepath.Dir(original), "repo 'with spaces'")

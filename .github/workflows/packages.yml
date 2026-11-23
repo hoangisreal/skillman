@@ -39,8 +39,8 @@ jobs:
           path: dist
       - name: Test portable lifecycle and locking
         run: go test ./internal/core -run TestPortable -count=1
-      - name: Test pinned imports and retry
-        run: go test ./internal/cli -run TestImportWorkflow -count=1
+      - name: Test pinned imports, retry and update preview
+        run: go test ./internal/cli -run 'TestImportWorkflow|TestUpdateDryRun' -count=1
       - name: Exercise native archive
         shell: bash
         run: |

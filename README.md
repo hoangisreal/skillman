@@ -162,8 +162,9 @@ docker). 34 starter packs ship with skillman. Edit them in tab 3 or with
 <img src="docs/screenshots/4-project.svg" alt="Project tab: per-skill drift state and token budget" width="100%">
 
 Tab 4 (or `skillman status`) shows each skill as `ok`, `outdated`, `modified`, `conflict`, `untracked`, `missing` or
-`orphan`. `skillman update` refreshes outdated copies, `diff` shows what changed, `pin` keeps a deliberate local
-edit, `remove` moves a copy to the trash. `doctor` checks links, shadowing and the description token budget.
+`orphan`. Run `skillman update --dry-run` to see which copies would refresh before running `skillman update`.
+Use `diff` to review changes, `pin` to keep a deliberate local edit and `remove` to move a copy to the trash.
+`doctor` checks links, shadowing and the description token budget.
 
 ### Update the library from upstream
 
@@ -304,6 +305,8 @@ Commit the generated `.gitattributes` in each managed skills directory to preser
   [skills.sh](https://skills.sh) directory.
 - [`gh skill`](https://github.blog/changelog/2026-04-16-manage-agent-skills-with-github-cli/): skills from the GitHub CLI.
 - [Skills Manager](https://github.com/xingkongliang/skills-manager): desktop app with a central repo and presets.
+- [Caliber](https://github.com/caliber-ai-org/ai-setup): generates and checks coding-agent context and syncs skills,
+  rules, plugins and MCP configuration across agents.
 
 Pick skillman if you keep a large private collection and want to control, and review, what reaches each project.
 

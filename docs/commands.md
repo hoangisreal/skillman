@@ -37,7 +37,7 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | `status [dir] [--json]` | State of every project skill (see [states](#project-skill-states)) |
 | `doctor [dir] [--json]` | Links, drift, shadowing by global skills, description token budget, packs with missing skills |
 | `diff <name>` | Unified diff library → project copy |
-| `update [names] [--force]` | Refresh `outdated` copies (`--force` also replaces `modified`) |
+| `update [names] [--force] [--dry-run] [--json]` | Refresh `outdated` copies. Explicit names can include local edits or pins with `--force`. Use `--dry-run` to preview eligible and blocked updates without writing files. Exit 1 if any selected update is blocked. |
 | `update-projects [--dry-run]` | Refresh outdated skills in every registered project |
 | `adopt [names]` | Start tracking copies that were added before the manifest existed |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
