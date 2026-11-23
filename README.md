@@ -92,9 +92,13 @@ If your team uses Windows, follow the [mixed-platform setup](#windows-and-mixed-
 
 Run `skillman` from your project. Press `/` to search, `Space` to select, and `i` to preview the installation. Use `2` to browse by stack, `4` to inspect the project, and `?` for shortcuts.
 
-![Install confirmation showing the project path, the skill to copy, and its description token cost](docs/screenshots/8-install-preview.png)
+![Install confirmation showing the selected Vue Router skill, both destination paths, and its description token cost](docs/screenshots/8-install-preview.png)
 
 The Project tab shows what is installed, how it differs from the library, and how much description space it uses. [Project tab screenshot](docs/screenshots/4-project.png) · [All screenshots](docs/screenshots) · [Keyboard shortcuts](docs/commands.md#tui-keys)
+
+Press `4`, then `s`, to get a recommendation. Enter a task such as `Vue component test`, or leave it blank for project-wide suggestions. Preview the first choice or choose other skills. In the manual picker, search by name or description, press `Ctrl+X` to mark or unmark a skill, and press `Enter` to preview your selection. The preview lists the actual project directories, the clients that read them, and the description token cost.
+
+[Project recommendation screenshot](docs/screenshots/10-suggestions.png)
 
 ### Interface language
 

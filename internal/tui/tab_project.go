@@ -158,16 +158,10 @@ func (t *projectTab) actions(m *Model) []action {
 			return t.run(m, map[bool]string{true: "pinned", false: "unpinned"}[pin], func() ([]core.Result, error) { return core.SetPin(p, names, pin) })
 		}},
 		{key: "s", label: "suggest", run: func(m *Model) tea.Cmd {
-			rows := m.d.rows
-			return m.async(m.lang.text("suggesting skills …"), func(func(string)) tea.Msg {
-				rec := search.Rank(core.NewRecommendationCatalog(), p, rows, "", 5, 0, true)
-				return doneMsg{then: func(m *Model) tea.Cmd {
-					if m.project != p || m.tab() != t {
-						return nil
-					}
-					return t.showSuggestions(m, rec)
-				}}
-			})
+			m.push(ask(m.lang.text("What are you working on? Leave blank for project suggestions."), "", "Vue component test", func(m *Model, task string) tea.Cmd {
+				return t.suggest(m, task, nil)
+			}))
+			return nil
 		}},
 		{key: "o", label: "doctor", run: func(m *Model) tea.Cmd {
 			lang := m.lang
@@ -247,25 +241,100 @@ func (t *projectTab) actions(m *Model) []action {
 	}
 }
 
-func (t *projectTab) showSuggestions(m *Model, rec search.Recommendation) tea.Cmd {
-	if len(rec.Shortlist) == 0 {
-		return m.notify(m.lang.text(rec.Message), false)
-	}
-	var options []option
-	for _, c := range rec.Shortlist {
-		options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, m.lang.text(c.Evidence), c.AddedTokens, m.lang.text(c.State))})
-	}
-	picker := pick(m.lang.text("Suggested project skills"), options, nil)
-	picker.filter.placeholder = "type to filter · space/click to mark · enter to preview"
-	picker.pickMany = func(m *Model, names []string) tea.Cmd {
-		items, err := core.ExpandItems(names)
+func (t *projectTab) suggest(m *Model, task string, stacks []string) tea.Cmd {
+	project, rows := m.project, m.d.rows
+	return m.async(m.lang.text("suggesting skills …"), func(func(string)) tea.Msg {
+		catalog := core.NewRecommendationCatalog()
+		declared, err := catalog.DeclaredSignals(stacks)
 		if err != nil {
-			return m.notify(err.Error(), true)
+			return doneMsg{note: err.Error(), isErr: true}
 		}
-		return m.installItems(items, strings.Join(names, ", "), nil)
+		rec := search.Rank(catalog, project, rows, task, 5, 0, true, declared...)
+		if rec.Err != nil {
+			return doneMsg{note: rec.Err.Error(), isErr: true}
+		}
+		return doneMsg{then: func(m *Model) tea.Cmd {
+			if m.project == project && m.tab() == t {
+				t.showSuggestions(m, rec, task)
+			}
+			return nil
+		}}
+	})
+}
+
+func previewSelection(m *Model, names []string) tea.Cmd {
+	items, err := core.ExpandItems(names)
+	if err != nil {
+		return m.notify(err.Error(), true)
 	}
-	m.push(picker)
-	return nil
+	return m.installItems(items, strings.Join(names, ", "), nil)
+}
+
+func (t *projectTab) showSuggestions(m *Model, rec search.Recommendation, task string) {
+	manual := m.lang.text("Choose other skills")
+	preview := m.lang.text("Preview installation")
+	use := m.lang.text("Read installed skill")
+	stack := m.lang.text("Declare project stacks")
+	baseline := m.lang.text("Preview @core")
+	var options []option
+	title := m.lang.text("No matching local skills")
+	var chosen search.Choice
+	if len(rec.Shortlist) > 0 {
+		chosen = rec.Shortlist[0]
+		title = chosen.Name
+		if rec.Budget.Total+chosen.AddedTokens > rec.Budget.Budget {
+			title += " · " + m.lang.text("over budget")
+		}
+		label := fmt.Sprintf("%s (%s) · +%dt %s", chosen.Reason, m.lang.text(chosen.Evidence), chosen.AddedTokens, m.lang.text(chosen.State))
+		action := preview
+		if chosen.State == "ok" {
+			action = use
+		}
+		options = append(options, option{action, label})
+	}
+	options = append(options, option{manual, ""})
+	if !rec.HasStack {
+		options = append(options, option{stack, "vue, postgres"}, option{baseline, ""})
+	}
+	m.push(pick(title, options, func(m *Model, value string) tea.Cmd {
+		switch value {
+		case preview:
+			return previewSelection(m, []string{chosen.Name})
+		case use:
+			body, err := core.ReadText(filepath.Join(core.Dest(m.project, chosen.Name), "SKILL.md"))
+			if err != nil {
+				return m.notify(err.Error(), true)
+			}
+			m.push(newMDModal(chosen.Name, body))
+		case stack:
+			m.push(ask(stack, "", "vue, postgres", func(m *Model, ids string) tea.Cmd {
+				return t.suggest(m, task, strings.Fields(strings.ReplaceAll(ids, ",", " ")))
+			}))
+		case baseline:
+			return previewSelection(m, []string{"@core"})
+		case manual:
+			opts := make([]option, 0, len(m.d.rows))
+			seen := map[string]bool{}
+			for _, c := range rec.Shortlist {
+				opts = append(opts, option{c.Name, c.Description})
+				seen[c.Name] = true
+			}
+			for _, row := range m.d.rows {
+				if !seen[row.Name] {
+					opts = append(opts, option{row.Name, row.Description})
+				}
+			}
+			picker := pick(manual, opts, nil)
+			picker.filter.placeholder = "filter · ctrl+x mark · ctrl+o read · enter preview"
+			picker.pickMany = previewSelection
+			picker.inspect = (*Model).openSkill
+			if chosen.Name != "" && core.NeedsProjectCopy(chosen.State) {
+				picker.list.sel[chosen.Name] = true
+			}
+			m.push(picker)
+		}
+		return nil
+	}))
 }
 
 func auditText(lang language, rep []core.AuditReport) string {

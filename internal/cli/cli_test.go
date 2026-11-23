@@ -332,14 +332,14 @@ func TestBriefRecommendation(t *testing.T) {
 		}
 		return rec.Shortlist[0].Name
 	}
-	if name := firstVue(); name != "vue-best-practices" {
+	if name := firstVue(); name != "vue-testing-best-practices" {
 		t.Fatalf("first candidate: %s", name)
 	}
 	// Remove a top-ranked name after indexing. Both modes should fill the vacant slot.
-	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-best-practices")); err != nil {
+	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-testing-best-practices")); err != nil {
 		t.Fatal(err)
 	}
-	if name := firstVue(); name != "vue-testing-best-practices" {
+	if name := firstVue(); name != "vue-best-practices" {
 		t.Fatalf("replacement: %s", name)
 	}
 	for _, task := range []string{"", "vue test", "no-matching-skill"} {
@@ -366,7 +366,7 @@ func TestBriefRecommendation(t *testing.T) {
 		for _, v := range shortlist {
 			c := v.(map[string]any)
 			packs[c["reason"].(string)] = true
-			if c["name"] == "vue-best-practices" {
+			if c["name"] == "vue-testing-best-practices" {
 				t.Fatal("stale skill selected")
 			}
 		}

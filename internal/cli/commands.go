@@ -546,8 +546,14 @@ func cmdAdd(a *Args) int {
 		}
 		for _, item := range preview.Skills {
 			outf("  %-34s %-16s %3dt  %s\n", item.Name, item.Action, item.Tokens, item.Reason)
+			for _, target := range item.Targets {
+				outf("    %s · %s · %s · %s\n", target.Path, target.Role, target.Mode, strings.Join(target.Agents, ", "))
+			}
 		}
-		outf("would add ≈%d tokens → %d/%d (dry run, nothing changed)\n", preview.AddedTokens, preview.BudgetAfter, preview.Budget)
+		outf("would add ≈%d description tokens → %d/%d (dry run, nothing changed)\n", preview.AddedTokens, preview.BudgetAfter, preview.Budget)
+		if preview.BudgetAfter > preview.Budget {
+			outf("warning: over the description token budget\n")
+		}
 		return 0
 	}
 	rs, err := core.Install(d, its, a.Has("force"))

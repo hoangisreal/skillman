@@ -68,7 +68,10 @@ func (m *Model) installItems(items []core.Item, label string, after func()) tea.
 func (m *Model) confirmInstall(plan core.InstallPreview, items []core.Item, label string, after func()) tea.Cmd {
 	var ready, problems []string
 	for _, s := range plan.Skills {
-		line := s.Name + " · " + m.lang.text(s.Reason)
+		line := s.Name + " · " + m.lang.text(s.Action) + " · " + m.lang.text(s.Reason)
+		for _, target := range s.Targets {
+			line += "\n  " + target.Path + " · " + m.lang.text(target.Role) + " · " + m.lang.text(target.Mode) + " · " + strings.Join(target.Agents, ", ")
+		}
 		if s.Action == "blocked" || s.Action == "skipped" {
 			problems = append(problems, line)
 		} else {

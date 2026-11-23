@@ -3,6 +3,22 @@ package tui
 // The catalog uses English UI messages as keys. Skill names, command syntax,
 // and the contents of imported files come from their original sources.
 var vietnameseMessages = map[string]string{
+	"What are you working on? Leave blank for project suggestions.": "Bạn đang làm gì? Có thể nhập từ khóa kỹ thuật hoặc để trống để gợi ý theo dự án.",
+	"No matching local skills":                                      "Thư viện chưa có skill phù hợp",
+	"Choose other skills":                                           "Chọn skill khác",
+	"Preview installation":                                          "Xem trước cài đặt",
+	"Read installed skill":                                          "Đọc skill đã cài",
+	"Declare project stacks":                                        "Khai báo stack của dự án",
+	"Preview @core":                                                 "Xem trước gói @core",
+	"Mark at least one skill":                                       "Chọn ít nhất một skill",
+	"filter · ctrl+x mark · ctrl+o read · enter preview":            "lọc · ctrl+x chọn · ctrl+o đọc · enter xem trước",
+	"primary":         "bản chính",
+	"mirror":          "bản cho Claude",
+	"copy":            "bản sao",
+	"symlink":         "liên kết",
+	"replace":         "thay thế",
+	"already_present": "đã có",
+	"repair_link":     "sửa đường dẫn",
 	// Navigation, settings and common controls.
 	"Library":    "Thư viện",
 	"Browse":     "Duyệt",

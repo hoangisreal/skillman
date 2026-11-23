@@ -92,6 +92,10 @@ func TestProjectInstallPreviewAndManifest(t *testing.T) {
 	if core.TreeHash(project) != before || len(core.ListTrash("")) != 0 {
 		t.Fatal("replace preview changed the project or trash")
 	}
+	targets := preview.Skills[0].Targets
+	if len(targets) != 2 || targets[0].Path != ".agents/skills/vitest" || targets[1].Path != ".claude/skills/vitest" || targets[1].Mode != "copy" {
+		t.Fatalf("unexpected preview targets: %+v", targets)
+	}
 	runOK(t, "add", "-C", project, "vitest", "--force")
 	runOK(t, "verify", "-C", project)
 

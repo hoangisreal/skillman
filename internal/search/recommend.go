@@ -15,6 +15,7 @@ type Choice struct {
 	Matched     []string `json:"matched_keywords"`
 	score       int
 	group       int
+	stackMatch  int
 }
 
 type Recommendation struct {
@@ -85,6 +86,15 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 				continue
 			}
 			c := Choice{RecSkill: s, group: i, Evidence: g.Reason, Reason: strings.Join(g.Stacks, ", "), Matched: []string{}}
+			if g.Reason != "baseline" {
+				c.stackMatch = 1
+				if g.Pack != "web-quality" || strings.HasPrefix(g.Reason, "declared:") {
+					c.stackMatch = 2
+				}
+			}
+			if core.NeedsProjectCopy(s.State) {
+				c.AddedTokens = core.DescriptionTokens(s.Name, s.Description)
+			}
 			if s.InPack {
 				c.Reason = "@" + g.Pack
 			}
@@ -103,14 +113,23 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		a, b := ranked[i], ranked[j]
+		if len(a.Matched) != len(b.Matched) {
+			return len(a.Matched) > len(b.Matched)
+		}
 		if a.score != b.score {
 			return a.score > b.score
+		}
+		if a.stackMatch != b.stackMatch {
+			return a.stackMatch > b.stackMatch
 		}
 		if a.InPack != b.InPack {
 			return a.InPack
 		}
-		if (a.Evidence == "baseline") != (b.Evidence == "baseline") {
-			return b.Evidence == "baseline"
+		if (a.State == "ok") != (b.State == "ok") {
+			return a.State == "ok"
+		}
+		if a.AddedTokens != b.AddedTokens {
+			return a.AddedTokens < b.AddedTokens
 		}
 		return a.Name < b.Name
 	})
@@ -160,6 +179,9 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	}
 	if !r.HasStack {
 		r.Message = strings.TrimSpace("No project stack detected. Pass --stack <id> when known, or preview @core with skillman add -C <project> @core --dry-run. " + r.Message)
+	}
+	if len(r.Shortlist) > 0 && r.Budget.Total+r.Shortlist[0].AddedTokens > r.Budget.Budget {
+		r.Message = strings.TrimSpace(r.Message + " Top choice exceeds the description token budget.")
 	}
 	for _, c := range r.Shortlist {
 		if !core.NeedsProjectCopy(c.State) {

@@ -204,6 +204,7 @@ type pickModal struct {
 	list     *table
 	pick     func(m *Model, v string) tea.Cmd
 	pickMany func(m *Model, names []string) tea.Cmd
+	inspect  func(m *Model, name string) tea.Cmd
 	area     rect
 }
 
@@ -255,6 +256,18 @@ func (p *pickModal) apply() {
 
 func (p *pickModal) choose(m *Model) tea.Cmd {
 	if p.pickMany != nil {
+		if p.inspect != nil {
+			if len(p.list.sel) == 0 {
+				return m.notify(m.lang.text("Mark at least one skill"), false)
+			}
+			var names []string
+			for _, o := range p.opts {
+				if p.list.sel[o.value] {
+					names = append(names, o.value)
+				}
+			}
+			return p.pickMany(m, names)
+		}
 		names := p.list.targets()
 		if len(names) == 0 {
 			return nil
@@ -272,11 +285,15 @@ func (p *pickModal) choose(m *Model) tea.Cmd {
 
 func (p *pickModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 	k := msg.String()
-	if p.pickMany != nil && k == "space" {
+	if p.pickMany != nil && (k == "ctrl+x" || (k == "space" && p.inspect == nil)) {
 		p.list.toggle()
 		return nil
 	}
 	switch k {
+	case "ctrl+o":
+		if p.inspect != nil {
+			return p.inspect(m, p.list.current())
+		}
 	case "esc":
 		m.pop()
 		return nil
