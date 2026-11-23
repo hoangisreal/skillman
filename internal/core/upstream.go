@@ -155,7 +155,7 @@ func inlineRepoLinks(clone, commit, wt, sdir, staged, work string, links map[str
 			dropped = append(dropped, e.Rel)
 			continue
 		}
-		Git([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
+		Git([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
 			"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 		src := filepath.Join(wt, filepath.FromSlash(repoRel))
 		real, err := filepath.EvalSymlinks(src)
@@ -253,8 +253,9 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 		paths = []string{"."}
 	}
 	paths = append(paths, licRoot...)
-	// Read symlink blobs as files so path validation sees the Git target verbatim on every OS.
-	r := Git(append([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.symlinks=false", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
+	// Read symlink blobs as files so path validation sees the Git target verbatim on every OS,
+	// and keep LF for text=auto files so a commit hashes the same everywhere.
+	r := Git(append([]string{"--literal-pathspecs", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.symlinks=false", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
 		"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 	if r.Code != 0 {
 		return "", nil, errf("checkout failed: %s", tail(r.Stderr, 200))

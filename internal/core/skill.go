@@ -24,8 +24,10 @@ func TreeHash(d string) string {
 			continue
 		}
 		if e.IsSymlink() {
+			// Hash link targets with forward slashes: Windows reports native
+			// separators, and the hash must match across platforms.
 			t, _ := os.Readlink(e.Path)
-			h.Write([]byte("L" + e.Rel + "\x00" + t + "\x00"))
+			h.Write([]byte("L" + e.Rel + "\x00" + filepath.ToSlash(t) + "\x00"))
 		} else if e.IsFile() {
 			h.Write([]byte("F" + e.Rel + "\x00"))
 			b, _ := os.ReadFile(e.Path)
