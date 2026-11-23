@@ -1,0 +1,2 @@
+# These goldens hash and diff the original bytes, including newlines.
+* -text

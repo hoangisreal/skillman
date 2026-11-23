@@ -137,15 +137,23 @@ type Model struct {
 		x, y int
 		at   time.Time
 	}
-	trace    *os.File
-	dragging func(x int)
-	seen     []bool // tabs opened at least once (others load lazily)
+	trace        *os.File
+	dragging     func(x int)
+	endDrag      func() tea.Cmd
+	mouseEnabled bool
+	seen         []bool // tabs opened at least once (others load lazily)
 }
 
 func New(project string) *Model {
-	m := &Model{project: project, lang: loadLanguage(), d: loadData(project)}
+	prefs := core.LoadMap(core.SettingsPath())
+	m := &Model{project: project, lang: loadLanguage(prefs), d: loadData(project), mouseEnabled: preferenceBool(prefs, "mouse", true)}
 	m.tabs = []tab{newLibraryTab(m), newBrowseTab(m), newPacksTab(m), newProjectTab(m), newUpdatesTab(m),
 		newUpstreamTab(m), newValidationTab(m), newTrashTab(m), newSettingsTab(m)}
+	if split, ok := prefs["library_split"].(float64); ok && split >= 0.25 && split <= 0.85 {
+		m.tabs[0].(*libraryTab).split = split
+	}
+	m.tabs[2].(*packsTab).showVendor = preferenceBool(prefs, "packs_show_vendor", false)
+	m.tabs[4].(*updatesTab).onlyChanges = preferenceBool(prefs, "updates_only_changes", true)
 	m.seen = make([]bool, len(m.tabs))
 	m.seen[0] = true
 	if p := os.Getenv("SKILLMAN_TRACE"); p != "" {
@@ -441,9 +449,17 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *Model) onMouse(msg tea.MouseMsg) tea.Cmd {
+	if !m.mouseEnabled {
+		return nil
+	}
 	mm := msg.Mouse()
-	if _, ok := msg.(tea.MouseReleaseMsg); ok {
+	if _, ok := msg.(tea.MouseReleaseMsg); ok && m.dragging != nil {
 		m.dragging = nil
+		done := m.endDrag
+		m.endDrag = nil
+		if done != nil {
+			return done()
+		}
 	}
 	if mo, ok := msg.(tea.MouseMotionMsg); ok {
 		if m.dragging != nil && mo.Button == tea.MouseLeft {
@@ -481,7 +497,9 @@ func (m *Model) View() tea.View {
 	}
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	if m.mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	v.WindowTitle = "skillman · " + m.project
 	if m.trace != nil {
 		fmt.Fprintf(m.trace, "view %d\n", time.Since(t0).Microseconds())

@@ -77,13 +77,31 @@ func decideInstall(project, src string, item Item, prev *Entry, force, copies bo
 }
 
 type InstallPreviewItem struct {
-	Name      string `json:"name"`
-	Pack      string `json:"pack"`
-	State     string `json:"state"`
-	InLibrary bool   `json:"in_library"`
-	Tokens    int    `json:"tokens"`
-	Action    string `json:"action"`
-	Reason    string `json:"reason"`
+	Name      string          `json:"name"`
+	Pack      string          `json:"pack"`
+	State     string          `json:"state"`
+	InLibrary bool            `json:"in_library"`
+	Tokens    int             `json:"tokens"`
+	Action    string          `json:"action"`
+	Reason    string          `json:"reason"`
+	Targets   []InstallTarget `json:"targets,omitempty"`
+}
+
+type InstallTarget struct {
+	Path   string   `json:"path"`
+	Role   string   `json:"role"`
+	Mode   string   `json:"mode"`
+	Agents []string `json:"agents"`
+}
+
+func installTarget(name, root, role, mode string) InstallTarget {
+	t := InstallTarget{Path: root + "/skills/" + name, Role: role, Mode: mode}
+	for _, agent := range agentDirs {
+		if Contains(agent.project, root) {
+			t.Agents = append(t.Agents, agent.id)
+		}
+	}
+	return t
 }
 
 type InstallPreview struct {
@@ -123,6 +141,16 @@ func PreviewInstall(project string, items []Item, force bool) (InstallPreview, e
 			preview.BudgetAfter += row.Tokens
 			if regularSkill(Dest(project, name)) {
 				preview.BudgetAfter -= SkillTokens(Dest(project, name))
+			}
+		}
+		if row.Action != "blocked" && row.Action != "skipped" {
+			mode := "symlink"
+			if copies {
+				mode = "copy"
+			}
+			row.Targets = []InstallTarget{
+				installTarget(name, ".agents", "primary", "copy"),
+				installTarget(name, ".claude", "mirror", mode),
 			}
 		}
 		preview.Skills = append(preview.Skills, row)

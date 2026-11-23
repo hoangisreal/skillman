@@ -95,6 +95,24 @@ func (c installChange) finish() {
 }
 
 func ConvertCopies(d string, dry bool) ([]string, error) {
+	return ConvertClaudeMode(d, "copy", dry)
+}
+
+func ClaudeMode(d string) (string, error) {
+	m, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return "", err
+	}
+	if m.copyMode() {
+		return "copy", nil
+	}
+	return "symlink", nil
+}
+
+func ConvertClaudeMode(d, mode string, dry bool) ([]string, error) {
+	if mode != "copy" && mode != "symlink" {
+		return nil, errf("unknown Claude mode: %s", mode)
+	}
 	if err := CheckProjectDirs(d); err != nil {
 		return nil, err
 	}
@@ -110,6 +128,7 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		return nil, err
 	}
 	copies := m.copyMode()
+	wantCopies := mode == "copy"
 	var msgs []string
 	var changes []installChange
 	rollback := func(err error) error {
@@ -126,7 +145,7 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		if IsSymlink(src) || !IsFile(filepath.Join(src, "SKILL.md")) {
 			return msgs, rollback(errf("invalid source: %s", src))
 		}
-		if copies && linkOK(d, n, true, TreeHash) {
+		if copies == wantCopies && linkOK(d, n, copies, TreeHash) {
 			continue
 		}
 		if TreeHash(src) != m.Skills[n].TreeHash {
@@ -138,6 +157,8 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 			if IsSymlink(lp) {
 				v, _ := os.Readlink(lp)
 				valid = filepath.ToSlash(v) == target
+			} else if copies && !wantCopies {
+				valid = replaceableMirror(d, n, m.Skills[n])
 			} else if st, e := os.Lstat(lp); e == nil && st.Mode().IsRegular() && st.Size() == int64(len(target)) {
 				rel, _ := filepath.Rel(d, lp)
 				g := Git([]string{"ls-files", "--stage", "--", filepath.ToSlash(rel)}, d, 10)
@@ -162,13 +183,13 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 			}
 		}
 		changes = append(changes, c)
-		if err := createMirror(src, lp); err != nil {
+		if err := link(d, n, wantCopies); err != nil {
 			return msgs, rollback(err)
 		}
 		changes[len(changes)-1].mirror = true
 	}
 	if !dry {
-		m.top.Set("claude_mode", "copy")
+		m.top.Set("claude_mode", mode)
 		if err := WriteManifest(d, m); err != nil {
 			return msgs, rollback(err)
 		}

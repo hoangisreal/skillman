@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -15,7 +14,6 @@ var (
 	LIB, SKILLS, PACKS, STAGING, CACHE, REPO_CACHE, UPDATES, STATE string
 	LegacyWork                                                     string
 	GitBase                                                        string
-	TokenBudget                                                    int
 	GlobalSkillDirs                                                []string
 )
 
@@ -63,7 +61,7 @@ func envOr(k, def string) string {
 	return def
 }
 
-// Configure (re)reads SKILL_LIBRARY, SKILLMAN_STATE, SKILLCORE_GIT_BASE, SKILL_TOKEN_BUDGET.
+// Configure (re)reads SKILL_LIBRARY, SKILLMAN_STATE and SKILLCORE_GIT_BASE.
 func Configure() {
 	LIB = expand(envOr("SKILL_LIBRARY", "~/skill-library"))
 	if a, err := filepath.Abs(LIB); err == nil {
@@ -78,10 +76,6 @@ func Configure() {
 	LegacyWork = filepath.Join(envOr("TMPDIR", os.TempDir()), "skill-verify")
 	STATE = expand(envOr("SKILLMAN_STATE", "~/.local/state/skillman"))
 	GitBase = envOr("SKILLCORE_GIT_BASE", "https://github.com/")
-	TokenBudget = 2000
-	if n, err := strconv.Atoi(os.Getenv("SKILL_TOKEN_BUDGET")); err == nil {
-		TokenBudget = n
-	}
 	GlobalSkillDirs = nil
 	for _, p := range []string{"~/.agents/skills", "~/.claude/skills", "~/.codex/skills", "~/.config/opencode/skills"} {
 		GlobalSkillDirs = append(GlobalSkillDirs, expand(p))

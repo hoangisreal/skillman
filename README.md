@@ -92,13 +92,21 @@ If your team uses Windows, follow the [mixed-platform setup](#windows-and-mixed-
 
 Run `skillman` from your project. Press `/` to search, `Space` to select, and `i` to preview the installation. Use `2` to browse by stack, `4` to inspect the project, and `?` for shortcuts.
 
-![Install confirmation showing the project path, the skill to copy, and its description token cost](docs/screenshots/8-install-preview.png)
+![Install confirmation showing the selected Vue Router skill, both destination paths, and its description token cost](docs/screenshots/8-install-preview.png)
 
 The Project tab shows what is installed, how it differs from the library, and how much description space it uses. [Project tab screenshot](docs/screenshots/4-project.png) · [All screenshots](docs/screenshots) · [Keyboard shortcuts](docs/commands.md#tui-keys)
 
-### Interface language
+Press `4`, then `s`, to get a recommendation. Enter a task such as `Vue component test`, or leave it blank for project-wide suggestions. Preview the first choice or choose other skills. In the manual picker, search by name or description, press `Ctrl+X` to mark or unmark a skill, and press `Enter` to preview your selection. The preview lists the actual project directories, the clients that read them, and the description token cost.
+
+[Project recommendation screenshot](docs/screenshots/10-suggestions.png)
+
+### Settings
 
 Press `9` to open **Settings**, select **English** or **Tiếng Việt** with the arrow keys, and press `Enter`. The interface switches immediately and Skillman remembers your choice for future sessions. [Settings in Vietnamese](docs/screenshots/9-settings.png)
+
+Use the same screen to edit the description token budget, toggle mouse capture, or reset the Library layout. Skillman remembers the Library divider and the Updates and Packs filters. The **Claude installation mode** row shows the mode used by the current project. Select it to preview a conversion.
+
+To share a list of the skills present in a project, press `4`, then `Shift+E`, to preview a Markdown export. In scripts, run `skillman export -C ./my-app` for stdout or add `--output project-skills.md` to create a file. [Markdown export preview](docs/screenshots/11-export.png)
 
 ## Import a skill and recommend it by stack
 
@@ -166,7 +174,7 @@ Commit the converted folders, manifest, and generated `.gitattributes`. If you m
 | --- | --- | --- |
 | `SKILL_LIBRARY` | `~/skill-library` | Local skills, packs, and upstream sources |
 | `SKILLMAN_STATE` | `~/.local/state/skillman` | Project registry, trash, and personal settings |
-| `SKILL_TOKEN_BUDGET` | `2000` | Description token budget reported by `doctor` |
+| `SKILL_TOKEN_BUDGET` | `2000` unless set in Settings | Positive integer that overrides the saved description token budget for CLI and TUI |
 
 ## Documentation
 

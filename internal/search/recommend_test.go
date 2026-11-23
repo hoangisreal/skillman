@@ -3,6 +3,7 @@ package search
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hoangisreal/skillman/internal/core"
@@ -36,6 +37,8 @@ func TestRecommendTaskCoverage(t *testing.T) {
 	}
 	mkskill(t, lib, "vue-testing-best-practices", "Use for Vue.js testing. Covers Vitest, Vue Test Utils, component testing, mocking, testing patterns, and Playwright for E2E testing.")
 	mkskill(t, lib, "vue-best-practices", "Vue 3 composition API best practices")
+	mkskill(t, lib, "vue-alpha-guide", "Vue coding guide for teams working across multiple packages and environments")
+	mkskill(t, lib, "vue-zeta-guide", "Vue coding guide")
 	mkskill(t, lib, "postgres-best-practices", "PostgreSQL schema and query best practices")
 	mkskill(t, lib, "postgres-database-migration", "Use this skill for planning, testing, and safely executing PostgreSQL schema migrations — especially when working with production data or shared databases.")
 	if err := core.SavePack(&core.Pack{Name: "web-vue", Skills: []string{"vue-best-practices", "vue-testing-best-practices"}}); err != nil {
@@ -55,9 +58,26 @@ func TestRecommendTaskCoverage(t *testing.T) {
 	}
 	rows := core.LoadIndex()
 
+	tie := Recommend(proj, rows, "coding guide", 2, 0)
+	if len(tie.Shortlist) != 2 || tie.Shortlist[0].Name != "vue-zeta-guide" {
+		t.Fatalf("equivalent guides should prefer lower added cost: %+v", tie.Shortlist)
+	}
+	if _, err := core.Install(proj, []core.Item{{Name: "vue-alpha-guide", Manual: true}}, false); err != nil {
+		t.Fatal(err)
+	}
+	tie = Recommend(proj, rows, "coding guide", 2, 0)
+	if len(tie.Shortlist) != 2 || tie.Shortlist[0].Name != "vue-alpha-guide" || tie.Shortlist[0].State != "ok" {
+		t.Fatalf("an equivalent matching project copy should come first: %+v", tie.Shortlist)
+	}
+
 	rec := Recommend(proj, rows, "test Vue components", 5, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" {
 		t.Fatalf("task shortlist: %+v", rec.Shortlist)
+	}
+	t.Setenv("SKILL_TOKEN_BUDGET", "1")
+	rec = Recommend(proj, rows, "test Vue components", 5, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" || !strings.Contains(rec.Message, "exceeds the description token budget") {
+		t.Fatalf("budget warning must preserve the specialist: %+v", rec)
 	}
 	rec = Recommend(proj, rows, "review database migrations", 3, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "postgres-database-migration" {

@@ -466,5 +466,10 @@ func SkillTokens(d string) int {
 	if v, ok := m["description"]; ok {
 		ds = pyStr(v)
 	}
-	return (runeLen(ns)+runeLen(collapseWS(ds)))/4 + 8
+	return DescriptionTokens(ns, ds)
+}
+
+// DescriptionTokens estimates the cost using metadata already in memory.
+func DescriptionTokens(name, description string) int {
+	return (runeLen(name)+runeLen(collapseWS(description)))/4 + 8
 }

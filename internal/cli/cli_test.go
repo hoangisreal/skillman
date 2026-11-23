@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ func setup(t *testing.T) (lib, proj string) {
 	t.Setenv("SKILL_LIBRARY", lib)
 	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
 	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("USERPROFILE", filepath.Join(root, "home"))
 	core.Configure()
 	if rc, _, errOut := run(t, "init"); rc != 0 {
 		t.Fatalf("init: %s", errOut)
@@ -111,8 +113,8 @@ func TestAgentWorkflow(t *testing.T) {
 	if rc := runJSON(t, &res, "add", "@web-vue", "postgres-best-practices", "-C", proj); rc != 0 || !res.OK {
 		t.Errorf("add: rc=%d %+v", rc, res)
 	}
-	if !core.IsSymlink(filepath.Join(proj, ".claude/skills/vue-best-practices")) {
-		t.Error("claude link missing")
+	if !core.LinkOK(proj, "vue-best-practices") || core.IsSymlink(core.LinkP(proj, "vue-best-practices")) == (runtime.GOOS == "windows") {
+		t.Error("expected the platform's default Claude path")
 	}
 	// a skill named explicitly that is missing still fails
 	if rc, _, _ := run(t, "add", "no-such-skill", "-C", proj); rc != 1 {
@@ -332,14 +334,14 @@ func TestBriefRecommendation(t *testing.T) {
 		}
 		return rec.Shortlist[0].Name
 	}
-	if name := firstVue(); name != "vue-best-practices" {
+	if name := firstVue(); name != "vue-testing-best-practices" {
 		t.Fatalf("first candidate: %s", name)
 	}
 	// Remove a top-ranked name after indexing. Both modes should fill the vacant slot.
-	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-best-practices")); err != nil {
+	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-testing-best-practices")); err != nil {
 		t.Fatal(err)
 	}
-	if name := firstVue(); name != "vue-testing-best-practices" {
+	if name := firstVue(); name != "vue-best-practices" {
 		t.Fatalf("replacement: %s", name)
 	}
 	for _, task := range []string{"", "vue test", "no-matching-skill"} {
@@ -366,7 +368,7 @@ func TestBriefRecommendation(t *testing.T) {
 		for _, v := range shortlist {
 			c := v.(map[string]any)
 			packs[c["reason"].(string)] = true
-			if c["name"] == "vue-best-practices" {
+			if c["name"] == "vue-testing-best-practices" {
 				t.Fatal("stale skill selected")
 			}
 		}
@@ -439,9 +441,14 @@ func TestAgentSetup(t *testing.T) {
 			t.Errorf("%s not linked", d)
 		}
 	}
-	// idempotent, and never touches a real directory
-	os.Remove(filepath.Join(home, ".agents/skills/skillman"))
-	os.MkdirAll(filepath.Join(home, ".agents/skills/skillman"), 0o755)
+	runOK(t, "agent-setup")
+	unmanaged := filepath.Join(home, ".agents/skills/skillman")
+	if err := os.RemoveAll(unmanaged); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(unmanaged, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	rc, _, _ := run(t, "agent-setup")
 	if rc != 1 || core.IsSymlink(filepath.Join(home, ".agents/skills/skillman")) {
 		t.Errorf("agent-setup must refuse a real dir (rc=%d)", rc)
