@@ -207,19 +207,19 @@ func RenamePack(oldName, newName string) error {
 }
 
 // ExpandPack resolves extends (depth-first, in order) and dedups.
-func ExpandPack(name string) ([]string, error) { return expandPack(name, nil) }
+func ExpandPack(name string) ([]string, error) { return expandPack(name, nil, LoadPack) }
 
-func expandPack(name string, stack []string) ([]string, error) {
+func expandPack(name string, stack []string, load func(string) (*Pack, error)) ([]string, error) {
 	if contains(stack, name) {
 		return nil, errf("pack cycle: %s", strings.Join(append(append([]string{}, stack...), name), " -> "))
 	}
-	pk, err := LoadPack(name)
+	pk, err := load(name)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
 	for _, e := range pk.Extends {
-		sub, err := expandPack(e, append(append([]string{}, stack...), name))
+		sub, err := expandPack(e, append(append([]string{}, stack...), name), load)
 		if err != nil {
 			return nil, err
 		}

@@ -131,7 +131,7 @@ type RecSkill struct {
 	Source      string `json:"source"`
 	InPack      bool   `json:"in_pack"`
 	InLibrary   bool   `json:"in_library"`
-	State       string `json:"state,omitempty"` // project state when installed
+	State       string `json:"state"` // project state when installed
 	Tokens      int    `json:"tokens"`
 }
 
@@ -151,15 +151,78 @@ type Recommendation struct {
 	ProjectState []string   `json:"installed"`
 }
 
+// RecommendationCatalog shares the same taxonomy and pack definitions between
+// index classification, stack detection and pack expansion for one request.
+type RecommendationCatalog struct {
+	tax       *Taxonomy
+	packs     map[string]*Pack
+	available map[string]bool
+	bySkill   map[string][]string
+}
+
+func NewRecommendationCatalog() *RecommendationCatalog {
+	c := &RecommendationCatalog{LoadTaxonomy(), map[string]*Pack{}, map[string]bool{}, map[string][]string{}}
+	for _, name := range ListPacks() {
+		c.available[name] = true
+		if pk, err := LoadPack(name); err == nil {
+			c.packs[name] = pk
+			for _, skill := range pk.Skills {
+				c.bySkill[skill] = append(c.bySkill[skill], name)
+			}
+		}
+	}
+	return c
+}
+
+func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
+	if rows := loadClassifiedIndex(c.tax, c.bySkill); rows != nil {
+		return rows, nil
+	}
+	if !IsDir(SKILLS) {
+		return nil, errf("library not found: %s (run: skillman init, or set SKILL_LIBRARY)", LIB)
+	}
+	rows, _, _, err := rebuildIndex(true, c.tax, c.bySkill)
+	return rows, err
+}
+
+func (c *RecommendationCatalog) pack(name string) (*Pack, error) {
+	if p := c.packs[name]; p != nil {
+		return p, nil
+	}
+	return nil, errf("pack not found: %s", name)
+}
+
+// ResolveRecSkill checks indexed metadata against the current library.
+func ResolveRecSkill(s RecSkill) RecSkill {
+	dir := SKILLS + "/" + s.Name
+	if s.InLibrary && IsFile(dir+"/SKILL.md") {
+		s.Tokens = SkillTokens(dir)
+	} else {
+		s.Description, s.Source, s.InLibrary = "⚠ not in library", "", false
+	}
+	return s
+}
+
 // Recommend proposes skills for a project: every detected pack with its curated skills, then extra library
 // skills classified into the same stacks (in_pack=false), each with its state in the project and token cost.
 // extra caps the non-pack skills per group (0 = none, -1 = all).
 func Recommend(d string, rows []IndexRow, extra int) Recommendation {
-	tax := LoadTaxonomy()
-	sugg := ProjectSignals(d)
-	status := ProjectStatus(d)
-	st := StatusMap(status)
+	r := NewRecommendationCatalog().Candidates(d, rows, extra)
+	for i := range r.Groups {
+		for j, s := range r.Groups[i].Skills {
+			r.Groups[i].Skills[j] = ResolveRecSkill(s)
+		}
+	}
+	return r
+}
+
+// Candidates builds groups from index metadata, leaving filesystem checks to the caller.
+func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int) Recommendation {
+	tax := c.tax
+	sugg := projectSignals(d, c.available)
 	man := ReadManifest(d)
+	status := projectStatus(d, man)
+	st := StatusMap(status)
 	byName := map[string]*IndexRow{}
 	for i := range rows {
 		byName[rows[i].Name] = &rows[i]
@@ -172,10 +235,10 @@ func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 		g := RecGroup{Pack: sg.Pack, Reason: sg.Reason, Stacks: []string{}, Skills: []RecSkill{}, Installed: man.Packs.Has(sg.Pack)}
 		var members []string
 		if sg.Pack != "" {
-			if pk, err := LoadPack(sg.Pack); err == nil {
+			if pk, err := c.pack(sg.Pack); err == nil {
 				g.Description = pk.Description
 			}
-			members, _ = ExpandPack(sg.Pack)
+			members, _ = expandPack(sg.Pack, nil, c.pack)
 		}
 		stackIDs := map[string]bool{}
 		if sg.Stack != "" {
@@ -191,9 +254,8 @@ func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 		}
 		mk := func(name string, inPack bool) RecSkill {
 			r := RecSkill{Name: name, InPack: inPack, State: st[name].State}
-			if row := byName[name]; row != nil && KEBAB.MatchString(name) && IsFile(SKILLS+"/"+name+"/SKILL.md") {
+			if row := byName[name]; row != nil && KEBAB.MatchString(name) {
 				r.Description, r.Source, r.InLibrary = row.Description, row.Source, true
-				r.Tokens = SkillTokens(SKILLS + "/" + name)
 			} else {
 				r.Description = "⚠ not in library"
 			}

@@ -126,7 +126,7 @@ Re-file a skill or add your own domains in `~/skill-library/taxonomy.yaml` ([gui
 ### Add skills to a project
 
 ```sh
-skillman recommend . --task "vue test" # ranked local choices, evidence, state and added tokens
+skillman recommend . --task "vue test" --brief --json # ranked local choices, evidence, state and added tokens
 skill-add @postgres vitest --dry-run  # what would be copied and what it costs per session
 skill-add @postgres vitest            # copy, link and record
 ```

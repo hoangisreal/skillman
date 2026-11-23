@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -255,6 +256,60 @@ func TestTaskSelection(t *testing.T) {
 	runJSON(t, &rec, "recommend", project, "--task", "zzzznothing")
 	if len(rec.Shortlist) != 0 || rec.Message == "" || len(rec.InstallArgs) != 0 {
 		t.Fatal(rec)
+	}
+}
+
+func TestBriefRecommendation(t *testing.T) {
+	lib, p := setup(t)
+	firstVue := func() string {
+		t.Helper()
+		var rec search.Recommendation
+		if rc := runJSON(t, &rec, "recommend", "-C", p, "--task", "vue", "--limit", "1", "--brief"); rc != 0 || len(rec.Shortlist) != 1 {
+			t.Fatal(rc, rec)
+		}
+		return rec.Shortlist[0].Name
+	}
+	if name := firstVue(); name != "vue-best-practices" {
+		t.Fatalf("first candidate: %s", name)
+	}
+	// Remove a top-ranked name after indexing. Both modes should fill the vacant slot.
+	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-best-practices")); err != nil {
+		t.Fatal(err)
+	}
+	if name := firstVue(); name != "vue-testing-best-practices" {
+		t.Fatalf("replacement: %s", name)
+	}
+	for _, task := range []string{"", "vue test", "no-matching-skill"} {
+		args := []string{"recommend", "-C", p, "--limit", "3", "--task", task}
+		var full, brief map[string]any
+		runJSON(t, &full, args...)
+		runJSON(t, &brief, append(args, "--brief")...)
+		for _, key := range []string{"project", "budget", "shortlist", "install_args", "message"} {
+			if !reflect.DeepEqual(full[key], brief[key]) {
+				t.Fatalf("different %s: %v vs %v", key, full, brief)
+			}
+		}
+		if _, ok := brief["groups"]; ok {
+			t.Fatal("brief includes groups")
+		}
+		if task != "" {
+			continue
+		}
+		shortlist := brief["shortlist"].([]any)
+		if len(shortlist) != 3 {
+			t.Fatal(shortlist)
+		}
+		packs := map[string]bool{}
+		for _, v := range shortlist {
+			c := v.(map[string]any)
+			packs[c["reason"].(string)] = true
+			if c["name"] == "vue-best-practices" {
+				t.Fatal("stale skill selected")
+			}
+		}
+		if !packs["@web-vue"] || !packs["@postgres"] || !packs["@docker"] {
+			t.Fatal(packs)
+		}
 	}
 }
 

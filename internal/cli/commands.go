@@ -27,7 +27,7 @@ func init() {
 	reg("browse", "[--domain D] [--stack S] [-C dir] [--json]",
 		"Skills grouped by domain › stack (the TUI Browse tab). Stacks used by the project are marked ★.",
 		[]string{"domain", "stack", "C"}, cmdBrowse)
-	reg("recommend", "[dir] [--task words] [--limit N] [--extra N] [--json]",
+	reg("recommend", "[dir] [--task words] [--limit N] [--extra N] [--brief] [--json]",
 		"Recommend skills for a project: detected packs with their skills, plus up to N (default 5, -1 = all)\n"+
 			"other library skills of the same stacks. Shows what is installed and the token cost.",
 		[]string{"task", "limit", "extra", "C"}, cmdRecommend)
@@ -74,6 +74,9 @@ func init() {
 		[]string{"d", "description", "extends"}, cmdPack)
 
 	// library
+	reg("import", "<owner/repo|GitHub URL> [--list] [--skill name ...] [--commit SHA] [-C project] [--dry-run] [--allow-risky] [--json]",
+		"Discover and import GitHub skills into the library. Supply -C to also install the selected skills into a project.",
+		[]string{"skill", "commit", "C"}, cmdImport)
 	reg("library", "check|apply|auto-safe|pending|rollback|pin|unpin|rebuild-index|validate|new|build-packs …",
 		"Manage the library and upstream updates:\n"+
 			"  library check [skills…] [--pack P] [--log] [--json]     read-only upstream check\n"+
@@ -128,21 +131,7 @@ func init() {
 // ───────────── discovery ─────────────
 
 func loadIndex() ([]core.IndexRow, error) {
-	rows := core.LoadIndex()
-	if rows == nil {
-		if !core.IsDir(core.SKILLS) {
-			return nil, fmt.Errorf("library not found: %s (run: skillman init, or set SKILL_LIBRARY)", core.LIB)
-		}
-		r, _, _, err := core.RebuildIndex(true)
-		if err != nil {
-			return nil, err
-		}
-		rows = core.LoadIndex()
-		if rows == nil {
-			rows = r
-		}
-	}
-	return rows, nil
+	return core.NewRecommendationCatalog().Index()
 }
 
 func stateMap(dir string) map[string]string {
@@ -379,7 +368,8 @@ func cmdRecommend(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	rows, err := loadIndex()
+	catalog := core.NewRecommendationCatalog()
+	rows, err := catalog.Index()
 	if err != nil {
 		return fail(err)
 	}
@@ -387,9 +377,18 @@ func cmdRecommend(a *Args) int {
 	if err != nil || limit < 1 || (a.Has("limit") && a.Str("limit", "") == "") {
 		return usage("--limit requires a positive integer")
 	}
-	rec := search.Recommend(d, rows, a.Str("task", ""), limit, a.Int("extra", 5))
+	brief := a.Has("brief")
+	rec := search.Rank(catalog, d, rows, a.Str("task", ""), limit, a.Int("extra", 5), brief)
 	if a.Has("json") {
-		printJSON(rec)
+		if brief {
+			out := map[string]any{"project": rec.Project, "budget": rec.Budget, "shortlist": rec.Shortlist, "install_args": rec.InstallArgs}
+			if rec.Message != "" {
+				out["message"] = rec.Message
+			}
+			printJSON(out)
+		} else {
+			printJSON(rec)
+		}
 		return 0
 	}
 	outf("project: %s\n", d)
@@ -398,6 +397,9 @@ func cmdRecommend(a *Args) int {
 	}
 	for _, c := range rec.Shortlist {
 		outf("  %-32s +%dt · %s (%s) %s\n", c.Name, c.AddedTokens, c.Reason, c.Evidence, c.State)
+	}
+	if brief {
+		return 0
 	}
 	if len(rec.Groups) == 0 {
 		outf("no stack detected (try: skillman browse, skillman search <words>)\n")

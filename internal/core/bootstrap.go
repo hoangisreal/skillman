@@ -104,6 +104,17 @@ func importStarter(name string, source StarterSource, allowRisky bool) (string, 
 		return "", err
 	}
 	defer os.RemoveAll(staged)
+	note, err := checkImportAudit(staged, name, allowRisky)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(staged, filepath.Join(SKILLS, name)); err != nil {
+		return "", err
+	}
+	return note, nil
+}
+
+func checkImportAudit(staged, name string, allowRisky bool) (string, error) {
 	report := auditSkill(staged, name)
 	note := ""
 	switch {
@@ -112,10 +123,7 @@ func importStarter(name string, source StarterSource, allowRisky bool) (string, 
 	case report.Level == "review" && !allowRisky:
 		return "", errf("audit %s: %s (re-run with --allow-risky to import anyway)", report.Level, strings.Join(report.Review, ", "))
 	case report.Level == "review":
-		note = "imported despite audit review: " + strings.Join(report.Review, ", ")
-	}
-	if err := os.Rename(staged, filepath.Join(SKILLS, name)); err != nil {
-		return "", err
+		note = "audit review: " + strings.Join(report.Review, ", ")
 	}
 	return note, nil
 }

@@ -25,27 +25,12 @@ public sources. Personal Codex installs use skill-installer. For an external ski
 import its source into the library and install the project copy through Skillman.
 
 ```bash
-skillman recommend . --task "postgres migration" --json
+skillman recommend -C ./shop --task "postgres migration" --brief --json
 ```
 
-```json
-{
-  "project": "/home/me/code/shop",
-  "groups": [
-    { "pack": "postgres", "reason": "package.json", "description": "PostgreSQL design, migrations, search, tuning",
-      "stacks": ["postgres"], "pack_installed": false,
-      "skills": [
-        { "name": "postgres-best-practices", "description": "…", "source": "neondatabase/postgres-skills",
-          "in_pack": true, "in_library": true, "state": "", "tokens": 52 },
-        { "name": "connect-cdc-postgres", "in_pack": false, "in_library": true, "tokens": 61, "…": "…" } ] } ],
-  "budget": { "total": 410, "budget": 2000, "…": "…" },
-  "shortlist": [
-    { "name": "postgres-best-practices", "reason": "@postgres · postgres", "evidence": "package.json", "added_tokens": 52, "…": "…" }
-  ],
-  "install_args": ["add", "-C", "/home/me/code/shop", "postgres-best-practices"],
-  "install_hint": "skillman add -C '/home/me/code/shop' postgres-best-practices"
-}
-```
+The response contains the resolved project, budget, shortlist and `install_args`. Each choice includes its
+source, stack evidence file, matched keywords, project state and additional description tokens. With no task,
+directly detected stacks each get a turn. Omit `--brief` to inspect the detailed groups.
 
 Then, as needed: `skillman browse --stack postgres --json`, `skillman search "postgres migration" --json`,
 `skillman info <skill> --json` (add `--body` to read it). The agent proposes a short list with token costs, checks it
@@ -54,7 +39,16 @@ with `skillman add -C <project> <selected names> --dry-run --json`, installs the
 whole proposed selection is wanted. These arguments include missing tracked copies that can be restored.
 An empty array means every shortlisted copy is present or the shortlist is empty.
 For an untracked copy, inspect `diff` before `adopt`. When the library needs content, preview the pinned sources
-with `bootstrap --pack core --dry-run --json`. Each import reports its own outcome.
+with `bootstrap --pack core --dry-run --json`. For a supplied GitHub source, list the skills and preview the selected name.
+
+```bash
+skillman import vuejs-ai/skills --list --json
+skillman import vuejs-ai/skills --skill vue-testing-best-practices -C ./shop --dry-run --json
+```
+
+Pass the returned `apply_args` to the CLI to reuse the reviewed SHA. Imports check the license and audit
+the staged skill. Existing names can be reused only with matching source, version and content. A failed project
+installation leaves the successful library import available and returns `retry_args` for `add`.
 
 ## JSON shapes
 

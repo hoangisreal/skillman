@@ -147,7 +147,7 @@ func inlineRepoLinks(clone, commit, wt, sdir, staged, work string) (inlined, dro
 			dropped = append(dropped, e.Rel)
 			continue
 		}
-		Git([]string{"-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
+		Git([]string{"--literal-pathspecs", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--", repoRel}, clone, 300,
 			"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 		src := filepath.Join(wt, filepath.FromSlash(repoRel))
 		real, err := filepath.EvalSymlinks(src)
@@ -245,7 +245,7 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 		paths = []string{"."}
 	}
 	paths = append(paths, licRoot...)
-	r := Git(append([]string{"-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
+	r := Git(append([]string{"--literal-pathspecs", "-c", "core.sparseCheckout=false", "--work-tree", wt, "checkout", commit, "--"}, paths...), clone, 600,
 		"GIT_INDEX_FILE="+filepath.Join(work, "index"))
 	if r.Code != 0 {
 		return "", nil, errf("checkout failed: %s", tail(r.Stderr, 200))
@@ -263,12 +263,12 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 	}
 	var licLocal, licRootP []string
 	for _, e := range SortedDir(sdir) {
-		if licenseLocalRx.MatchString(e.Name()) {
+		if licenseLocalRx.MatchString(e.Name()) && e.Type().IsRegular() {
 			licLocal = append(licLocal, e.Name())
 		}
 	}
 	for _, p := range licRoot {
-		if IsFile(filepath.Join(wt, p)) {
+		if !IsSymlink(filepath.Join(wt, p)) && IsFile(filepath.Join(wt, p)) {
 			licRootP = append(licRootP, filepath.Join(wt, p))
 		}
 	}
@@ -281,7 +281,9 @@ func Materialize(repo, commit, subpath, dest, tier string, extra map[string]any)
 	}
 	inlined, dropped := inlineRepoLinks(clone, commit, wt, sdir, staged, work)
 	if len(licLocal) == 0 {
-		CopyFile(licRootP[0], filepath.Join(staged, "UPSTREAM-LICENSE.txt"))
+		if err := CopyFile(licRootP[0], filepath.Join(staged, "UPSTREAM-LICENSE.txt")); err != nil {
+			return "", nil, err
+		}
 	}
 	var mods []string
 	first5 := func(xs []string) string {

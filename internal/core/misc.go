@@ -184,11 +184,15 @@ func SuggestPacks(d string) []Suggestion {
 }
 
 func ProjectSignals(d string) []Suggestion {
-	files := scanFiles(d)
 	available := map[string]bool{}
 	for _, p := range ListPacks() {
 		available[p] = true
 	}
+	return projectSignals(d, available)
+}
+
+func projectSignals(d string, available map[string]bool) []Suggestion {
+	files := scanFiles(d)
 	var out []Suggestion
 	if available["core"] {
 		out = append(out, Suggestion{Pack: "core", Reason: "baseline"})

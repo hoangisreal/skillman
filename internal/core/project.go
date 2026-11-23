@@ -464,7 +464,10 @@ type SkillStatus struct {
 
 // ProjectStatus: ok | outdated | modified | conflict | missing | orphan | untracked | invalid per skill.
 func ProjectStatus(d string) []SkillStatus {
-	man := ReadManifest(d)
+	return projectStatus(d, ReadManifest(d))
+}
+
+func projectStatus(d string, man *ManifestData) []SkillStatus {
 	names := map[string]bool{}
 	for n := range man.Skills {
 		names[n] = true

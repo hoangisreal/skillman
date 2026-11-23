@@ -1,6 +1,6 @@
 ---
 name: skillman
-description: Select and manage project skills from the user's local Skillman library. Use for stack-based recommendations, project packs, installation previews, and tracked updates.
+description: Select and manage project skills from the user's local Skillman library. Use for stack-based recommendations, project packs, importing a chosen GitHub source, installation previews, and tracked updates.
 ---
 
 # Managing project skills with skillman
@@ -11,19 +11,25 @@ record in `.agents/skill-manifest.json`. Always go through `skillman` so the man
 Every command is non-interactive; add `--json` to read results reliably. `skillman help <command>` shows options.
 
 ## Choose skills for this project
-1. Run `skillman recommend -C <project> --json` for local recommendations. For a particular task, add
-   `--task "vue test"` or other keywords in the catalog's language. Start with `shortlist` (five by default).
-   Show each choice's evidence, reason, source, state and estimated added description tokens. Use `groups` for alternatives.
-2. Refine when needed:
-   - `skillman browse --json` — every domain › stack with its skills; `skillman browse --stack postgres`
-   - `skillman search "<words>" --json` — ranked; filters: `stack:vue domain:backend pack:core src:owner notinstalled`
-   - `skillman info <skill> --json` (add `--body` to read the SKILL.md) before adding anything unfamiliar.
-3. Propose a short list to the user: name, why, token cost. Prefer a pack's curated skills plus a few specific
-   extras over whole domains: every skill's description costs context in every session (budget ≈ 2000 tokens).
-4. Preview the chosen names with `skillman add -C <project> <names…> --dry-run --json`. Keep the absolute
-   project path from the recommendation; `install_args` is an argv array for the proposed new skills.
-   After the user selects skills, install those names and report the actual summary. Confirm with
-   `skillman status -C <project> --json` and `skillman verify -C <project> --json`.
+Start with one call to **`skillman recommend -C <project> --brief --json`**. For a specific task, add
+`--task "<keywords>"`. Translate Vietnamese requests into a few catalog keywords, such as `vue test`
+or `postgres migration`. Omit the task for a cross-stack selection.
+
+Show the shortlisted names with their source, stack evidence file, matched keywords, project state
+and added tokens. Use `info <name> --json` only when a decision needs more detail. If the shortlist is
+empty, say which capability is missing locally.
+
+After the user chooses, run `skillman add -C <project> <chosen names> --dry-run --json` using the exact
+project path returned. Install those names with the same arguments without `--dry-run` and report the
+actual results. Check `status -C <project> --json` and `verify -C <project> --json`.
+
+## Import a supplied GitHub source
+
+Use `skillman import <source> --list --json` to read names, directories and descriptions. Preview the
+selection with `--skill <name> --dry-run --json`, repeating `--skill` for multiple choices. Include
+`-C <project>` when a project copy is requested. With approval, pass `apply_args` as arguments to
+`skillman` to import the reviewed commit. Report library and project outcomes separately. If project
+installation failed, use `retry_args` after resolving the reported cause.
 
 ## Choosing the tool
 - “Which skills from my library suit this repo?” uses Skillman. Local recommendations work offline.

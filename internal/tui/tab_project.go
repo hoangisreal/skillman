@@ -154,25 +154,16 @@ func (t *projectTab) actions(m *Model) []action {
 			return t.run(m, map[bool]string{true: "pinned", false: "unpinned"}[pin], func() ([]core.Result, error) { return core.SetPin(p, names, pin) })
 		}},
 		{key: "s", label: "suggest", run: func(m *Model) tea.Cmd {
-			rec := search.Recommend(p, m.d.rows, "", 5, 0)
-			if len(rec.Shortlist) == 0 {
-				return m.notify(rec.Message, false)
-			}
-			var options []option
-			for _, c := range rec.Shortlist {
-				options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, c.Evidence, c.AddedTokens, c.State)})
-			}
-			picker := pick("Suggested project skills", options, nil)
-			picker.filter.placeholder = "type to filter · space/click to mark · enter to preview"
-			picker.pickMany = func(m *Model, names []string) tea.Cmd {
-				items, err := core.ExpandItems(names)
-				if err != nil {
-					return m.notify(err.Error(), true)
-				}
-				return m.installItems(items, strings.Join(names, ", "), nil)
-			}
-			m.push(picker)
-			return nil
+			rows := m.d.rows
+			return m.async("suggesting skills …", func(func(string)) tea.Msg {
+				rec := search.Rank(core.NewRecommendationCatalog(), p, rows, "", 5, 0, true)
+				return doneMsg{then: func(m *Model) tea.Cmd {
+					if m.project != p || m.tab() != t {
+						return nil
+					}
+					return t.showSuggestions(m, rec)
+				}}
+			})
 		}},
 		{key: "o", label: "doctor", run: func(m *Model) tea.Cmd {
 			return m.async("doctor …", func(func(string)) tea.Msg {
@@ -243,6 +234,27 @@ func (t *projectTab) actions(m *Model) []action {
 		{key: "esc", label: "clear selection", run: func(m *Model) tea.Cmd { t.tbl.sel = map[string]bool{}; return nil }, hidden: true},
 		{key: "enter", label: "open", run: func(m *Model) tea.Cmd { return m.openSkill(t.tbl.current()) }, hidden: true},
 	}
+}
+
+func (t *projectTab) showSuggestions(m *Model, rec search.Recommendation) tea.Cmd {
+	if len(rec.Shortlist) == 0 {
+		return m.notify(rec.Message, false)
+	}
+	var options []option
+	for _, c := range rec.Shortlist {
+		options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, c.Evidence, c.AddedTokens, c.State)})
+	}
+	picker := pick("Suggested project skills", options, nil)
+	picker.filter.placeholder = "type to filter · space/click to mark · enter to preview"
+	picker.pickMany = func(m *Model, names []string) tea.Cmd {
+		items, err := core.ExpandItems(names)
+		if err != nil {
+			return m.notify(err.Error(), true)
+		}
+		return m.installItems(items, strings.Join(names, ", "), nil)
+	}
+	m.push(picker)
+	return nil
 }
 
 func auditText(rep []core.AuditReport) string {
