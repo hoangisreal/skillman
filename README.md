@@ -290,7 +290,7 @@ No. Removing a skill, replacing a modified copy or deleting a pack moves it to a
 
 New Windows projects keep a managed Claude copy alongside the canonical `.agents/skills` tree. Both directories and `.agents/skill-manifest.json` belong in version control. Windows does not need Developer Mode for this layout. On another OS, Skillman follows the layout saved in the manifest. For an older project, preview `skillman repair-links -C . --mode copy --dry-run` and rerun without `--dry-run` to convert tracked links.
 
-Preserve the exact skill bytes across Git checkouts. Add the following rules to the project’s `.gitattributes` before committing skills, and ignore `.agents/.skillman.lock` in `.gitignore`.
+Commit the generated `.gitattributes` in each managed skills directory to preserve file bytes across Git checkouts. Skillman preserves existing attributes files. For a repository with custom attributes, ensure these rules apply and ignore `.agents/.skillman.lock` in `.gitignore`.
 
 ```gitattributes
 .agents/skills/** -text

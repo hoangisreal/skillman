@@ -4,18 +4,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-
 	"strings"
 )
 
 func copyMode(d string) bool {
 	var mode string
-	m := ReadManifest(d)
-	if m.top.Get("claude_mode", &mode) {
-		return mode == "copy"
-	}
-	return false
+	return ReadManifest(d).top.Get("claude_mode", &mode) && mode == "copy"
 }
+
 func managedMirror(d, name string, e *Entry) bool {
 	p := LinkP(d, name)
 	return e != nil && copyMode(d) && !IsSymlink(p) && IsDir(p) && TreeHash(p) == e.TreeHash
@@ -89,6 +85,9 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		if managedMirror(d, n, m.Skills[n]) {
 			continue
 		}
+		if TreeHash(src) != m.Skills[n].TreeHash {
+			return msgs, rollback(errf("review changed project copy before conversion: %s", src))
+		}
 		target := "../../.agents/skills/" + n
 		if Lexists(lp) {
 			valid := false
@@ -99,7 +98,10 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 				rel, _ := filepath.Rel(d, lp)
 				g := Git([]string{"ls-files", "--stage", "--", filepath.ToSlash(rel)}, d, 10)
 				b, _ := os.ReadFile(lp)
-				valid = g.Code == 0 && strings.HasPrefix(g.Stdout, "120000 ") && string(b) == target
+				if g.Code == 0 && strings.HasPrefix(g.Stdout, "120000 ") && string(b) == target {
+					blob := Git([]string{"show", ":" + filepath.ToSlash(rel)}, d, 10)
+					valid = blob.Code == 0 && blob.Stdout == target
+				}
 			}
 			if !valid {
 				return msgs, rollback(errf("unmanaged or modified Claude path: %s", lp))

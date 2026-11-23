@@ -862,9 +862,13 @@ type Diagnostic struct {
 func Doctor(d string) []Diagnostic {
 	var out []Diagnostic
 	add := func(lv, f string, a ...any) { out = append(out, Diagnostic{lv, sprintf(f, a...)}) }
+	copies := copyMode(d)
 	for _, r := range ProjectStatus(d) {
+		if copies && r.Tracked && !r.LinkOK && r.State != "missing" {
+			add("warn", "%s: Claude copy missing or differs from %s", LinkP(d, r.Name), Dest(d, r.Name))
+		}
 		switch s := r.State; {
-		case s == "ok" && !r.LinkOK:
+		case s == "ok" && !r.LinkOK && !copies:
 			add("warn", "%s: .claude/skills link missing/broken (fix: repair-links)", r.Name)
 		case s == "missing" || s == "invalid":
 			add("error", "%s: %s (manifest says installed)", r.Name, s)

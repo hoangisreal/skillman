@@ -26,7 +26,6 @@ def cli(*args):
 if phase == "create":
     project.mkdir()
     git("init", "-b", "main")
-    (project / ".gitattributes").write_text(".agents/skills/** -text\n.claude/skills/** -text\n")
     (project / ".gitignore").write_text(".agents/.skillman.lock\n")
 else:
     subprocess.run(["git", "-c", "core.autocrlf=true", "clone", bundle, project], check=True)

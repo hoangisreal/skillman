@@ -46,6 +46,11 @@ The table counts calls observed by the binary wrapper. `<project>` stands for th
 
 Codex initially failed to initialize its app server with read-only runtime state. The completed runs used its regular runtime. An earlier Claude Code run completed the coding prompt, while the timed run above records the file change independently. OpenCode's three results leave its routing unverified.
 
+
+## Additional local clients
+
+Cursor's CLI executable was unavailable on the Linux evaluation machine. GitHub Copilot CLI 1.0.83 started and reported an authentication error for the Vietnamese local-selection prompt. The fixture wrapper recorded zero Skillman calls, and the requested Vue testing skill was absent after the run. Discovery and installation in both clients still need an authenticated live check.
+
 ## GitHub import
 
 A separate live smoke test listed eight skills in `vuejs-ai/skills`. The preview selected `skills/vue-testing-best-practices` at `198f0cd8f7f9c0a3d9b566ccc16de6677519ee78`. Running its `apply_args` imported the skill into a temporary library, installed the requested project copy and passed `skillman verify`. The CLI integration test uses a local Git remote for branch movement, collisions, license and audit checks, and project-install failure and retry.
