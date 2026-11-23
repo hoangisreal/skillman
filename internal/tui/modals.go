@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func center(w, h, mw, mh int) rect {
@@ -118,9 +119,11 @@ func (c *confirmModal) view(m *Model, w, h int) ([]string, rect) {
 	c.offset = min(c.offset, c.last)
 	r := center(w, h, mw, visible+fixedRows)
 	c.area = r
-	yes, no := " Yes (y) ", " No (n) "
-	if len(yes)+len(no)+2 > r.w-2 {
-		yes, no = " Yes y ", " No n "
+	yes, no := m.lang.text(" Yes (y) "), m.lang.text(" No (n) ")
+	gap := "  "
+	if ansi.StringWidth(yes)+ansi.StringWidth(no)+2 > r.w-2 {
+		yes, no = m.lang.text(" Yes y "), m.lang.text(" No n ")
+		gap = " "
 	}
 	ys, ns := stTabOff, stTabOff
 	if c.focus == 0 {
@@ -135,17 +138,18 @@ func (c *confirmModal) view(m *Model, w, h int) ([]string, rect) {
 	if hint {
 		line := ""
 		if c.last > 0 {
-			line = stDim.Render("↑↓ scroll")
+			line = stDim.Render(m.lang.text("↑↓ scroll"))
 		}
 		inner = append(inner, line)
 	}
 	by := r.y + 1 + len(inner)
-	inner = append(inner, ys.Render(yes)+"  "+ns.Render(no))
-	c.btnYes = rect{r.x + 1, by, len(yes), 1}
-	c.btnNo = rect{r.x + 1 + len(yes) + 2, by, len(no), 1}
-	title := "Confirm"
+	inner = append(inner, ys.Render(yes)+gap+ns.Render(no))
+	yesWidth := ansi.StringWidth(yes)
+	c.btnYes = rect{r.x + 1, by, yesWidth, 1}
+	c.btnNo = rect{r.x + 1 + yesWidth + len(gap), by, ansi.StringWidth(no), 1}
+	title := m.lang.text("Confirm")
 	if c.danger {
-		title = stErr.Render("Confirm")
+		title = stErr.Render(title)
 	}
 	return box(title, inner, r.w, r.h, true), r
 }
@@ -184,8 +188,8 @@ func (a *askModal) paste(m *Model, s string)                 { a.in.insert(s) }
 
 func (a *askModal) view(m *Model, w, h int) ([]string, rect) {
 	r := center(w, h, min(max(60, w*2/3), 110), 6)
-	inner := []string{a.prompt, a.in.render(r.w-2, "› "), "", stDim.Render("enter = ok · esc = cancel")}
-	return box("Input", inner, r.w, r.h, true), r
+	inner := []string{a.prompt, a.in.render(m.lang, r.w-2, "› "), "", stDim.Render(m.lang.text("enter = ok · esc = cancel"))}
+	return box(m.lang.text("Input"), inner, r.w, r.h, true), r
 }
 
 // ───────────── pick (filterable list) ─────────────
@@ -200,6 +204,7 @@ type pickModal struct {
 	list     *table
 	pick     func(m *Model, v string) tea.Cmd
 	pickMany func(m *Model, names []string) tea.Cmd
+	inspect  func(m *Model, name string) tea.Cmd
 	area     rect
 }
 
@@ -251,6 +256,18 @@ func (p *pickModal) apply() {
 
 func (p *pickModal) choose(m *Model) tea.Cmd {
 	if p.pickMany != nil {
+		if p.inspect != nil {
+			if len(p.list.sel) == 0 {
+				return m.notify(m.lang.text("Mark at least one skill"), false)
+			}
+			var names []string
+			for _, o := range p.opts {
+				if p.list.sel[o.value] {
+					names = append(names, o.value)
+				}
+			}
+			return p.pickMany(m, names)
+		}
 		names := p.list.targets()
 		if len(names) == 0 {
 			return nil
@@ -268,11 +285,15 @@ func (p *pickModal) choose(m *Model) tea.Cmd {
 
 func (p *pickModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 	k := msg.String()
-	if p.pickMany != nil && k == "space" {
+	if p.pickMany != nil && (k == "ctrl+x" || (k == "space" && p.inspect == nil)) {
 		p.list.toggle()
 		return nil
 	}
 	switch k {
+	case "ctrl+o":
+		if p.inspect != nil {
+			return p.inspect(m, p.list.current())
+		}
 	case "esc":
 		m.pop()
 		return nil
@@ -321,9 +342,9 @@ func (p *pickModal) paste(m *Model, s string) { p.filter.insert(s); p.apply() }
 func (p *pickModal) view(m *Model, w, h int) ([]string, rect) {
 	r := center(w, h, min(max(70, w*3/4), 140), h*4/5)
 	p.area = r
-	inner := []string{p.filter.render(r.w-2, "/ ")}
+	inner := []string{p.filter.render(m.lang, r.w-2, "/ ")}
 	lr := rect{r.x + 1, r.y + 2, r.w - 2, r.h - 3}
-	inner = append(inner, p.list.render(lr)...)
+	inner = append(inner, p.list.render(m.lang, lr)...)
 	return box(p.title+stDim.Render(" ("+itoa(len(p.shown))+")"), inner, r.w, r.h, true), r
 }
 
@@ -374,7 +395,7 @@ func (t *textModal) view(m *Model, w, h int) ([]string, rect) {
 	if t.width != r.w-2 {
 		t.width = r.w - 2
 		off := t.v.offset
-		t.v.set(colorDiff(wrapPlain(t.text, t.width)))
+		t.v.set(colorDiff(m.lang, wrapPlain(t.text, t.width)))
 		t.v.offset = off
 	}
 	inner := t.v.render(rect{r.x + 1, r.y + 1, r.w - 2, r.h - 3})
@@ -382,13 +403,14 @@ func (t *textModal) view(m *Model, w, h int) ([]string, rect) {
 	if t.accept != nil {
 		hint = "Enter to continue · Esc to cancel · ↑↓ to review"
 	}
-	inner = append(inner, stDim.Render(hint))
+	inner = append(inner, stDim.Render(m.lang.text(hint)))
 	return box(t.title, inner, r.w, r.h, true), r
 }
 
 // colorDiff colors unified-diff lines; other text passes through.
-func colorDiff(lines []string) []string {
+func colorDiff(lang language, lines []string) []string {
 	out := make([]string, len(lines))
+	errLabel, warnLabel := lang.text("ERROR"), lang.text("WARN")
 	for i, l := range lines {
 		switch {
 		case strings.HasPrefix(l, "+++") || strings.HasPrefix(l, "---"):
@@ -399,9 +421,9 @@ func colorDiff(lines []string) []string {
 			out[i] = stOK.Render(l)
 		case strings.HasPrefix(l, "-"):
 			out[i] = stErr.Render(l)
-		case strings.HasPrefix(l, "✗") || strings.HasPrefix(l, "ERROR"):
+		case strings.HasPrefix(l, "✗") || strings.HasPrefix(l, "ERROR") || strings.HasPrefix(l, errLabel):
 			out[i] = stErr.Render(l)
-		case strings.HasPrefix(l, "!") || strings.HasPrefix(l, "WARN"):
+		case strings.HasPrefix(l, "!") || strings.HasPrefix(l, "WARN") || strings.HasPrefix(l, warnLabel):
 			out[i] = stWarn.Render(l)
 		default:
 			out[i] = l
@@ -425,10 +447,14 @@ func (t *mdModal) view(m *Model, w, h int) ([]string, rect) {
 	t.area = r
 	if t.width != r.w-2 {
 		t.width = r.w - 2
-		t.v.set(renderMarkdown(t.raw, t.width, 0))
+		t.v.set(renderMarkdown(m.lang, t.raw, t.width, 0))
 	}
 	inner := t.v.render(rect{r.x + 1, r.y + 1, r.w - 2, r.h - 3})
-	inner = append(inner, stDim.Render("↑↓ PgUp PgDn wheel · esc / q = close"))
+	hint := "↑↓ PgUp PgDn wheel · esc / q = close"
+	if t.accept != nil {
+		hint = "Enter to name the output file · Esc to cancel"
+	}
+	inner = append(inner, stDim.Render(m.lang.text(hint)))
 	return box(t.title, inner, r.w, r.h, true), r
 }
 
@@ -439,9 +465,9 @@ func (t *mdModal) mouse(m *Model, msg tea.MouseMsg) tea.Cmd  { return t.textModa
 
 func newHelpModal(m *Model) *textModal {
 	var b strings.Builder
-	b.WriteString("Global\n")
+	b.WriteString(m.lang.text("Global") + "\n")
 	for _, l := range [][2]string{
-		{"1-8 · [ ]  · alt+←/→", "switch tab (or click a tab)"},
+		{"1-9 · [ ]  · alt+←/→", "switch tab (or click a tab)"},
 		{"tab / shift+tab", "move focus between panes"},
 		{"/", "search / filter"},
 		{"↑↓ j k · PgUp PgDn · g G", "move (mouse wheel scrolls the pane under the pointer)"},
@@ -451,33 +477,32 @@ func newHelpModal(m *Model) *textModal {
 		{"ctrl+r", "reload library, packs and project status"},
 		{"q · ctrl+c", "quit"},
 	} {
-		b.WriteString("  " + fit(l[0], 28) + " " + l[1] + "\n")
+		b.WriteString("  " + fit(l[0], 28) + " " + m.lang.text(l[1]) + "\n")
 	}
-	b.WriteString("\n" + m.tab().title() + " tab\n")
+	b.WriteString("\n" + m.lang.format("%s tab", m.lang.text(m.tab().title())) + "\n")
 	for _, a := range m.tab().actions(m) {
-		b.WriteString("  " + fit(a.key, 28) + " " + a.label + "\n")
+		b.WriteString("  " + fit(a.key, 28) + " " + m.lang.text(a.label) + "\n")
 	}
-	b.WriteString("\nThe footer keys are clickable. Drag the │ divider to resize panes.\n" +
-		"Everything here is also a CLI command: skillman help")
-	return newTextModal("Help", b.String())
+	b.WriteString("\n" + m.lang.text("The footer keys are clickable. Drag the │ divider to resize panes.") + "\n" +
+		m.lang.text("For CLI commands, run skillman help."))
+	return newTextModal(m.lang.text("Help"), b.String())
 }
 
 func newPalette(m *Model) *pickModal {
 	var opts []option
 	acts := map[string]action{}
 	for _, a := range m.allActions() {
-		id := a.key + " " + a.label
-		acts[id] = a
-		opts = append(opts, option{value: a.label, label: "[" + a.key + "]"})
-		acts[a.label] = a
+		label := m.lang.text(a.label)
+		opts = append(opts, option{value: label, label: "[" + a.key + "]"})
+		acts[label] = a
 	}
 	for i, t := range m.tabs {
 		i := i
-		lbl := "Go to " + t.title()
+		lbl := m.lang.format("Go to %s", m.lang.text(t.title()))
 		acts[lbl] = action{run: func(m *Model) tea.Cmd { m.setTab(i); return nil }}
 		opts = append(opts, option{value: lbl, label: "[" + itoa(i+1) + "]"})
 	}
-	return pick("Commands", opts, func(m *Model, v string) tea.Cmd {
+	return pick(m.lang.text("Commands"), opts, func(m *Model, v string) tea.Cmd {
 		if a, ok := acts[v]; ok && a.run != nil {
 			return a.run(m)
 		}

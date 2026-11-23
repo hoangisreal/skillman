@@ -71,7 +71,7 @@ func setSkillLink(lp, target string) error {
 		return err
 	}
 	if IsSymlink(lp) {
-		if t, _ := os.Readlink(lp); t == target {
+		if t, _ := os.Readlink(lp); filepath.ToSlash(t) == filepath.ToSlash(target) {
 			return nil
 		}
 	}
@@ -352,7 +352,7 @@ func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry,
 	if err := link(d, name, copies); err != nil {
 		return c, err
 	}
-	c.linked = c.previousLink != "../../.agents/skills/"+name
+	c.linked = filepath.ToSlash(c.previousLink) != "../../.agents/skills/"+name
 	if !linkOK(d, name, copies, TreeHash) {
 		return c, errf("link does not resolve: %s", c.link)
 	}
@@ -619,7 +619,7 @@ func DanglingLinks(d string) []string {
 	for _, e := range SortedDir(ld) {
 		p := filepath.Join(ld, e.Name())
 		if IsSymlink(p) && !Exists(p) {
-			if t, _ := os.Readlink(p); strings.HasPrefix(t, "../../.agents/skills/") {
+			if t, _ := os.Readlink(p); strings.HasPrefix(filepath.ToSlash(t), "../../.agents/skills/") {
 				out = append(out, p)
 			}
 		}
@@ -956,7 +956,7 @@ func TokenBudgetOf(d string) Budget {
 	}
 	b.GlobalSkills = len(seen)
 	b.Total = b.ProjectTokens + b.GlobalTokens
-	b.Budget = TokenBudget
+	b.Budget, _ = DescriptionBudget()
 	return b
 }
 

@@ -34,6 +34,35 @@ Each sample launched a fresh binary. The first call started with an index and no
 
 ## Agent routing
 
+### Task-first ranking check
+
+The fixtures cover a longer specialist winning on task fit, the shorter of two equivalent guides winning
+on added description cost, and a matching installed guide taking precedence over an equivalent uninstalled
+guide. CLI and TUI tests also cover a missing indexed skill, empty projects, manual selection and a cancelled
+preview.
+
+On Linux, the same warm `recommend --task "vue test" --brief --json` request ranked
+`vue-testing-best-practices` first in every run. Each row uses 25 runs per build, alternating their order
+after one warmup per build. The baseline is `207c313`. File opens are from a separate warm `strace` run.
+
+| Synthetic catalog | p50, ms | p95, ms | JSON bytes | Successful `SKILL.md` opens |
+|---|---:|---:|---:|---:|
+| 723 skills | 15.4 → 15.3 | 19.7 → 18.6 | 774 → 774 | 6 → 6 |
+| 3,000 skills | 24.0 → 24.5 | 31.0 → 29.0 | 776 → 776 | 6 → 6 |
+
+A live terminal run selected a Vue Router skill in place of the proposed Vue testing skill, cancelled
+and reopened the preview, installed the manual selection and verified all seven tracked copies.
+
+### Client runs with the task-first workflow
+
+| Client | Local shortlist | Preview and install exactly one skill | Ordinary code edit |
+|---|---|---|---|
+| Codex | Called `recommend --brief --json` and left the fixture unchanged | Previewed, installed and verified the selected Vue testing skill | Updated `double.js` without calling Skillman |
+| Claude Code | One `recommend --brief --json` call and no fixture changes | Called preview, add, status and verify, but the environment reported a read-only filesystem and no install appeared | Updated `double.js` and ran Node without calling Skillman |
+| OpenCode | Timed out without reaching the fixture binary | Timed out without reaching the fixture binary | Timed out before editing |
+
+### Earlier client runs
+
 Each agent received a fresh Vue project containing both `skillman` and `find-skills`. A wrapper recorded arguments passed to the fixture binary. Project changes were checked independently of the agent's response.
 
 | Case | Vietnamese prompt |

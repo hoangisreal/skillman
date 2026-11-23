@@ -19,12 +19,11 @@ type updatesTab struct {
 	staged      map[string]core.Staged
 	keys        []string
 	onlyChanges bool
-	info        string
+	info        map[language]string
 }
 
 func newUpdatesTab(m *Model) *updatesTab {
-	t := &updatesTab{items: map[string]core.UpdateItem{}, staged: map[string]core.Staged{}, onlyChanges: true,
-		info: "c = check all upstream · k = one pack · L = skills selected in Library (read-only, nothing changes)"}
+	t := &updatesTab{items: map[string]core.UpdateItem{}, staged: map[string]core.Staged{}, onlyChanges: true}
 	for _, p := range core.LoadPending() {
 		t.staged[p.Name] = p
 		it := p.UpdateItem
@@ -44,7 +43,7 @@ func newUpdatesTab(m *Model) *updatesTab {
 		case 1:
 			return it.Name
 		case 2:
-			return styled(it.Status)
+			return m.lang.styled(it.Status)
 		case 3:
 			return stDim.Render(it.Repo)
 		case 4:
@@ -54,7 +53,7 @@ func newUpdatesTab(m *Model) *updatesTab {
 				if len(s.Risk) > 0 {
 					return stateStyle["modified"].Render(strings.Join(s.Risk, "; "))
 				}
-				return stOK.Render("safe")
+				return stOK.Render(m.lang.text("safe"))
 			}
 		}
 		return ""
@@ -87,8 +86,16 @@ func (t *updatesTab) fill() {
 }
 
 type checkedMsg struct {
-	rep   *core.UpdateReport
-	label string
+	rep      *core.UpdateReport
+	label    string
+	selected int
+}
+
+func (c checkedMsg) subject(lang language) string {
+	if c.selected > 0 {
+		return lang.format("%d selected skills", c.selected)
+	}
+	return lang.text(c.label)
 }
 
 type stagedMsg struct {
@@ -99,11 +106,17 @@ type stagedMsg struct {
 }
 
 func (t *updatesTab) check(m *Model, names []string, label string) tea.Cmd {
-	return m.async("checking "+label+" …", func(progress func(string)) tea.Msg {
-		rep := core.CheckUpdates(names, 8, func(repo string, done, total int) {
-			progress(fmt.Sprintf("checking %s … %d/%d repos (%s)", label, done, total, repo))
+	lang := m.lang
+	check := checkedMsg{label: label}
+	if label == "" {
+		check.selected = len(names)
+	}
+	subject := check.subject(lang)
+	return m.async(lang.format("checking %s …", subject), func(progress func(string)) tea.Msg {
+		check.rep = core.CheckUpdates(names, 8, func(repo string, done, total int) {
+			progress(lang.format("checking %s … %d/%d repos (%s)", subject, done, total, repo))
 		})
-		return checkedMsg{rep, label}
+		return check
 	})
 }
 
@@ -115,11 +128,12 @@ func (t *updatesTab) stage(m *Model, names []string, then string) tea.Cmd {
 			todo = append(todo, it)
 		}
 	}
-	return m.async("staging …", func(progress func(string)) tea.Msg {
+	lang := m.lang
+	return m.async(lang.text("staging …"), func(progress func(string)) tea.Msg {
 		var out stagedMsg
 		out.names, out.then = names, then
 		for _, it := range todo {
-			progress("staging " + it.Name + " …")
+			progress(lang.format("staging %s …", it.Name))
 			s, err := core.StageUpdate(it)
 			if err != nil {
 				out.errs = append(out.errs, it.Name+": "+err.Error())
@@ -145,18 +159,28 @@ func (t *updatesTab) handle(m *Model, msg tea.Msg) tea.Cmd {
 		for _, it := range msg.rep.Items {
 			cnt[it.Status]++
 		}
-		var parts []string
-		for k, v := range cnt {
-			parts = append(parts, k+"="+itoa(v))
+		t.info = make(map[language]string)
+		var summary string
+		for _, entry := range languages {
+			lang := entry.id
+			var parts []string
+			for k, v := range cnt {
+				parts = append(parts, lang.text(k)+"="+itoa(v))
+			}
+			sort.Strings(parts)
+			joined := strings.Join(parts, ", ")
+			if lang == m.lang {
+				summary = joined
+			}
+			info := lang.format("%s: %s · no upstream: %d · checked %s", msg.subject(lang), joined, len(msg.rep.NoUpstream), msg.rep.CheckedAt)
+			if len(msg.rep.Errors) > 0 {
+				info += "\n" + lang.format("errors: %s", strings.Join(msg.rep.Errors[:min(3, len(msg.rep.Errors))], "; "))
+			}
+			info += "\n" + lang.text("enter = changelog + diff · a = apply selected · A = apply all safe")
+			t.info[lang] = info
 		}
-		sort.Strings(parts)
-		t.info = fmt.Sprintf("%s: %s · no upstream: %d · checked %s", msg.label, strings.Join(parts, ", "), len(msg.rep.NoUpstream), msg.rep.CheckedAt)
-		if len(msg.rep.Errors) > 0 {
-			t.info += "\nerrors: " + strings.Join(msg.rep.Errors[:min(3, len(msg.rep.Errors))], "; ")
-		}
-		t.info += "\nenter = changelog + diff · a = apply selected · A = apply all safe"
 		t.fill()
-		return m.notify("update check done: "+strings.Join(parts, ", "), false)
+		return m.notify(m.lang.format("update check done: %s", summary), false)
 	case stagedMsg:
 		for _, s := range msg.got {
 			t.staged[s.Name] = s
@@ -188,16 +212,17 @@ func (t *updatesTab) handle(m *Model, msg tea.Msg) tea.Cmd {
 }
 
 func (t *updatesTab) details(m *Model, s core.Staged) tea.Cmd {
-	return m.async("loading changelog …", func(func(string)) tea.Msg {
+	lang := m.lang
+	return m.async(lang.text("loading changelog …"), func(func(string)) tea.Msg {
 		risk := strings.Join(s.Risk, "; ")
 		if risk == "" {
-			risk = "none (safe)"
+			risk = lang.text("none (safe)")
 		}
-		text := fmt.Sprintf("%s  %s  %s → %s\nrisk: %s\nadded: %s\nremoved: %s\nchanged: %s\n\nupstream changelog:\n%s\n\n%s",
+		text := lang.format("%s  %s  %s → %s\nrisk: %s\nadded: %s\nremoved: %s\nchanged: %s\n\nupstream changelog:\n%s\n\n%s",
 			s.Name, s.Repo, core.Short(s.Commit, 12), core.Short(s.NewCommit, 12), risk, orDash(strings.Join(s.Added, ", ")),
 			orDash(strings.Join(s.Removed, ", ")), orDash(strings.Join(s.ChangedFiles, ", ")), core.Changelog(s.UpdateItem, 30),
 			core.DiffText(filepath.Join(core.SKILLS, s.Name), s.Staged, "current", "upstream", 0))
-		return doneMsg{title: "update: " + s.Name, text: text}
+		return doneMsg{title: lang.format("update: %s", s.Name), text: text}
 	})
 }
 
@@ -215,7 +240,8 @@ func (t *updatesTab) apply(m *Model, staged []core.Staged, safeOnly bool) tea.Cm
 		if allow {
 			todo = append(todo, risky...)
 		}
-		return m.async("applying "+itoa(len(todo))+" update(s) …", func(func(string)) tea.Msg {
+		lang := m.lang
+		return m.async(lang.format("applying %d update(s) …", len(todo)), func(func(string)) tea.Msg {
 			rs := core.ApplyUpdates(todo, allow, true)
 			var pend []core.Staged
 			for _, s := range staged {
@@ -224,9 +250,9 @@ func (t *updatesTab) apply(m *Model, staged []core.Staged, safeOnly bool) tea.Cm
 				}
 			}
 			if err := core.QueuePending(pend); err != nil {
-				rs = append(rs, core.Result{Name: "pending updates", Message: err.Error()})
+				rs = append(rs, core.Result{Name: lang.text("pending updates"), Message: err.Error()})
 			}
-			return doneMsg{reindex: true, title: "apply updates", text: fmtResults(rs), then: func(m *Model) tea.Cmd {
+			return doneMsg{reindex: true, title: "apply updates", text: fmtResults(lang, rs), then: func(m *Model) tea.Cmd {
 				for _, r := range rs {
 					if r.OK {
 						delete(t.staged, r.Name)
@@ -247,18 +273,20 @@ func (t *updatesTab) apply(m *Model, staged []core.Staged, safeOnly bool) tea.Cm
 		for _, s := range risky {
 			rs = append(rs, s.Name+": "+strings.Join(s.Risk, "; "))
 		}
-		opts := []option{{"safe", fmt.Sprintf("apply only the %d safe update(s)", len(safe))},
-			{"all", "apply ALL incl. " + itoa(len(risky)) + " risky: " + core.Short(strings.Join(rs, " | "), 300)}, {"cancel", "do nothing"}}
-		m.push(pick("Risky updates staged — choose (review with enter first)", opts, func(m *Model, v string) tea.Cmd {
-			if v == "safe" || v == "all" {
-				return go1(m, v == "all")
+		safeLabel, allLabel := m.lang.text("safe"), m.lang.text("all")
+		opts := []option{{safeLabel, m.lang.format("apply only the %d safe update(s)", len(safe))},
+			{allLabel, m.lang.format("apply ALL incl. %d risky: %s", len(risky), core.Short(strings.Join(rs, " | "), 300))},
+			{m.lang.text("cancel"), m.lang.text("do nothing")}}
+		m.push(pick(m.lang.text("Risky updates staged — choose (review with enter first)"), opts, func(m *Model, v string) tea.Cmd {
+			if v == safeLabel || v == allLabel {
+				return go1(m, v == allLabel)
 			}
 			return nil
 		}))
 	case len(safe) > 0:
-		m.push(confirm(fmt.Sprintf("Apply %d safe update(s) to the library and commit?", len(safe)), false, func(m *Model) tea.Cmd { return go1(m, false) }))
+		m.push(confirm(m.lang.format("Apply %d safe update(s) to the library and commit?", len(safe)), false, func(m *Model) tea.Cmd { return go1(m, false) }))
 	default:
-		return m.notify("nothing safe to apply", false)
+		return m.notify(m.lang.text("nothing safe to apply"), false)
 	}
 	return nil
 }
@@ -271,7 +299,7 @@ func (t *updatesTab) actions(m *Model) []action {
 			for _, s := range core.PackSummaries(true) {
 				opts = append(opts, option{s.Name, s.Description})
 			}
-			m.push(pick("Check updates for pack", opts, func(m *Model, p string) tea.Cmd {
+			m.push(pick(m.lang.text("Check updates for pack"), opts, func(m *Model, p string) tea.Cmd {
 				names, err := core.ExpandPack(p)
 				if err != nil {
 					return m.notify(err.Error(), true)
@@ -284,9 +312,9 @@ func (t *updatesTab) actions(m *Model) []action {
 			lib := m.tabs[0].(*libraryTab)
 			names := lib.tbl.targets()
 			if len(lib.tbl.sel) == 0 {
-				return m.notify("select skills in Library (tab 1, space) first", true)
+				return m.notify(m.lang.text("select skills in Library (tab 1, space) first"), true)
 			}
-			return t.check(m, names, itoa(len(names))+" selected skills")
+			return t.check(m, names, "")
 		}},
 		{key: "space", label: "select", run: func(m *Model) tea.Cmd { t.tbl.toggle(); return nil }, hidden: true},
 		{key: "enter", label: "details", run: func(m *Model) tea.Cmd {
@@ -297,7 +325,7 @@ func (t *updatesTab) actions(m *Model) []action {
 			if t.items[k].Status == "changed" {
 				return t.stage(m, []string{k}, "details")
 			}
-			return m.notify(k+": "+t.items[k].Status, false)
+			return m.notify(k+": "+m.lang.text(t.items[k].Status), false)
 		}},
 		{key: "a", label: "apply selected", run: func(m *Model) tea.Cmd {
 			var names []string
@@ -307,7 +335,7 @@ func (t *updatesTab) actions(m *Model) []action {
 				}
 			}
 			if len(names) == 0 {
-				return m.notify("select changed skills (space) or put the cursor on one", true)
+				return m.notify(m.lang.text("select changed skills (space) or put the cursor on one"), true)
 			}
 			return t.stage(m, names, "apply")
 		}},
@@ -319,7 +347,7 @@ func (t *updatesTab) actions(m *Model) []action {
 				}
 			}
 			if len(names) == 0 {
-				return m.notify("no changed skills — run a check first (c)", false)
+				return m.notify(m.lang.text("no changed skills — run a check first (c)"), false)
 			}
 			return t.stage(m, names, "apply-safe")
 		}},
@@ -331,8 +359,8 @@ func (t *updatesTab) actions(m *Model) []action {
 			if k == "" {
 				return nil
 			}
-			m.push(confirm("Roll back library skill "+k+" to its previous git version and pin it?", false, func(m *Model) tea.Cmd {
-				return m.async("rolling back "+k+" …", func(func(string)) tea.Msg {
+			m.push(confirm(m.lang.format("Roll back library skill %s to its previous git version and pin it?", k), false, func(m *Model) tea.Cmd {
+				return m.async(m.lang.format("rolling back %s …", k), func(func(string)) tea.Msg {
 					msg, err := core.Rollback(k, true)
 					if err != nil {
 						return doneMsg{note: err.Error(), isErr: true}
@@ -342,19 +370,25 @@ func (t *updatesTab) actions(m *Model) []action {
 			}))
 			return nil
 		}},
-		{key: "f", label: "only changes", run: func(m *Model) tea.Cmd { t.onlyChanges = !t.onlyChanges; t.fill(); return nil }},
+		{key: "f", label: "only changes", run: func(m *Model) tea.Cmd {
+			return m.savePreference("updates_only_changes", !t.onlyChanges, func() {
+				t.onlyChanges = !t.onlyChanges
+				t.fill()
+			})
+		}},
 		{key: "p", label: "update projects", run: func(m *Model) tea.Cmd {
 			aff := core.ProjectsAffected(nil)
 			if len(aff) == 0 {
-				return m.notify("no registered project has outdated skills", false)
+				return m.notify(m.lang.text("no registered project has outdated skills"), false)
 			}
 			var lines []string
 			for _, a := range aff {
 				lines = append(lines, a.Project+": "+strings.Join(a.Skills, ", "))
 			}
-			m.push(confirm("Update outdated skills in:\n"+strings.Join(lines, "\n")+"\n(pinned and locally modified skills are skipped)", false,
+			m.push(confirm(m.lang.format("Update outdated skills in:\n%s\n(pinned and locally modified skills are skipped)", strings.Join(lines, "\n")), false,
 				func(m *Model) tea.Cmd {
-					return m.async("updating projects …", func(func(string)) tea.Msg {
+					lang := m.lang
+					return m.async(lang.text("updating projects …"), func(func(string)) tea.Msg {
 						var all []core.Result
 						for _, a := range aff {
 							rs, err := core.UpdateProject(a.Project, a.Skills, false)
@@ -367,7 +401,7 @@ func (t *updatesTab) actions(m *Model) []action {
 								all = append(all, r)
 							}
 						}
-						return doneMsg{title: "update projects", text: fmtResults(all), reload: true}
+						return doneMsg{title: "update projects", text: fmtResults(lang, all), reload: true}
 					})
 				}))
 			return nil
@@ -392,11 +426,15 @@ func (t *updatesTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 }
 
 func (t *updatesTab) view(m *Model, r rect) []string {
-	head := strings.Split(t.info, "\n")
+	info := t.info[m.lang]
+	if info == "" {
+		info = m.lang.text("c = check all upstream · k = one pack · L = skills selected in Library (read-only, nothing changes)")
+	}
+	head := append([]string{m.lang.text("only changes") + " " + filterState(m.lang, t.onlyChanges)}, strings.Split(info, "\n")...)
 	for i := range head {
 		head[i] = stDim.Render(head[i])
 	}
-	return append(head, t.tbl.render(rect{r.x, r.y + len(head), r.w, r.h - len(head)})...)
+	return append(head, t.tbl.render(m.lang, rect{r.x, r.y + len(head), r.w, r.h - len(head)})...)
 }
 
 // ───────────── 6 Upstream candidates ─────────────
@@ -434,7 +472,7 @@ func newUpstreamTab(m *Model) *upstreamTab {
 		case 3:
 			f := x.Flags
 			if t.lib[x.Name] {
-				f = "in library " + f
+				f = m.lang.text("in library") + " " + f
 			}
 			return stWarn.Render(f)
 		case 4:
@@ -487,7 +525,7 @@ func (t *upstreamTab) tick(m *Model, i int) tea.Cmd {
 	c := &t.cands[t.shown[i]]
 	var note tea.Cmd
 	if c.Collides && !c.Ticked {
-		note = m.notify(c.Name+" collides with an existing skill; importing needs --rename-collisions", true)
+		note = m.notify(m.lang.format("%s collides with an existing skill; importing needs --rename-collisions", c.Name), true)
 	}
 	if err := core.SetTicks(map[int]bool{c.Line: !c.Ticked}); err != nil {
 		return m.notify(err.Error(), true)
@@ -503,18 +541,19 @@ func (t *upstreamTab) actions(m *Model) []action {
 		{key: "I", label: "import ticked", run: func(m *Model) tea.Cmd { return t.importRun(m, true) }},
 		{key: "t", label: "only ticked", run: func(m *Model) tea.Cmd { t.onlyTicked = !t.onlyTicked; t.apply(); return nil }},
 		{key: "V", label: "verify repos", run: func(m *Model) tea.Cmd {
-			m.push(confirm("Clone (sparse, blob-less) every repo in staging/repos.txt and list candidate skills? Nothing is imported.", false,
+			m.push(confirm(m.lang.text("Clone (sparse, blob-less) every repo in staging/repos.txt and list candidate skills? Nothing is imported."), false,
 				func(m *Model) tea.Cmd {
-					return m.async("verifying upstream repos …", func(progress func(string)) tea.Msg {
+					lang := m.lang
+					return m.async(lang.text("verifying upstream repos …"), func(progress func(string)) tea.Msg {
 						n := 0
 						res, err := core.VerifyRepos("", 8, func(r core.RepoResult) {
 							n++
-							progress(fmt.Sprintf("verified %d repos · %s: %s (%d skills)", n, r.Repo, r.Status, len(r.Skills)))
+							progress(lang.format("verified %d repos · %s: %s (%d skills)", n, r.Repo, lang.text(r.Status), len(r.Skills)))
 						})
 						if err != nil {
 							return doneMsg{note: err.Error(), isErr: true}
 						}
-						return doneMsg{note: fmt.Sprintf("verified %d repos", len(res)), reload: true}
+						return doneMsg{note: lang.format("verified %d repos", len(res)), reload: true}
 					})
 				}))
 			return nil
@@ -524,18 +563,21 @@ func (t *upstreamTab) actions(m *Model) []action {
 }
 
 func (t *upstreamTab) importRun(m *Model, dry bool, reviewed ...core.ImportLine) tea.Cmd {
-	return m.async(map[bool]string{true: "import dry-run …", false: "importing …"}[dry], func(progress func(string)) tea.Msg {
-		log, err := core.ImportTicked(core.QueueImportOptions{DryRun: dry, Reviewed: reviewed}, func(l core.ImportLine) { progress(l.Result + " " + l.Name) })
+	lang := m.lang
+	return m.async(lang.text(map[bool]string{true: "import dry-run …", false: "importing …"}[dry]), func(progress func(string)) tea.Msg {
+		log, err := core.ImportTicked(core.QueueImportOptions{DryRun: dry, Reviewed: reviewed}, func(l core.ImportLine) {
+			progress(lang.text(l.Result) + " " + l.Name)
+		})
 		if err != nil {
 			return doneMsg{note: err.Error(), isErr: true}
 		}
 		if log == nil {
-			return doneMsg{note: "nothing ticked"}
+			return doneMsg{note: lang.text("nothing ticked")}
 		}
 		var b strings.Builder
 		n := 0
 		for _, l := range log {
-			fmt.Fprintf(&b, "%-9s %s:%s @ %s  %s\n", l.Result, l.Repo, l.Name, core.Short(l.Commit, 12), l.Detail)
+			fmt.Fprintf(&b, "%-9s %s:%s @ %s  %s\n", lang.text(l.Result), l.Repo, l.Name, core.Short(l.Commit, 12), lang.text(l.Detail))
 			if l.Result == "DRY-RUN" {
 				n++
 			}
@@ -545,14 +587,14 @@ func (t *upstreamTab) importRun(m *Model, dry bool, reviewed ...core.ImportLine)
 			if err != nil {
 				return doneMsg{note: err.Error(), isErr: true, title: "import result", text: b.String(), reindex: true}
 			}
-			fmt.Fprintf(&b, "\nvalidate: skills=%d errors=%d warnings=%d\nreview, then commit: git -C %s add -A && git -C %s commit\n", len(rows), len(e), len(w), core.LIB, core.LIB)
+			b.WriteString(lang.format("\nvalidate: skills=%d errors=%d warnings=%d\nreview, then commit: git -C %s add -A && git -C %s commit\n", len(rows), len(e), len(w), core.LIB, core.LIB))
 			return doneMsg{title: "import result", text: b.String(), reindex: true}
 		}
 		return doneMsg{then: func(m *Model) tea.Cmd {
-			pre := newTextModal("import preview", b.String())
+			pre := newTextModal(m.lang.text("import preview"), b.String())
 			if n > 0 {
 				pre.accept = func(m *Model) tea.Cmd {
-					m.push(confirm(fmt.Sprintf("Import %d skill(s) for real?", n), false, func(m *Model) tea.Cmd { return t.importRun(m, false, log...) }))
+					m.push(confirm(m.lang.format("Import %d skill(s) for real?", n), false, func(m *Model) tea.Cmd { return t.importRun(m, false, log...) }))
 					return nil
 				}
 			}
@@ -621,9 +663,9 @@ func (t *upstreamTab) view(m *Model, r rect) []string {
 		}
 	}
 	t.q.area = rect{r.x, r.y, r.w, 1}
-	head := []string{t.q.render(r.w, stAccentB.Render("/ ")),
-		stDim.Render(fmt.Sprintf("%d/%d candidates · %d ticked · add repos to staging/repos.txt, then V", len(t.shown), len(t.cands), n))}
-	return append(head, t.tbl.render(rect{r.x, r.y + 2, r.w, r.h - 2})...)
+	head := []string{t.q.render(m.lang, r.w, stAccentB.Render("/ ")),
+		stDim.Render(m.lang.format("%d/%d candidates · %d ticked · add repos to staging/repos.txt, then V", len(t.shown), len(t.cands), n))}
+	return append(head, t.tbl.render(m.lang, rect{r.x, r.y + 2, r.w, r.h - 2})...)
 }
 
 // ───────────── 7 Validation ─────────────
@@ -645,7 +687,7 @@ var valRx = regexp.MustCompile("^- (ERROR|WARN) `([^`]+)`: (.*)$")
 func newValidationTab(m *Model) *validationTab {
 	t := &validationTab{focus: 1}
 	t.q.placeholder = "filter: words · error · review · link · lines"
-	t.tbl = newTable(column{title: "level", width: 6}, column{title: "skill", flex: 2}, column{title: "finding", flex: 6})
+	t.tbl = newTable(column{title: "level", width: 9}, column{title: "skill", flex: 2}, column{title: "finding", flex: 6})
 	t.tbl.focused = true
 	t.tbl.empty = "no findings (v = re-validate)"
 	t.tbl.keyOf = func(i int) string { return itoa(t.shown[i]) }
@@ -653,7 +695,7 @@ func newValidationTab(m *Model) *validationTab {
 		r := t.all[t.shown[i]]
 		switch c {
 		case 0:
-			return styled(r.level)
+			return m.lang.styled(r.level)
 		case 1:
 			return r.name
 		case 2:
@@ -737,12 +779,13 @@ func (t *validationTab) actions(m *Model) []action {
 		{key: "/", label: "filter", run: func(m *Model) tea.Cmd { t.setFocus(0); return nil }},
 		{key: "enter", label: "open in Library", run: func(m *Model) tea.Cmd { return t.jump(m) }},
 		{key: "v", label: "re-validate", run: func(m *Model) tea.Cmd {
-			return m.async("validating library …", func(func(string)) tea.Msg {
+			lang := m.lang
+			return m.async(lang.text("validating library …"), func(func(string)) tea.Msg {
 				rows, e, w, err := core.RebuildIndex(true)
 				if err != nil {
 					return doneMsg{note: err.Error(), isErr: true}
 				}
-				return doneMsg{note: fmt.Sprintf("re-validated: skills=%d errors=%d warnings=%d", len(rows), len(e), len(w)), reindex: true}
+				return doneMsg{note: lang.format("re-validated: skills=%d errors=%d warnings=%d", len(rows), len(e), len(w)), reindex: true}
 			})
 		}},
 	}
@@ -795,8 +838,15 @@ func (t *validationTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 
 func (t *validationTab) view(m *Model, r rect) []string {
 	t.q.area = rect{r.x, r.y, r.w, 1}
-	head := []string{t.q.render(r.w, stAccentB.Render("/ ")), stDim.Render(t.head + " · " + t.counts)}
-	return append(head, t.tbl.render(rect{r.x, r.y + 2, r.w, r.h - 2})...)
+	report := m.lang.text(t.head)
+	if m.lang != english {
+		var skills, errors, warnings int
+		if _, err := fmt.Sscanf(t.head, "skills: %d  errors: %d  warnings: %d", &skills, &errors, &warnings); err == nil {
+			report = m.lang.format("skills: %d  errors: %d  warnings: %d", skills, errors, warnings)
+		}
+	}
+	head := []string{t.q.render(m.lang, r.w, stAccentB.Render("/ ")), stDim.Render(report + " · " + t.counts)}
+	return append(head, t.tbl.render(m.lang, rect{r.x, r.y + 2, r.w, r.h - 2})...)
 }
 
 // ───────────── 8 Trash ─────────────
@@ -819,11 +869,11 @@ func newTrashTab(m *Model) *trashTab {
 		case 0:
 			return core.Short(e.S("removed_at"), 16)
 		case 1:
-			return e.S("kind")
+			return m.lang.text(e.S("kind"))
 		case 2:
 			return e.S("name")
 		case 3:
-			return stDim.Render(e.S("reason"))
+			return stDim.Render(m.lang.text(e.S("reason")))
 		case 4:
 			if p := e.S("project"); p != "" {
 				return stDim.Render(p)
@@ -869,7 +919,7 @@ func (t *trashTab) actions(m *Model) []action {
 				return nil
 			}
 			payload := filepath.Join(e.S("slot"), e.S("name"))
-			m.push(newTextModal("trash vs library: "+e.S("name"), core.DiffText(filepath.Join(core.SKILLS, e.S("name")), payload, "library", "trash", 0)))
+			m.push(newTextModal(m.lang.format("trash vs library: %s", e.S("name")), core.DiffText(filepath.Join(core.SKILLS, e.S("name")), payload, "library", "trash", 0)))
 			return nil
 		}},
 		{key: "x", label: "delete forever", run: func(m *Model) tea.Cmd {
@@ -877,7 +927,7 @@ func (t *trashTab) actions(m *Model) []action {
 			if e == nil {
 				return nil
 			}
-			m.push(confirm("Permanently delete trash entry "+e.S("name")+"?", true, func(m *Model) tea.Cmd {
+			m.push(confirm(m.lang.format("Permanently delete trash entry %s?", e.S("name")), true, func(m *Model) tea.Cmd {
 				return t.empty(m, []string{e.S("slot")})
 			}))
 			return nil
@@ -890,7 +940,7 @@ func (t *trashTab) actions(m *Model) []action {
 			for _, e := range t.entries {
 				slots = append(slots, e.S("slot"))
 			}
-			m.push(confirm(fmt.Sprintf("Permanently delete ALL %d trash entries?", len(slots)), true, func(m *Model) tea.Cmd {
+			m.push(confirm(m.lang.format("Permanently delete ALL %d trash entries?", len(slots)), true, func(m *Model) tea.Cmd {
 				return t.empty(m, slots)
 			}))
 			return nil
@@ -899,9 +949,10 @@ func (t *trashTab) actions(m *Model) []action {
 }
 
 func (t *trashTab) empty(m *Model, slots []string) tea.Cmd {
-	return m.async("deleting trash entries …", func(func(string)) tea.Msg {
+	lang := m.lang
+	return m.async(lang.text("deleting trash entries …"), func(func(string)) tea.Msg {
 		n, err := core.EmptyTrash(slots)
-		note := fmt.Sprintf("deleted %d entries", n)
+		note := lang.format("deleted %d entries", n)
 		if err != nil {
 			return doneMsg{title: note, text: err.Error(), reload: true}
 		}
@@ -919,6 +970,6 @@ func (t *trashTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 }
 
 func (t *trashTab) view(m *Model, r rect) []string {
-	head := []string{stDim.Render("removed project skills, replaced copies and deleted packs · R restore · D diff · x delete")}
-	return append(head, t.tbl.render(rect{r.x, r.y + 1, r.w, r.h - 1})...)
+	head := []string{stDim.Render(m.lang.text("removed project skills, replaced copies and deleted packs · R restore · D diff · x delete"))}
+	return append(head, t.tbl.render(m.lang, rect{r.x, r.y + 1, r.w, r.h - 1})...)
 }

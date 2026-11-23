@@ -42,6 +42,8 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | `adopt [names]` | Start tracking copies that were added before the manifest existed |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
 | `repair-links [dir]` | Repair Claude links and copies. When only the project skill has changed, refresh the unchanged Claude copy. Reports separately edited copies and occupied paths for manual review. |
+| `repair-links [-C dir] --mode copy\|symlink [--dry-run]` | Preview or change the project's Claude paths and store the mode in its manifest. |
+| `export [-C dir] [--format markdown] [--output file] [--force]` | List skill names, short descriptions and project-relative paths. Defaults to stdout. Use `--force` to replace an existing output file. |
 | `verify [dir] [--json]` | **CI check.** Requires a valid manifest, matching copies and a valid Claude link or mirror. Pinned edits are accepted when the layout is intact. Needs no library. |
 | `audit [dir \| skill-dir] [--library] [--fail-on review\|error\|never] [-q] [--json]` | **Offline risk scan**: validation errors, hooks, pipe-to-shell, credential reads, broad `allowed-tools`, symlinks, executables |
 | `projects [--json]` | Projects where skillman installed skills |
@@ -114,7 +116,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 
 ## TUI keys
 
-Global: `1`–`8` or `[` `]` switch tabs · `tab`/`shift+tab` move between panes · `/` search or filter ·
+Global: `1`–`9` or `[` `]` switch tabs · `tab`/`shift+tab` move between panes · `/` search or filter ·
 `↑↓ j k PgUp PgDn g G` move · `space` select · `ctrl+a` select all shown · `esc` clear · `enter` open ·
 `ctrl+p` command palette · `?` help · `ctrl+r` reload · `q` quit.
 
@@ -131,3 +133,6 @@ the pane under the pointer; drag the `│` divider in Library to resize the prev
 | 6 Upstream | `space` tick · `I` preview import (Enter to continue to confirmation) · `t` only ticked · `V` verify repos · `/` filter |
 | 7 Validation | `/` filter · `enter` open in Library · `v` re-validate |
 | 8 Trash | `R` restore · `D` diff vs library · `x` delete forever · `E` empty |
+| 9 Settings | `↑↓` choose a preference · `enter` edit, toggle, or preview the change |
+
+Skillman saves the interface language in `settings.json` under `SKILLMAN_STATE` (`~/.local/state/skillman` by default). A fresh installation uses English.

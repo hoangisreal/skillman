@@ -36,6 +36,8 @@ skillman recommend -C ./shop --task "postgres migration" --brief --json
 The response contains the resolved project, budget, shortlist and `install_args`. Each choice includes its
 source, stack evidence file, matched keywords, project state and additional description tokens. With no task,
 directly detected stacks each get a turn. Omit `--brief` to inspect the detailed groups.
+Task fit and stack evidence take priority. Equally relevant skills favor a matching project copy, then a lower
+additional description cost. A budget warning leaves the top choice visible. Reuse an installed matching skill directly.
 For a new project with a chosen stack, pass `--stack vue --stack postgres` or `--stack vue,postgres`.
 The evidence for an explicit choice is `declared:<id>`. When the stack is open, preview the local `@core` pack.
 
@@ -63,7 +65,7 @@ installation leaves the successful library import available and returns `retry_a
 |---|---|
 | `remove`, `update`, `adopt`, `pin`, `verify`, `library pin` | `{"ok": bool, "results": [{"name", "ok", "message"}]}` |
 | `add` | Same result fields plus `summary` with `installed`, `already_present`, `skipped`, `failed`. Exit 1 when every requested member is unavailable. |
-| `add --dry-run` | `{"project", "ok", "skills": [{"name", "pack", "state", "in_library", "tokens", "action", "reason"}], "added_tokens", "budget_after", "budget"}` |
+| `add --dry-run` | `{"project", "ok", "skills": [{"name", "pack", "state", "in_library", "tokens", "action", "reason", "targets"?}], "added_tokens", "budget_after", "budget"}`. Targets give the project-relative path, role, mode and client IDs. |
 | `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?}]` |
 | `status --agents` | `{"project", "include_global", "agents": [{"id", "roots", "skills", "duplicates"}]}`. Skill rows include `name`, `path`, `scope`, `tracked`, `state` and optional `aliases`. |
 | `doctor` | `{"project", "ok", "checks": [{"level": "ok\|warn\|error", "message"}]}` |

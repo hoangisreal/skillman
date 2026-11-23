@@ -18,11 +18,13 @@ for a stack the user has chosen, repeating it for multiple stacks. If the stack 
 `@core` pack as a starting point.
 
 Show the shortlisted names with their source, stack evidence file, matched keywords, project state
-and added tokens. Use `info <name> --json` only when a decision needs more detail. If the shortlist is
-empty, say which capability is missing locally.
+and added description tokens. Lead with task fit and reuse an existing matching project copy when
+available. Describe any budget warning alongside the relevant choice. Use `info <name> --json` or
+`info <name> --body --json` when a decision needs more detail. If the shortlist is empty, say which
+capability is missing locally.
 
 After the user chooses, run `skillman add -C <project> <chosen names> --dry-run --json` using the exact
-project path returned. Check preview `ok` and each `action` for blocked or skipped skills. Install the
+project path returned. Check preview `ok`, each `action` and its project-relative `targets`. Install the
 approved names with the same arguments without `--dry-run` and report the
 actual results. Check `status -C <project> --json` and `verify -C <project> --json`.
 

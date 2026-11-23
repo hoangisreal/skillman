@@ -53,7 +53,7 @@ func newBrowseTab(m *Model) *browseTab {
 		}
 		switch n.kind {
 		case "project":
-			return stStar.Render("★ This project")
+			return stStar.Render("★ " + m.lang.text("This project"))
 		case "domain":
 			arrow := "▸ "
 			if t.expanded[n.id] {
@@ -61,7 +61,7 @@ func newBrowseTab(m *Model) *browseTab {
 			}
 			return star + arrow + stBold.Render(n.title)
 		case "other":
-			return "     " + stDim.Render("(other)")
+			return "     " + stDim.Render(m.lang.text("(other)"))
 		}
 		return star + strings.Repeat("  ", n.depth) + "  " + n.title
 	}
@@ -86,7 +86,7 @@ func newBrowseTab(m *Model) *browseTab {
 			}
 			return ""
 		case 3:
-			return styled(d.State)
+			return m.lang.styled(d.State)
 		case 4:
 			return stDim.Render(d.Row.Description)
 		}
@@ -246,13 +246,13 @@ func (t *browseTab) actions(m *Model) []action {
 		{key: "i", label: "install", run: func(m *Model) tea.Cmd {
 			names := t.lt.targets()
 			if t.focus == 0 || len(names) == 0 {
-				return m.notify("select skills in the list (tab, space) or press I to install the stack's pack", true)
+				return m.notify(m.lang.text("select skills in the list (tab, space) or press I to install the stack's pack"), true)
 			}
 			var items []core.Item
 			for _, n := range names {
 				items = append(items, core.Item{Name: n})
 			}
-			return m.installItems(items, itoa(len(items))+" skill(s)", clear)
+			return m.installItems(items, m.lang.format("%d skill(s)", len(items)), clear)
 		}},
 		{key: "I", label: "install stack", run: func(m *Model) tea.Cmd {
 			n := t.node()
@@ -276,7 +276,7 @@ func (t *browseTab) actions(m *Model) []action {
 			for _, i := range t.items {
 				items = append(items, core.Item{Name: m.d.ix.Docs[i].Row.Name})
 			}
-			return m.installItems(items, "all "+itoa(len(items))+" skills of "+n.title, nil)
+			return m.installItems(items, m.lang.format("all %d skills of %s", len(items), n.title), nil)
 		}},
 		{key: "n", label: "new pack", run: func(m *Model) tea.Cmd {
 			names := t.lt.targets()
@@ -299,7 +299,7 @@ func (t *browseTab) actions(m *Model) []action {
 				}
 			}
 			if len(names) == 0 {
-				return m.notify("none of these skills is in the project", true)
+				return m.notify(m.lang.text("none of these skills is in the project"), true)
 			}
 			return m.uninstallSkills(names, clear)
 		}, hidden: true},
@@ -459,12 +459,15 @@ func (t *browseTab) view(m *Model, r rect) []string {
 	}
 	pw := rest - lw
 	t.areas.tree = rect{r.x, r.y, tw, r.h}
-	treeLines := box("Domains", t.tt.render(rect{r.x + 1, r.y + 1, tw - 2, r.h - 2}), tw, r.h, t.focus == 0)
+	treeLines := box(m.lang.text("Domains"), t.tt.render(m.lang, rect{r.x + 1, r.y + 1, tw - 2, r.h - 2}), tw, r.h, t.focus == 0)
 
 	n := t.node()
 	title := ""
 	if n != nil {
 		title = n.title
+		if n.kind == "project" || n.kind == "other" {
+			title = m.lang.text(title)
+		}
 		if n.kind == "stack" {
 			title = m.d.tax.DomainTitle(n.domain) + " › " + n.title
 		}
@@ -474,15 +477,15 @@ func (t *browseTab) view(m *Model, r rect) []string {
 	}
 	extra := ""
 	if t.onlyNew {
-		extra += " · not installed"
+		extra += " · " + m.lang.text("not installed")
 	}
 	if s := len(t.lt.sel); s > 0 {
-		extra += " · " + itoa(s) + " selected"
+		extra += " · " + m.lang.format("%d selected", s)
 	}
 	t.areas.list = rect{r.x + tw, r.y, lw, r.h}
 	t.q.area = rect{r.x + tw + 1, r.y + 1, lw - 2, 1}
-	inner := []string{t.q.render(lw-2, stAccentB.Render("/ "))}
-	inner = append(inner, t.lt.render(rect{r.x + tw + 1, r.y + 2, lw - 2, r.h - 3})...)
+	inner := []string{t.q.render(m.lang, lw-2, stAccentB.Render("/ "))}
+	inner = append(inner, t.lt.render(m.lang, rect{r.x + tw + 1, r.y + 2, lw - 2, r.h - 3})...)
 	listLines := box(title+stDim.Render(" ("+itoa(len(t.items))+")"+extra), inner, lw, r.h, t.focus == 1 || t.focus == 2)
 	if !showPrev {
 		t.areas.prev = rect{}
@@ -490,6 +493,6 @@ func (t *browseTab) view(m *Model, r rect) []string {
 	}
 	t.areas.prev = rect{r.x + tw + lw, r.y, pw, r.h}
 	t.prev.show(m, t.lt.current(), pw-2)
-	pl := box("Preview", t.prev.v.render(rect{r.x + tw + lw + 1, r.y + 1, pw - 2, r.h - 2}), pw, r.h, t.focus == 3)
+	pl := box(m.lang.text("Preview"), t.prev.v.render(rect{r.x + tw + lw + 1, r.y + 1, pw - 2, r.h - 2}), pw, r.h, t.focus == 3)
 	return hjoin(treeLines, listLines, pl)
 }

@@ -116,6 +116,7 @@ type tickMsg struct{}
 
 type Model struct {
 	project  string
+	lang     language
 	w, h     int
 	d        *data
 	tabs     []tab
@@ -136,15 +137,23 @@ type Model struct {
 		x, y int
 		at   time.Time
 	}
-	trace    *os.File
-	dragging func(x int)
-	seen     []bool // tabs opened at least once (others load lazily)
+	trace        *os.File
+	dragging     func(x int)
+	endDrag      func() tea.Cmd
+	mouseEnabled bool
+	seen         []bool // tabs opened at least once (others load lazily)
 }
 
 func New(project string) *Model {
-	m := &Model{project: project, d: loadData(project)}
+	prefs := core.LoadMap(core.SettingsPath())
+	m := &Model{project: project, lang: loadLanguage(prefs), d: loadData(project), mouseEnabled: preferenceBool(prefs, "mouse", true)}
 	m.tabs = []tab{newLibraryTab(m), newBrowseTab(m), newPacksTab(m), newProjectTab(m), newUpdatesTab(m),
-		newUpstreamTab(m), newValidationTab(m), newTrashTab(m)}
+		newUpstreamTab(m), newValidationTab(m), newTrashTab(m), newSettingsTab(m)}
+	if split, ok := prefs["library_split"].(float64); ok && split >= 0.25 && split <= 0.85 {
+		m.tabs[0].(*libraryTab).split = split
+	}
+	m.tabs[2].(*packsTab).showVendor = preferenceBool(prefs, "packs_show_vendor", false)
+	m.tabs[4].(*updatesTab).onlyChanges = preferenceBool(prefs, "updates_only_changes", true)
 	m.seen = make([]bool, len(m.tabs))
 	m.seen[0] = true
 	if p := os.Getenv("SKILLMAN_TRACE"); p != "" {
@@ -169,14 +178,14 @@ func (m *Model) Init() tea.Cmd {
 			}
 		}
 		if bad > 0 {
-			m.notify(fmt.Sprintf("%d pack problem(s), e.g. %s: %s", bad, probs[0].Pack, probs[0].Problem), true)
+			m.notify(m.lang.format("%d pack problem(s), e.g. %s: %s", bad, probs[0].Pack, probs[0].Problem), true)
 		}
 	}
 	if len(m.d.rows) == 0 {
-		m.notify("library is empty: "+core.LIB+" (run: skillman init, then the Upstream tab)", true)
+		m.notify(m.lang.format("library is empty: %s (run: skillman init, then the Upstream tab)", core.LIB), true)
 	}
 	if errs := m.d.tax.Errors; len(errs) > 0 {
-		m.notify("taxonomy: "+errs[0], true)
+		m.notify(m.lang.format("taxonomy: %s", errs[0]), true)
 	}
 	return tea.Batch(cmds...)
 }
@@ -303,7 +312,7 @@ func (m *Model) allActions() []action {
 	return append(acts,
 		action{key: "?", label: "Help", run: func(m *Model) tea.Cmd { m.push(newHelpModal(m)); return nil }, hidden: true},
 		action{key: "ctrl+p", label: "Commands", run: func(m *Model) tea.Cmd { m.push(newPalette(m)); return nil }, hidden: true},
-		action{key: "ctrl+r", label: "Reload", run: func(m *Model) tea.Cmd { m.notify("reloaded", false); return m.reload(true) }, hidden: true},
+		action{key: "ctrl+r", label: "Reload", run: func(m *Model) tea.Cmd { m.notify(m.lang.text("reloaded"), false); return m.reload(true) }, hidden: true},
 		action{key: "q", label: "Quit", run: func(m *Model) tea.Cmd { return tea.Quit }, hidden: true},
 	)
 }
@@ -360,7 +369,7 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, m.reload(msg.reindex))
 		}
 		if msg.text != "" {
-			m.push(newTextModal(msg.title, msg.text))
+			m.push(newTextModal(m.lang.text(msg.title), msg.text))
 		}
 		if msg.then != nil {
 			cmds = append(cmds, msg.then(m))
@@ -440,9 +449,17 @@ func (m *Model) onKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *Model) onMouse(msg tea.MouseMsg) tea.Cmd {
+	if !m.mouseEnabled {
+		return nil
+	}
 	mm := msg.Mouse()
-	if _, ok := msg.(tea.MouseReleaseMsg); ok {
+	if _, ok := msg.(tea.MouseReleaseMsg); ok && m.dragging != nil {
 		m.dragging = nil
+		done := m.endDrag
+		m.endDrag = nil
+		if done != nil {
+			return done()
+		}
 	}
 	if mo, ok := msg.(tea.MouseMotionMsg); ok {
 		if m.dragging != nil && mo.Button == tea.MouseLeft {
@@ -480,7 +497,9 @@ func (m *Model) View() tea.View {
 	}
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	if m.mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	v.WindowTitle = "skillman · " + m.project
 	if m.trace != nil {
 		fmt.Fprintf(m.trace, "view %d\n", time.Since(t0).Microseconds())
@@ -490,10 +509,10 @@ func (m *Model) View() tea.View {
 
 func (m *Model) render() string {
 	if m.w == 0 || m.h == 0 {
-		return "loading…"
+		return m.lang.text("loading…")
 	}
 	if m.w < 20 || m.h < 6 { // too small to draw panes: say so instead of a garbled frame
-		msg := []string{fit("skillman: terminal too small", m.w)}
+		msg := []string{fit(m.lang.text("skillman: terminal too small"), m.w)}
 		for len(msg) < m.h {
 			msg = append(msg, strings.Repeat(" ", m.w))
 		}
@@ -504,18 +523,31 @@ func (m *Model) render() string {
 	// tab bar
 	m.tabZones = m.tabZones[:0]
 	var tb strings.Builder
+	titles := make([]string, len(m.tabs))
 	total := 0
-	for _, t := range m.tabs {
-		total += 4 + ansi.StringWidth(t.title())
-	}
-	x, titleWidth := 0, (w-4*len(m.tabs))/len(m.tabs)
 	for i, t := range m.tabs {
-		label := " " + itoa(i+1) + " " + t.title() + " "
+		titles[i] = m.lang.text(t.title())
+		total += 4 + ansi.StringWidth(titles[i])
+	}
+	// Compact tabs drop one padding space. Give remaining cells to Settings, the final tab.
+	available := w - 3*len(titles)
+	titleWidth := max(0, available/len(titles))
+	spare := available
+	for _, title := range titles {
+		spare -= min(titleWidth, ansi.StringWidth(title))
+	}
+	x := 0
+	for i, title := range titles {
+		number := itoa(i+1) + " "
+		label := " " + number + title + " "
 		if total > w {
+			label = number
 			if titleWidth > 0 {
-				label = " " + itoa(i+1) + " " + ansi.Truncate(t.title(), titleWidth, "…") + " "
-			} else {
-				label = itoa(i+1) + " "
+				limit := titleWidth
+				if i == len(titles)-1 {
+					limit += spare
+				}
+				label += ansi.Truncate(title, limit, "…") + " "
 			}
 		}
 		lw := ansi.StringWidth(label)
@@ -557,9 +589,9 @@ func (m *Model) render() string {
 			st = stOK.Render("✓ ") + m.note
 		}
 	case len(m.d.rows) == 1 && m.d.rows[0].Name == core.SelfSkill:
-		st = stDim.Render("Load starter skills. " + core.PackImportHint("core"))
+		st = stDim.Render(m.lang.text("Load starter skills.") + " " + m.lang.text(core.PackImportHint("core")))
 	}
-	proj := stDim.Render(" project: " + tilde(m.project))
+	proj := stDim.Render(" " + m.lang.format("project: %s", tilde(m.project)))
 	if ansi.StringWidth(st)+ansi.StringWidth(proj) < w {
 		st = fit(st, w-ansi.StringWidth(proj)) + proj
 	}
@@ -579,7 +611,7 @@ func (m *Model) footer(w int) string {
 	help := action{key: "?", label: "help", run: func(m *Model) tea.Cmd { m.push(newHelpModal(m)); return nil }}
 	palette := action{key: "ctrl+p", label: "commands", run: func(m *Model) tea.Cmd { m.push(newPalette(m)); return nil }}
 	add := func(a action, limit int) bool {
-		seg := stKey.Render(a.key) + " " + a.label + "  "
+		seg := stKey.Render(a.key) + " " + m.lang.text(a.label) + "  "
 		sw := ansi.StringWidth(seg)
 		if x+sw > limit {
 			return false
@@ -592,8 +624,9 @@ func (m *Model) footer(w int) string {
 		x += sw
 		return true
 	}
+	limit := w - ansi.StringWidth("? "+m.lang.text(help.label)+"  ")
 	for _, a := range m.tab().actions(m) {
-		if !a.hidden && !add(a, w-len("? help  ")) {
+		if !a.hidden && !add(a, limit) {
 			break
 		}
 	}
