@@ -114,3 +114,37 @@ func TestPortableLifecycle(t *testing.T) {
 		t.Fatal("restore did not recreate copy")
 	}
 }
+
+func TestPortableClaudeModeRoundTrip(t *testing.T) {
+	project := t.TempDir()
+	t.Setenv("SKILLMAN_STATE", t.TempDir())
+	t.Setenv("SKILL_LIBRARY", t.TempDir())
+	Configure()
+	mkskill(t, SKILLS, "example", "A test skill", "", nil)
+	if _, err := ConvertClaudeMode(project, "copy", false); err != nil {
+		t.Fatal(err)
+	}
+	if results, err := Install(project, []Item{{Name: "example"}}, false); err != nil || !results[0].OK {
+		t.Fatal(results, err)
+	}
+	path := LinkP(project, "example")
+	before := TreeHash(project)
+	if paths, err := ConvertClaudeMode(project, "symlink", true); err != nil || len(paths) != 1 || paths[0] != path || TreeHash(project) != before {
+		t.Fatal(paths, err)
+	}
+	probe := filepath.Join(t.TempDir(), "probe")
+	probeErr := os.Symlink(Dest(project, "example"), probe)
+	_, err := ConvertClaudeMode(project, "symlink", false)
+	if probeErr != nil {
+		if err == nil || IsSymlink(path) || !LinkOK(project, "example") || TreeHash(project) != before {
+			t.Fatalf("failed symlink creation should roll back: %v", err)
+		}
+		return
+	}
+	if err != nil || !IsSymlink(path) || !LinkOK(project, "example") {
+		t.Fatalf("copy to symlink: %v", err)
+	}
+	if _, err := ConvertClaudeMode(project, "copy", false); err != nil || IsSymlink(path) || !LinkOK(project, "example") {
+		t.Fatalf("symlink to copy: %v", err)
+	}
+}

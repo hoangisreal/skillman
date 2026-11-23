@@ -100,9 +100,13 @@ Press `4`, then `s`, to get a recommendation. Enter a task such as `Vue componen
 
 [Project recommendation screenshot](docs/screenshots/10-suggestions.png)
 
-### Interface language
+### Settings
 
 Press `9` to open **Settings**, select **English** or **Tiếng Việt** with the arrow keys, and press `Enter`. The interface switches immediately and Skillman remembers your choice for future sessions. [Settings in Vietnamese](docs/screenshots/9-settings.png)
+
+Use the same screen to edit the description token budget, toggle mouse capture, or reset the Library layout. Skillman remembers the Library divider and the Updates and Packs filters. The **Claude installation mode** row shows the mode used by the current project. Select it to preview a conversion.
+
+To share a list of the skills present in a project, press `4`, then `Shift+E`, to preview a Markdown export. In scripts, run `skillman export -C ./my-app` for stdout or add `--output project-skills.md` to create a file. [Markdown export preview](docs/screenshots/11-export.png)
 
 ## Import a skill and recommend it by stack
 
@@ -170,7 +174,7 @@ Commit the converted folders, manifest, and generated `.gitattributes`. If you m
 | --- | --- | --- |
 | `SKILL_LIBRARY` | `~/skill-library` | Local skills, packs, and upstream sources |
 | `SKILLMAN_STATE` | `~/.local/state/skillman` | Project registry, trash, and personal settings |
-| `SKILL_TOKEN_BUDGET` | `2000` | Description token budget reported by `doctor` |
+| `SKILL_TOKEN_BUDGET` | `2000` unless set in Settings | Positive integer that overrides the saved description token budget for CLI and TUI |
 
 ## Documentation
 

@@ -106,3 +106,55 @@ func TestLanguageSettingsFallback(t *testing.T) {
 		t.Fatalf("failed save must leave the language unchanged and show an error:\n%s", screen)
 	}
 }
+
+func TestSettingsAndExportWorkflow(t *testing.T) {
+	project := settingsFixture(t)
+	t.Setenv("SKILL_TOKEN_BUDGET", "")
+	d := newDriver(t, project)
+	d.screen()
+	lib := d.m.tabs[0].(*libraryTab)
+	x, y := lib.divX, lib.q.area.y+2
+	d.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	d.send(tea.MouseMotionMsg{X: x - 20, Y: y, Button: tea.MouseLeft})
+	if core.LoadMap(core.SettingsPath())["library_split"] != nil || lib.split == defaultLibrarySplit {
+		t.Fatal("drag should resize the Library before persisting")
+	}
+	d.send(tea.MouseReleaseMsg{X: x - 20, Y: y, Button: tea.MouseLeft})
+	split := lib.split
+	d = newDriver(t, project)
+	if d.m.tabs[0].(*libraryTab).split != split {
+		t.Fatal("reopening Skillman should restore the Library divider")
+	}
+	d.press("9", "down", "down", "enter", "ctrl+u")
+	d.typeText("120")
+	d.press("enter", "down", "enter")
+	if d.m.View().MouseMode != tea.MouseModeNone || !strings.Contains(ansi.Strip(d.screen()), "120 (personal settings)") {
+		t.Fatal("Settings should update the active budget and mouse mode")
+	}
+	d.press("down", "enter", "down", "enter", "enter", "y")
+	if d.m.tabs[0].(*libraryTab).split != defaultLibrarySplit {
+		t.Fatal("Settings should reset the Library divider")
+	}
+	if mode, err := core.ClaudeMode(project); err != nil || mode != "copy" {
+		t.Fatalf("Claude mode %q: %v", mode, err)
+	}
+	d.press("3", "v", "5", "f")
+	d = newDriver(t, project)
+	if d.m.mouseEnabled || !d.m.tabs[2].(*packsTab).showVendor || d.m.tabs[4].(*updatesTab).onlyChanges {
+		t.Fatal("mouse and filter preferences did not persist")
+	}
+	d.press("i", "y", "4", "E")
+	if preview, ok := d.m.modals[0].(*mdModal); !ok || !strings.Contains(preview.raw, ".agents/skills/example/SKILL.md") {
+		t.Fatal("missing project skill export preview")
+	}
+	d.press("enter", "enter")
+	file := filepath.Join(project, "project-skills.md")
+	if body, err := os.ReadFile(file); err != nil || !strings.Contains(string(body), "Fixture description") {
+		t.Fatalf("markdown export %q: %v", body, err)
+	}
+	d.press("E", "enter", "enter")
+	if _, ok := d.m.modals[0].(*confirmModal); !ok {
+		t.Fatal("replacing the export should require confirmation")
+	}
+	d.press("esc")
+}

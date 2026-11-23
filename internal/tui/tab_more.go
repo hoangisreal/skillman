@@ -370,7 +370,12 @@ func (t *updatesTab) actions(m *Model) []action {
 			}))
 			return nil
 		}},
-		{key: "f", label: "only changes", run: func(m *Model) tea.Cmd { t.onlyChanges = !t.onlyChanges; t.fill(); return nil }},
+		{key: "f", label: "only changes", run: func(m *Model) tea.Cmd {
+			return m.savePreference("updates_only_changes", !t.onlyChanges, func() {
+				t.onlyChanges = !t.onlyChanges
+				t.fill()
+			})
+		}},
 		{key: "p", label: "update projects", run: func(m *Model) tea.Cmd {
 			aff := core.ProjectsAffected(nil)
 			if len(aff) == 0 {
@@ -425,7 +430,7 @@ func (t *updatesTab) view(m *Model, r rect) []string {
 	if info == "" {
 		info = m.lang.text("c = check all upstream · k = one pack · L = skills selected in Library (read-only, nothing changes)")
 	}
-	head := strings.Split(info, "\n")
+	head := append([]string{m.lang.text("only changes") + " " + filterState(m.lang, t.onlyChanges)}, strings.Split(info, "\n")...)
 	for i := range head {
 		head[i] = stDim.Render(head[i])
 	}

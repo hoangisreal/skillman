@@ -61,7 +61,8 @@ func init() {
 	reg("pin", "<skills…> [-C dir]", "Keep a project copy as it is (skipped by update, accepted by verify).",
 		[]string{"C"}, func(a *Args) int { return cmdPin(a, true) })
 	reg("unpin", "<skills…> [-C dir]", "Undo pin.", []string{"C"}, func(a *Args) int { return cmdPin(a, false) })
-	reg("repair-links", "[dir] [--mode copy] [--dry-run]", "Repair Claude skill links or managed copies.", []string{"C", "mode"}, cmdRepairLinks)
+	reg("repair-links", "[dir] [--mode copy|symlink] [--dry-run]", "Repair Claude skill links or managed copies.", []string{"C", "mode"}, cmdRepairLinks)
+	reg("export", "[-C dir] [--format markdown] [--output file] [--force]", "Export a Markdown list of installed project skills.", []string{"C", "format", "output"}, cmdExport)
 	reg("projects", "[--json]", "Projects registered by skillman (where skills were installed).", nil, cmdProjects)
 
 	// packs
@@ -856,10 +857,10 @@ func cmdRepairLinks(a *Args) int {
 	}
 	var msgs []string
 	switch {
-	case a.Str("mode", "") == "copy":
-		msgs, err = core.ConvertCopies(d, a.Has("dry-run"))
+	case a.Str("mode", "") == "copy" || a.Str("mode", "") == "symlink":
+		msgs, err = core.ConvertClaudeMode(d, a.Str("mode", ""), a.Has("dry-run"))
 	case a.Has("mode") || a.Has("dry-run"):
-		return usage("use --mode copy with --dry-run")
+		return usage("use --mode copy or --mode symlink with --dry-run")
 	default:
 		msgs, err = core.RepairLinks(d)
 	}
@@ -882,6 +883,33 @@ func cmdRepairLinks(a *Args) int {
 	}
 	if len(msgs) == 0 {
 		outf("nothing to repair\n")
+	}
+	return 0
+}
+
+func cmdExport(a *Args) int {
+	output := a.Str("output", "")
+	badFormat := a.Has("format") && a.Str("format", "") != "markdown"
+	if len(a.Pos) != 0 || badFormat || (output == "" && (a.Has("output") || a.Has("force"))) {
+		return usage("skillman export [-C dir] [--format markdown] [--output file [--force]]")
+	}
+	project, err := projectDir(a, false)
+	if err != nil {
+		return fail(err)
+	}
+	markdown, err := core.ExportMarkdown(project)
+	if err != nil {
+		return fail(err)
+	}
+	if output == "" {
+		outf("%s", markdown)
+		return 0
+	}
+	if err := core.WriteSkillExport(output, markdown, a.Has("force")); err != nil {
+		if os.IsExist(err) {
+			return fail(fmt.Errorf("%s already exists (use --force to replace it)", output))
+		}
+		return fail(err)
 	}
 	return 0
 }

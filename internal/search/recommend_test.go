@@ -3,6 +3,7 @@ package search
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hoangisreal/skillman/internal/core"
@@ -72,6 +73,11 @@ func TestRecommendTaskCoverage(t *testing.T) {
 	rec := Recommend(proj, rows, "test Vue components", 5, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" {
 		t.Fatalf("task shortlist: %+v", rec.Shortlist)
+	}
+	t.Setenv("SKILL_TOKEN_BUDGET", "1")
+	rec = Recommend(proj, rows, "test Vue components", 5, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" || !strings.Contains(rec.Message, "exceeds the description token budget") {
+		t.Fatalf("budget warning must preserve the specialist: %+v", rec)
 	}
 	rec = Recommend(proj, rows, "review database migrations", 3, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "postgres-database-migration" {
