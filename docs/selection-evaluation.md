@@ -1,0 +1,68 @@
+# Project skill selection measurements
+
+## Project status in copy mode
+
+On Linux, `status -C <project> --json` compared 100 tracked skills against matching Claude copies and a matching
+local library. Each tree had a `SKILL.md` and a roughly 3 KB reference. Both binaries reported 100 healthy rows.
+Timing uses 50 fresh processes per binary after five warmups, with the order alternated and the OS file cache enabled.
+A separate `strace` counted successful opens of the manifest and one representative canonical `SKILL.md`.
+
+| Build | p50 | p95 | Manifest opens | Canonical `SKILL.md` opens per skill |
+|---|---:|---:|---:|---:|
+| `f8f2929` | 56.59 ms | 68.17 ms | 101 | 2 |
+| Shared manifest and hashes | 20.36 ms | 26.90 ms | 1 | 1 |
+
+## Recommendation CLI
+
+Each cell shows the full JSON command at `d8d8e84` followed by the new `--brief --json` command. Both ran `recommend -C <project> --task "vue test"` against the same files. Every run ranked `vue-testing-best-practices` first.
+
+| Catalog | Project | Installed skills | First call, ms | Warm p50, ms | Warm p95, ms | JSON bytes | Skill file opens |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Original 723 | Small | 0 | 713.8 → 709.2 | 31.8 → 24.4 | 36.4 → 29.5 | 18,660 → 854 | 70 → 1 |
+| Synthetic 723 | Small | 0 | 183.7 → 185.3 | 28.2 → 14.5 | 36.0 → 18.2 | 10,123 → 770 | 483 → 1 |
+| Synthetic 723 | Small | 2 | 190.1 → 183.6 | 31.8 → 15.1 | 36.1 → 19.0 | 10,238 → 772 | 489 → 7 |
+| Synthetic 723 | Monorepo | 0 | 196.6 → 179.1 | 30.6 → 17.6 | 34.8 → 20.7 | 10,164 → 779 | 483 → 1 |
+| Synthetic 723 | Monorepo | 2 | 190.0 → 181.0 | 30.5 → 17.7 | 40.1 → 20.1 | 10,279 → 781 | 489 → 7 |
+| Synthetic 3,000 | Small | 0 | 755.4 → 696.0 | 75.9 → 22.0 | 89.3 → 26.5 | 10,126 → 772 | 2,001 → 1 |
+| Synthetic 3,000 | Small | 2 | 756.3 → 697.3 | 74.4 → 24.3 | 84.9 → 32.8 | 10,241 → 774 | 2,007 → 7 |
+| Synthetic 3,000 | Monorepo | 0 | 760.2 → 707.9 | 77.9 → 26.4 | 88.2 → 33.7 | 10,167 → 781 | 2,001 → 1 |
+| Synthetic 3,000 | Monorepo | 2 | 757.3 → 724.9 | 79.4 → 27.3 | 97.6 → 32.1 | 10,282 → 783 | 2,007 → 7 |
+
+The original-catalog fixture copied the local index, packs and skill descriptions into a temporary library. The synthetic fixtures used the shipped packs, three named skills and a repeating sequence of Vue, PostgreSQL and unrelated guides. Small projects had one Vue and PostgreSQL package manifest. Monorepos had 40 under `packages/`. Populated projects used `add` to install `vue-best-practices` and `postgres-database-migration`.
+
+Each sample launched a fresh binary. The first call started with an index and no classification cache. The OS file cache remained enabled. Warm timings use 50 invocations for the original catalog and 25 for each synthetic fixture, with nearest-rank p95. Bytes count stdout including whitespace. A separate warm `strace -f -e openat` run counted successful opens of `SKILL.md`, including project hashing and budget reads. On the original fixture, output shrank 95.4% and warm p95 fell 19.0%.
+
+## Agent routing
+
+Each agent received a fresh Vue project containing both `skillman` and `find-skills`. A wrapper recorded arguments passed to the fixture binary. Project changes were checked independently of the agent's response.
+
+| Case | Vietnamese prompt |
+|---|---|
+| Local | Từ thư viện Skillman local, đề xuất tối đa ba skill để kiểm thử component Vue trong project này. Chưa cài gì. |
+| Upstream | Tìm skill upstream để kiểm thử Vue trong repo GitHub vuejs-ai/skills. Cho tôi biết tên và nguồn, chưa cài gì. |
+| Coding | Sửa hàm double trong double.js để double(3) trả về 6. |
+
+The table counts calls observed by the binary wrapper. `<project>` stands for the absolute fixture path.
+
+| Agent | Case | Skillman calls | Arguments | Project files changed | Outcome |
+|---|---|---:|---|---|---|
+| Codex | Local | 1 | `recommend -C <project> --brief --json --task "vue test"` | None | Completed |
+| Codex | Upstream | 1 | `import vuejs-ai/skills --list --json` | None | Completed |
+| Codex | Coding | 0 | — | `double.js` | Completed and ran the Node assertion |
+| Claude Code | Local | 1 | `recommend -C <project> --brief --json --task "vue test"` | None | Completed |
+| Claude Code | Upstream | 1 | `import vuejs-ai/skills --list --json` | None | Completed |
+| Claude Code | Coding | 0 | — | `double.js` | Changed the function to `return x * 2` and invoked Node. The final run timed out at 100 s after the edit. |
+| OpenCode | Local | 0 | — | None | Timed out at 100 s during fixture discovery |
+| OpenCode | Upstream | 0 | — | None | Attempted `--help` and web search. No call reached the fixture binary before the 100 s timeout. |
+| OpenCode | Coding | 0 | — | None | Attempted to edit `double.js` and timed out at 100 s. The fixture diff was empty. |
+
+Codex initially failed to initialize its app server with read-only runtime state. The completed runs used its regular runtime. An earlier Claude Code run completed the coding prompt, while the timed run above records the file change independently. OpenCode's three results leave its routing unverified.
+
+
+## Additional local clients
+
+Cursor's CLI executable was unavailable on the Linux evaluation machine. GitHub Copilot CLI 1.0.83 started and reported an authentication error for the Vietnamese local-selection prompt. The fixture wrapper recorded zero Skillman calls, and the requested Vue testing skill was absent after the run. Discovery and installation in both clients still need an authenticated live check.
+
+## GitHub import
+
+A separate live smoke test listed eight skills in `vuejs-ai/skills`. The preview selected `skills/vue-testing-best-practices` at `198f0cd8f7f9c0a3d9b566ccc16de6677519ee78`. Running its `apply_args` imported the skill into a temporary library, installed the requested project copy and passed `skillman verify`. The CLI integration test uses a local Git remote for branch movement, collisions, license and audit checks, and project-install failure and retry.

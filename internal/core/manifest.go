@@ -2,9 +2,11 @@ package core
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 )
 
@@ -149,13 +151,21 @@ func (e *Entry) UnmarshalJSON(b []byte) error {
 	if err := o.UnmarshalJSON(b); err != nil {
 		return err
 	}
-	o.Get("source", &e.Source)
-	o.Get("upstream_commit", &e.UpstreamCommit)
-	o.Get("tree_hash", &e.TreeHash)
-	o.Get("installed_at", &e.InstalledAt)
-	o.Get("packs", &e.Packs)
-	o.Get("manual", &e.Manual)
-	o.Get("pinned", &e.Pinned)
+	var commit *string
+	fields := []any{&e.Source, &commit, &e.TreeHash, &e.InstalledAt, &e.Packs, &e.Manual, &e.Pinned}
+	for i, k := range entryKeys {
+		if raw, ok := o.Vals[k]; ok {
+			if bytes.Equal(raw, []byte("null")) && k != "upstream_commit" && k != "packs" {
+				return errf("invalid %s in skill entry", k)
+			}
+			if err := json.Unmarshal(raw, fields[i]); err != nil {
+				return errf("invalid %s in skill entry", k)
+			}
+		}
+	}
+	if commit != nil {
+		e.UpstreamCommit = *commit
+	}
 	// keep the original key order (known keys are re-set in place by MarshalJSON)
 	e.extra = o
 	return nil
@@ -185,20 +195,85 @@ type ManifestData struct {
 }
 
 func ReadManifest(d string) *ManifestData {
-	top := LoadOMap(filepath.Join(d, ".agents", Manifest))
-	m := &ManifestData{Skills: map[string]*Entry{}, Packs: NewOMap(), top: top}
+	m, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return emptyManifest(false)
+	}
+	return m
+}
+
+func emptyManifest(newProject bool) *ManifestData {
+	top := NewOMap()
+	top.Set("version", 1)
+	if newProject && runtime.GOOS == "windows" {
+		top.Set("claude_mode", "copy")
+	}
+	return &ManifestData{Skills: map[string]*Entry{}, Packs: NewOMap(), top: top}
+}
+
+// LoadProjectManifest distinguishes a new project from a damaged manifest.
+func LoadProjectManifest(d string) (*ManifestData, bool, error) {
+	file := filepath.Join(d, ".agents", Manifest)
+	invalid := func(reason any) (*ManifestData, bool, error) {
+		return nil, false, errf("invalid manifest %s: %v", file, reason)
+	}
+	if IsSymlink(filepath.Dir(file)) {
+		return invalid("manifest directory is a symlink")
+	}
+	info, err := os.Lstat(file)
+	if os.IsNotExist(err) {
+		return emptyManifest(true), false, nil
+	}
+	if err != nil {
+		return invalid(err)
+	}
+	if !info.Mode().IsRegular() {
+		return invalid("expected a regular file")
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return invalid(err)
+	}
+	top := NewOMap()
+	if err := json.Unmarshal(b, top); err != nil {
+		return invalid(err)
+	}
+	var version int
+	if top.Has("version") && (!top.Get("version", &version) || version != 1) {
+		return invalid("expected manifest version 1")
+	}
 	if !top.Has("version") {
 		top.Set("version", 1)
 	}
-	var skills map[string]*Entry
-	if top.Get("skills", &skills) && skills != nil {
-		m.Skills = skills
+	var mode string
+	if top.Has("claude_mode") && (!top.Get("claude_mode", &mode) || (mode != "symlink" && mode != "copy")) {
+		return invalid("invalid Claude mode")
 	}
-	var packs OMap
-	if top.Get("packs", &packs) && packs.Vals != nil {
-		m.Packs = &packs
+	m := &ManifestData{Packs: NewOMap(), top: top}
+	if err := json.Unmarshal(top.Vals["skills"], &m.Skills); err != nil {
+		return invalid(err)
 	}
-	return m
+	if m.Skills == nil {
+		return invalid("skills must be an object")
+	}
+	for _, name := range m.SkillNames() {
+		e := m.Skills[name]
+		if !KEBAB.MatchString(name) || e == nil {
+			return invalid("invalid skill entry " + name)
+		}
+		if _, err := hex.DecodeString(e.TreeHash); len(e.TreeHash) != 16 || err != nil {
+			return invalid("invalid tree_hash for " + name)
+		}
+	}
+	if top.Has("packs") && !top.Get("packs", m.Packs) {
+		return invalid("packs must be an object")
+	}
+	return m, true, nil
+}
+
+func (m *ManifestData) copyMode() bool {
+	var mode string
+	return m.top.Get("claude_mode", &mode) && mode == "copy"
 }
 
 func (m *ManifestData) SkillNames() []string {
@@ -226,5 +301,47 @@ func WriteManifest(d string, m *ManifestData) error {
 		top.Set("packs", map[string]any{})
 	}
 	top.Set("packs", m.Packs)
-	return WriteJSON(filepath.Join(d, ".agents", Manifest), top)
+	var mode string
+	var added []string
+	if top.Get("claude_mode", &mode) && mode == "copy" {
+		if err := CheckProjectDirs(d); err != nil {
+			return err
+		}
+		for _, dir := range []string{".agents/skills", ".claude/skills"} {
+			p := filepath.Join(d, dir, ".gitattributes")
+			if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+				removeAddedAttributes(added)
+				return err
+			}
+			f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+			if os.IsExist(err) {
+				continue
+			}
+			if err != nil {
+				removeAddedAttributes(added)
+				return err
+			}
+			added = append(added, p)
+			_, err = f.WriteString("# Keep Skillman manifest hashes stable across Git checkouts.\n* -text\n")
+			closeErr := f.Close()
+			if err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				removeAddedAttributes(added)
+				return err
+			}
+		}
+	}
+	err := WriteJSON(filepath.Join(d, ".agents", Manifest), top)
+	if err != nil {
+		removeAddedAttributes(added)
+	}
+	return err
+}
+
+func removeAddedAttributes(paths []string) {
+	for _, p := range paths {
+		os.Remove(p)
+	}
 }

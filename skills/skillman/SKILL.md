@@ -1,6 +1,6 @@
 ---
 name: skillman
-description: Choose, add, inspect, update or remove agent skills for the current project with the skillman CLI instead of copying SKILL.md folders by hand. Use when the user asks which skills a project has or needs, wants skills for a stack (Vue, Postgres, Docker, ML, …), or asks about skill drift, health, security or upstream updates.
+description: Select and manage project skills from the user's local Skillman library. Use for stack-based recommendations, project packs, importing a chosen GitHub source, installation previews, and tracked updates.
 ---
 
 # Managing project skills with skillman
@@ -11,20 +11,43 @@ record in `.agents/skill-manifest.json`. Always go through `skillman` so the man
 Every command is non-interactive; add `--json` to read results reliably. `skillman help <command>` shows options.
 
 ## Choose skills for this project
-1. `skillman recommend . --json` — detected stacks (from package.json, pyproject.toml, go.mod, Dockerfile, …) as
-   `groups`: each has a `pack`, its curated `skills` (`in_pack: true`), extra same-stack skills (`in_pack: false`),
-   the project `state` of each skill and its `tokens`. `install_hint` is the one-line install.
-2. Refine when needed:
-   - `skillman browse --json` — every domain › stack with its skills; `skillman browse --stack postgres`
-   - `skillman search "<words>" --json` — ranked; filters: `stack:vue domain:backend pack:core src:owner notinstalled`
-   - `skillman info <skill> --json` (add `--body` to read the SKILL.md) before adding anything unfamiliar.
-3. Propose a short list to the user: name, why, token cost. Prefer a pack's curated skills plus a few specific
-   extras over whole domains: every skill's description costs context in every session (budget ≈ 2000 tokens).
-4. `skillman add @pack skill … --dry-run` shows what would be copied and the token total; then run it without
-   `--dry-run` once the user agrees.
+Start with one call to **`skillman recommend -C <project> --brief --json`**. For a specific task, add
+`--task "<keywords>"`. Translate Vietnamese requests into a few catalog keywords, such as `vue test`
+or `postgres migration`. Omit the task for a cross-stack selection. In a new folder, use `--stack <id>`
+for a stack the user has chosen, repeating it for multiple stacks. If the stack is open, offer the local
+`@core` pack as a starting point.
+
+Show the shortlisted names with their source, stack evidence file, matched keywords, project state
+and added tokens. Use `info <name> --json` only when a decision needs more detail. If the shortlist is
+empty, say which capability is missing locally.
+
+After the user chooses, run `skillman add -C <project> <chosen names> --dry-run --json` using the exact
+project path returned. Check preview `ok` and each `action` for blocked or skipped skills. Install the
+approved names with the same arguments without `--dry-run` and report the
+actual results. Check `status -C <project> --json` and `verify -C <project> --json`.
+
+## Import a supplied GitHub source
+
+Use `skillman import <source> --list --json` to read names, directories and descriptions. Preview the
+selection with `--skill <name> --dry-run --json`, repeating `--skill` for multiple choices. Include
+`-C <project>` when a project copy is requested. With approval, pass `apply_args` as arguments to
+`skillman` to import the reviewed commit. Report library and project outcomes separately. If project
+installation failed, use `retry_args` after resolving the reported cause.
+
+## Choosing the tool
+- “Which skills from my library suit this repo?” uses Skillman. Local recommendations work offline.
+- “Find a better skill on GitHub” calls for external discovery (e.g. find-skills). If a source is chosen for a
+  Skillman-managed project, import it into the library first and use Skillman to track its installation.
+- Personal Codex skill installation belongs to its skill-installer. An ordinary request to write code or tests
+  uses the agent's existing capabilities.
+- If the local shortlist is empty, explain what is missing. For a starter pack, show
+  `skillman bootstrap --pack core --dry-run --json` (also web-vue or postgres). Import sources on request.
+- For an untracked project copy, show its status and diff before offering to adopt it.
+- Explicit selection: `$skillman` in Codex CLI or `/skillman` in Claude Code.
 
 ## Inspect
 - `skillman status --json` — state per skill: ok, outdated, modified, conflict, untracked, missing, orphan.
+- `skillman status --agents --json` — locations and duplicates by client. Add `--include-global` when checking personal skills.
 - `skillman doctor --json` — links, shadowing by global skills, token budget, packs with missing skills.
 - `skillman audit . --json` — offline risk scan (hooks, download-piped-to-shell, credential reads, broad
   `allowed-tools`, symlinks, executables). `skillman verify .` is the CI check (needs no library).

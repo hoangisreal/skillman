@@ -179,7 +179,7 @@ func TestLifecycle(t *testing.T) {
 	for _, s := range ProjectStatus(proj) {
 		check(t, s.State == "ok", "all ok after install: %s=%s", s.Name, s.State)
 	}
-	rs, _ = Install(proj, []Item{{"alpha", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "alpha", Pack: ""}}, false)
 	check(t, rs[0].Message == "already up to date", "reinstall up to date")
 
 	appendFile(filepath.Join(proj, ".agents/skills/alpha/SKILL.md"), "edit\n")
@@ -188,7 +188,7 @@ func TestLifecycle(t *testing.T) {
 	check(t, !rs[0].OK, "update refuses modified without force")
 	appendFile(filepath.Join(f.lib, "skills/beta/SKILL.md"), "lib change\n")
 	check(t, state(proj, "beta") == "outdated", "library change -> outdated")
-	rs, _ = Install(proj, []Item{{"beta", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "beta", Pack: ""}}, false)
 	check(t, !rs[0].OK && strings.Contains(rs[0].Message, "outdated"), "install of outdated copy points to update")
 	SetPin(proj, []string{"beta"}, true)
 	rs, _ = UpdateProject(proj, nil, false)
@@ -220,7 +220,7 @@ func TestLifecycle(t *testing.T) {
 	// refusals
 	os.MkdirAll(filepath.Join(proj, ".claude/skills/realdir"), 0o755)
 	mkskill(t, filepath.Join(f.lib, "skills"), "realdir", "", "", nil)
-	rs, _ = Install(proj, []Item{{"realdir", ""}}, false)
+	rs, _ = Install(proj, []Item{{Name: "realdir", Pack: ""}}, false)
 	check(t, !rs[0].OK && strings.Contains(rs[0].Message, "not a symlink"), "refuse when .claude/skills/<name> is a real dir")
 	check(t, !Exists(filepath.Join(proj, ".agents/skills/realdir")), "nothing copied on refusal")
 	rs, _ = Uninstall(proj, []string{"../../etc"})
@@ -233,12 +233,12 @@ func TestLifecycle(t *testing.T) {
 	os.MkdirAll(evil, 0o755)
 	os.MkdirAll(elsewhere, 0o755)
 	os.Symlink(elsewhere, filepath.Join(evil, ".agents"))
-	_, err = Install(evil, []Item{{"alpha", ""}}, false)
+	_, err = Install(evil, []Item{{Name: "alpha", Pack: ""}}, false)
 	ents, _ := os.ReadDir(elsewhere)
 	check(t, err != nil && len(ents) == 0, "refuse symlinked .agents (nothing written outside)")
 
 	// uninstall pack keeps shared/manual skills
-	Install(proj, []Item{{"loc", "big"}}, false)
+	Install(proj, []Item{{Name: "loc", Pack: "big"}}, false)
 	UninstallPack(proj, "big")
 	left := ReadManifest(proj).Skills
 	_, hasLoc := left["loc"]
@@ -255,8 +255,10 @@ func TestLifecycle(t *testing.T) {
 	}
 	check(t, slot != "", "uninstalled skill in trash")
 	_, err = RestoreTrash(slot)
-	_, back := ReadManifest(proj).Skills["gamma"]
+	restored := ReadManifest(proj)
+	_, back := restored.Skills["gamma"]
 	check(t, err == nil && Exists(filepath.Join(proj, ".agents/skills/gamma/SKILL.md")) && back, "restore from trash: %v", err)
+	check(t, restored.Packs.Has("big") && back && restored.Skills["gamma"].HasPack("big"), "restoring the last pack member must restore its pack")
 
 	// repair links + doctor
 	os.Remove(filepath.Join(proj, ".claude/skills/gamma"))
@@ -487,9 +489,124 @@ func TestTaxonomyAndRecommend(t *testing.T) {
 		packs = append(packs, g.Pack)
 	}
 	check(t, reflect.DeepEqual(packs, []string{"core", "web-vue"}), "recommend groups: %v", packs)
-	check(t, strings.Contains(rec.InstallHint, "@web-vue"), "install hint: %s", rec.InstallHint)
+
 	det := DetectedStacks(SuggestPacks(proj), LoadTaxonomy())
 	check(t, det["vue"] && det["core-workflow"], "detected stacks: %v", det)
+}
+
+func TestBootstrapPinnedSource(t *testing.T) {
+	f, commit := newFixture(t, []string{"alpha"}, nil)
+	source := StarterSource{"acme/skills", commit, "skills/alpha", "community"}
+	sources := map[string]StarterSource{"example": source}
+	names := []string{"example", "alpha", "unknown"}
+	if err := os.MkdirAll(STAGING, 0755); err != nil {
+		t.Fatal(err)
+	}
+	queue := filepath.Join(STAGING, "CANDIDATES.md")
+	if err := os.WriteFile(queue, []byte("existing selections"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	items, err := bootstrapSkills(names, sources, true, false)
+	if err != nil || items[0].Status != "planned" || items[1].Status != "already_present" || items[2].Status != "unavailable" || Exists(filepath.Join(SKILLS, "example")) {
+		t.Fatal(items, err)
+	}
+	items, err = bootstrapSkills(names, sources, false, false)
+	if err != nil || items[0].Status != "imported" {
+		t.Fatal(items, err)
+	}
+	dir := filepath.Join(SKILLS, "example")
+	if !IsFile(filepath.Join(dir, "UPSTREAM-LICENSE.txt")) || LoadMap(filepath.Join(dir, "SOURCE.json"))["commit"] != commit {
+		t.Fatal("missing provenance")
+	}
+	items, err = bootstrapSkills(names, sources, false, false)
+	if err != nil || items[0].Status != "already_present" {
+		t.Fatal(items, err)
+	}
+	if data, err := os.ReadFile(queue); err != nil || string(data) != "existing selections" {
+		t.Fatal("queue changed")
+	}
+	project := filepath.Join(f.root, "fresh-project")
+	if err := os.Mkdir(project, 0755); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Install(project, []Item{{Name: "example"}}, false)
+	if err != nil || !allOK(results) || !allOK(Verify(project)) {
+		t.Fatal(results, err)
+	}
+}
+
+func TestInstallRollback(t *testing.T) {
+	f, _ := newFixture(t, nil, []string{"alpha", "beta"})
+	project := filepath.Join(f.root, "app")
+	items := []Item{{Name: "alpha"}}
+	rs, err := Install(project, items, false)
+	if err != nil || !allOK(rs) {
+		t.Fatal(rs, err)
+	}
+	active := filepath.Join(Dest(project, "alpha"), "SKILL.md")
+	appendFile(active, "local edit\n")
+	local := TreeHash(Dest(project, "alpha"))
+	manifest := filepath.Join(project, ".agents", Manifest)
+	before, err := os.ReadFile(manifest)
+	must(t, err)
+
+	claude := filepath.Join(project, ".claude")
+	must(t, os.Rename(claude, claude+".save"))
+	must(t, os.WriteFile(claude, []byte("reserved"), 0644))
+	rs, err = Install(project, items, true)
+	if err != nil || allOK(rs) || TreeHash(Dest(project, "alpha")) != local {
+		t.Fatal("lost local copy after link error", rs, err)
+	}
+	after, err := os.ReadFile(manifest)
+	must(t, err)
+	if string(before) != string(after) || len(ListTrash(project)) != 0 {
+		t.Fatal("failed install changed manifest or trash")
+	}
+
+	must(t, os.Remove(claude))
+	must(t, os.Rename(claude+".save", claude))
+	src := filepath.Join(SKILLS, "beta", "SKILL.md")
+	must(t, os.Rename(src, src+".save"))
+	must(t, os.Symlink("SKILL.md.save", src))
+	rs, err = Install(project, []Item{{Name: "beta"}}, false)
+	if err != nil || allOK(rs) || Lexists(LinkP(project, "beta")) || Lexists(Dest(project, "beta")) {
+		t.Fatal("orphan copy/link", rs, err)
+	}
+	must(t, os.Remove(src))
+	must(t, os.Rename(src+".save", src))
+
+	// Make the manifest rename fail after both copies and links have been published.
+	must(t, os.Rename(manifest, manifest+".save"))
+	must(t, os.Mkdir(manifest, 0755))
+	lp := LinkP(project, "alpha")
+	must(t, os.Remove(lp))
+	must(t, os.Symlink("previous-link", lp))
+	_, err = Install(project, []Item{{Name: "alpha"}, {Name: "beta"}}, true)
+	target, readErr := os.Readlink(lp)
+	if err == nil || readErr != nil || target != "previous-link" || TreeHash(Dest(project, "alpha")) != local ||
+		Lexists(LinkP(project, "beta")) || Lexists(Dest(project, "beta")) {
+		t.Fatal("incomplete batch rollback", err, readErr, target)
+	}
+}
+
+func TestBootstrapAuditOverride(t *testing.T) {
+	f, _ := newFixture(t, nil, nil)
+	dir := mkskill(t, filepath.Join(f.up, "skills"), "example", "Test skill", "", nil)
+	md := filepath.Join(dir, "SKILL.md")
+	must(t, os.WriteFile(md, []byte("---\nname: example\ndescription: Test skill\nhooks: {}\n---\nTest.\n"), 0644))
+	source := StarterSource{"acme/skills", f.push("review fixture"), "skills/example", "community"}
+	if _, err := importStarter("example", source, false); err == nil || !strings.Contains(err.Error(), "audit review") || Lexists(filepath.Join(SKILLS, "example")) {
+		t.Fatal(err)
+	}
+	note, err := importStarter("example", source, true)
+	if err != nil || !strings.Contains(note, "audit review") || !IsFile(filepath.Join(SKILLS, "example", "SKILL.md")) {
+		t.Fatal(note, err)
+	}
+	must(t, os.WriteFile(md, []byte("---\nname: example\nhooks: {}\n---\nMissing description.\n"), 0644))
+	source.Commit = f.push("validation error fixture")
+	if _, err := importStarter("invalid-example", source, true); err == nil || !strings.Contains(err.Error(), "audit error") || Lexists(filepath.Join(SKILLS, "invalid-example")) {
+		t.Fatal(err)
+	}
 }
 
 func TestPackYAMLRoundTrip(t *testing.T) {

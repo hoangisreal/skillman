@@ -306,8 +306,11 @@ func TestTUIFlow(t *testing.T) {
 	tm, ok = m.modals[0].(*textModal)
 	check(t, ok && strings.HasPrefix(tm.title, "audit") && strings.Contains(tm.text, "alpha"), "audit view")
 	d.press("esc", "s")
-	_, ok = m.modals[0].(*pickModal)
-	check(t, ok, "suggest picker")
+	picker, ok := m.modals[0].(*pickModal)
+	check(t, ok && picker.pickMany != nil, "shortlist picker")
+	d.press("space", "enter")
+	_, ok = m.modals[0].(*confirmModal)
+	check(t, ok, "shortlist selection previews install")
 	d.press("esc")
 
 	// Trash: restore
@@ -391,6 +394,28 @@ func TestTUIFlow(t *testing.T) {
 	d.press("esc", "?")
 	check(t, len(m.modals) == 1, "help")
 	d.press("esc")
+}
+
+func TestAdoptUsesProjectSelection(t *testing.T) {
+	e := setup(t)
+	if rs, err := core.Install(e.proj, []core.Item{{Name: "alpha"}}, false); err != nil || len(rs) != 1 || !rs[0].OK {
+		t.Fatal(rs, err)
+	}
+	mkskill(t, filepath.Dir(core.Dest(e.proj, "beta")), "beta", "local copy", "body")
+	d := newDriver(t, e.proj)
+	d.press("4")
+	pt := d.m.tabs[3].(*projectTab)
+	if pt.tbl.current() != "alpha" {
+		t.Fatal("unexpected initial selection", pt.tbl.current())
+	}
+	d.press("a")
+	if installed(e.proj)["beta"] || core.Lexists(core.LinkP(e.proj, "beta")) {
+		t.Fatal("adopt changed an unselected skill")
+	}
+	d.press("down", "a")
+	if !installed(e.proj)["beta"] {
+		t.Fatal("selected untracked skill was not adopted")
+	}
 }
 
 // BenchmarkSearchKeystroke measures one keystroke in the Library search box (filter + render).

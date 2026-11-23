@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/hoangisreal/skillman"
@@ -26,10 +28,10 @@ func init() {
 	reg("browse", "[--domain D] [--stack S] [-C dir] [--json]",
 		"Skills grouped by domain › stack (the TUI Browse tab). Stacks used by the project are marked ★.",
 		[]string{"domain", "stack", "C"}, cmdBrowse)
-	reg("recommend", "[dir] [--extra N] [--json]",
+	reg("recommend", "[dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]",
 		"Recommend skills for a project: detected packs with their skills, plus up to N (default 5, -1 = all)\n"+
 			"other library skills of the same stacks. Shows what is installed and the token cost.",
-		[]string{"extra", "C"}, cmdRecommend)
+		[]string{"stack", "task", "limit", "extra", "C"}, cmdRecommend)
 	reg("suggest", "[dir] [--json]", "Suggest packs from the project's manifests (package.json, pyproject.toml, go.mod, …).",
 		[]string{"C"}, cmdSuggest)
 	reg("taxonomy", "[--default] [--json]",
@@ -41,7 +43,7 @@ func init() {
 		"Copy skills and packs into a project (.agents/skills + .claude/skills link + manifest).", []string{"C"}, cmdAdd)
 	reg("remove", "<skill|@pack>… [-C dir] [--json]",
 		"Remove skills or a pack from a project (to trash; skills still used by another pack stay).", []string{"C"}, cmdRemove)
-	reg("status", "[dir] [--json]", "State of every project skill: ok outdated modified conflict untracked missing orphan invalid.",
+	reg("status", "[dir] [-C dir] [--agents [--include-global]] [--json]", "Project skill state, or on-disk skill locations by agent with --agents.",
 		[]string{"C"}, cmdStatus)
 	reg("doctor", "[dir] [--json]", "Check links, drift, shadowing by global skills and the description token budget.",
 		[]string{"C"}, cmdDoctor)
@@ -51,15 +53,15 @@ func init() {
 		"Offline risk scan: hooks, pipe-to-shell, credential reads, broad allowed-tools, symlinks, executables.",
 		[]string{"fail-on"}, cmdAudit)
 	reg("diff", "<skill> [-C dir]", "Unified diff library → project copy.", []string{"C"}, cmdDiff)
-	reg("update", "[skills…] [-C dir] [--force] [--json]",
-		"Refresh outdated project copies from the library (--force also replaces modified ones).", []string{"C"}, cmdUpdate)
+	reg("update", "[skills…] [-C dir] [--force] [--dry-run] [--json]",
+		"Refresh outdated project copies from the library. Use --dry-run to preview and --force to allow replacing local edits.", []string{"C"}, cmdUpdate)
 	reg("update-projects", "[--dry-run] [--json]", "Refresh outdated skills in every registered project.", nil, cmdUpdateProjects)
 	reg("adopt", "[skills…] [-C dir] [--json]", "Track skills copied into .agents/skills before the manifest existed.",
 		[]string{"C"}, cmdAdopt)
 	reg("pin", "<skills…> [-C dir]", "Keep a project copy as it is (skipped by update, accepted by verify).",
 		[]string{"C"}, func(a *Args) int { return cmdPin(a, true) })
 	reg("unpin", "<skills…> [-C dir]", "Undo pin.", []string{"C"}, func(a *Args) int { return cmdPin(a, false) })
-	reg("repair-links", "[dir]", "Recreate missing or broken .claude/skills links.", []string{"C"}, cmdRepairLinks)
+	reg("repair-links", "[dir] [--mode copy] [--dry-run]", "Recreate missing or broken .claude/skills links.", []string{"C", "mode"}, cmdRepairLinks)
 	reg("projects", "[--json]", "Projects registered by skillman (where skills were installed).", nil, cmdProjects)
 
 	// packs
@@ -73,6 +75,9 @@ func init() {
 		[]string{"d", "description", "extends"}, cmdPack)
 
 	// library
+	reg("import", "<owner/repo|GitHub URL> [--list] [--skill name ...] [--commit SHA] [-C project] [--dry-run] [--allow-risky] [--json]",
+		"Discover and import GitHub skills into the library. Supply -C to also install the selected skills into a project.",
+		[]string{"skill", "commit", "C"}, cmdImport)
 	reg("library", "check|apply|auto-safe|pending|rollback|pin|unpin|rebuild-index|validate|new|build-packs …",
 		"Manage the library and upstream updates:\n"+
 			"  library check [skills…] [--pack P] [--log] [--json]     read-only upstream check\n"+
@@ -96,6 +101,7 @@ func init() {
 	// setup
 	reg("init", "", "Create or refresh the library at $SKILL_LIBRARY: starter packs, repos.txt, the skillman skill, git.",
 		nil, cmdInit)
+	reg("bootstrap", "--pack <core|web-vue|postgres> [--dry-run] [--allow-risky] [--json]", "Preview or import missing starter skills into the library from pinned sources.", []string{"pack"}, cmdBootstrap)
 	reg("agent-setup", "[--dry-run] [--remove] [--no-claude] [--no-codex]",
 		"Link the skillman skill into ~/.claude/skills (Claude Code, OpenCode) and ~/.agents/skills (Codex),\n"+
 			"so coding agents can use skillman in any project. Never overwrites a real directory.", nil, cmdAgentSetup)
@@ -126,21 +132,7 @@ func init() {
 // ───────────── discovery ─────────────
 
 func loadIndex() ([]core.IndexRow, error) {
-	rows := core.LoadIndex()
-	if rows == nil {
-		if !core.IsDir(core.SKILLS) {
-			return nil, fmt.Errorf("library not found: %s (run: skillman init, or set SKILL_LIBRARY)", core.LIB)
-		}
-		r, _, _, err := core.RebuildIndex(true)
-		if err != nil {
-			return nil, err
-		}
-		rows = core.LoadIndex()
-		if rows == nil {
-			rows = r
-		}
-	}
-	return rows, nil
+	return core.NewRecommendationCatalog().Index()
 }
 
 func stateMap(dir string) map[string]string {
@@ -306,7 +298,7 @@ func cmdBrowse(a *Args) int {
 	}
 	tax := core.LoadTaxonomy()
 	proj, _ := core.ResolveProject(a.Str("C", "."), false)
-	det := core.DetectedStacks(core.SuggestPacks(proj), tax)
+	det := core.DetectedStacks(core.ProjectSignals(proj), tax)
 	tree := core.BuildTree(rows, tax, det, core.PacksBySkill())
 	dom, stk := a.Str("domain", ""), a.Str("stack", "")
 	var sel []core.DomainNode
@@ -377,16 +369,50 @@ func cmdRecommend(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	rows, err := loadIndex()
+	catalog := core.NewRecommendationCatalog()
+	ids := a.List("stack")
+	if a.Has("stack") && len(ids) == 0 {
+		return usage("--stack requires a taxonomy stack ID")
+	}
+	declared, err := catalog.DeclaredSignals(ids)
+	if err != nil {
+		return usage(err.Error())
+	}
+	rows, err := catalog.Index()
 	if err != nil {
 		return fail(err)
 	}
-	rec := core.Recommend(d, rows, a.Int("extra", 5))
+	limit, err := strconv.Atoi(a.Str("limit", "5"))
+	if err != nil || limit < 1 || (a.Has("limit") && a.Str("limit", "") == "") {
+		return usage("--limit requires a positive integer")
+	}
+	brief := a.Has("brief")
+	rec := search.Rank(catalog, d, rows, a.Str("task", ""), limit, a.Int("extra", 5), brief, declared...)
+	if rec.Err != nil {
+		return fail(rec.Err)
+	}
 	if a.Has("json") {
-		printJSON(rec)
+		if brief {
+			out := map[string]any{"project": rec.Project, "budget": rec.Budget, "shortlist": rec.Shortlist, "install_args": rec.InstallArgs}
+			if rec.Message != "" {
+				out["message"] = rec.Message
+			}
+			printJSON(out)
+		} else {
+			printJSON(rec)
+		}
 		return 0
 	}
 	outf("project: %s\n", d)
+	if rec.Message != "" {
+		outf("%s\n", rec.Message)
+	}
+	for _, c := range rec.Shortlist {
+		outf("  %-32s +%dt · %s (%s) %s\n", c.Name, c.AddedTokens, c.Reason, c.Evidence, c.State)
+	}
+	if brief {
+		return 0
+	}
 	if len(rec.Groups) == 0 {
 		outf("no stack detected (try: skillman browse, skillman search <words>)\n")
 		return 0
@@ -396,7 +422,13 @@ func cmdRecommend(a *Args) int {
 		if g.Installed {
 			mark = " [installed]"
 		}
-		outf("\n@%s%s — %s (%s)\n", g.Pack, mark, g.Description, g.Reason)
+		label := g.Pack
+		if label != "" {
+			label = "@" + label
+		} else {
+			label = strings.Join(g.Stacks, ", ")
+		}
+		outf("\n%s%s — %s (%s)\n", label, mark, g.Description, g.Reason)
 		for _, s := range g.Skills {
 			tag := "  "
 			if !s.InPack {
@@ -504,55 +536,33 @@ func cmdAdd(a *Args) int {
 		return fail(err)
 	}
 	if a.Has("dry-run") {
-		st := stateMap(d)
-		tok := 0
-		type plan struct {
-			Name, Pack, State string
-			InLibrary         bool
-			Tokens            int
+		preview, err := core.PreviewInstall(d, its, a.Has("force"))
+		if err != nil {
+			return fail(err)
 		}
-		var ps []plan
-		for _, it := range its {
-			src := filepath.Join(core.SKILLS, it.Name)
-			p := plan{Name: it.Name, Pack: it.Pack, State: st[it.Name], InLibrary: core.IsFile(filepath.Join(src, "SKILL.md"))}
-			if p.InLibrary {
-				p.Tokens = core.SkillTokens(src)
-				if p.State == "" {
-					tok += p.Tokens
-				}
-			}
-			ps = append(ps, p)
-		}
-		tb := core.TokenBudgetOf(d)
 		if a.Has("json") {
-			out := []map[string]any{}
-			for _, p := range ps {
-				out = append(out, map[string]any{"name": p.Name, "pack": p.Pack, "state": p.State, "in_library": p.InLibrary, "tokens": p.Tokens})
-			}
-			printJSON(map[string]any{"project": d, "skills": out, "added_tokens": tok, "budget_after": tb.Total + tok, "budget": tb.Budget})
+			printJSON(preview)
 			return 0
 		}
-		for _, p := range ps {
-			what := "copy"
-			switch {
-			case !p.InLibrary:
-				what = "NOT IN LIBRARY"
-			case p.State != "":
-				what = "already " + p.State
-			}
-			outf("  %-34s %-16s %3dt  %s\n", p.Name, what, p.Tokens, p.Pack)
+		for _, item := range preview.Skills {
+			outf("  %-34s %-16s %3dt  %s\n", item.Name, item.Action, item.Tokens, item.Reason)
 		}
-		outf("would add ≈%d tokens → %d/%d (dry run, nothing changed)\n", tok, tb.Total+tok, tb.Budget)
+		outf("would add ≈%d tokens → %d/%d (dry run, nothing changed)\n", preview.AddedTokens, preview.BudgetAfter, preview.Budget)
 		return 0
 	}
 	rs, err := core.Install(d, its, a.Has("force"))
 	if err != nil {
 		return fail(err)
 	}
-	if a.Has("json") {
-		return resultsOut(a, rs, nil)
-	}
+	summary := core.SummarizeInstall(rs)
 	rc := 0
+	if !summary.OK() {
+		rc = 1
+	}
+	if a.Has("json") {
+		printJSON(map[string]any{"ok": summary.OK(), "results": rs, "summary": summary})
+		return rc
+	}
 	for _, r := range rs {
 		if r.OK {
 			if strings.HasPrefix(r.Message, "skipped:") {
@@ -596,16 +606,48 @@ func cmdRemove(a *Args) int {
 }
 
 func cmdStatus(a *Args) int {
+	if a.Has("include-global") && !a.Has("agents") {
+		return usage("--include-global requires --agents")
+	}
 	d, err := projectDir(a, true)
 	if err != nil {
 		return fail(err)
 	}
-	st := core.ProjectStatus(d)
+	if a.Has("agents") {
+		report, err := core.InspectAgents(d, a.Has("include-global"))
+		if err != nil {
+			return fail(err)
+		}
+		if a.Has("json") {
+			printJSON(report)
+			return 0
+		}
+		outf("project: %s\n", report.Project)
+		for _, agent := range report.Agents {
+			outf("\n%s\n", agent.ID)
+			for _, root := range agent.Roots {
+				outf("  %s root: %s (%s)\n", root.Scope, root.Path, root.State)
+			}
+			for _, skill := range agent.Skills {
+				outf("  %-14s %-28s %s\n", skill.State, skill.Name, skill.Path)
+				for _, alias := range skill.Aliases {
+					outf("    also at %s\n", alias)
+				}
+			}
+			for _, duplicate := range agent.Duplicates {
+				outf("  duplicate %s: %s\n", duplicate.Name, strings.Join(duplicate.Paths, ", "))
+			}
+		}
+		return 0
+	}
+	st, man, err := core.InspectProject(d)
+	if err != nil {
+		return fail(err)
+	}
 	if a.Has("json") {
 		printJSON(st)
 		return 0
 	}
-	man := core.ReadManifest(d)
 	ps := strings.Join(man.PackNames(), ", ")
 	if ps == "" {
 		ps = "-"
@@ -656,9 +698,6 @@ func cmdVerify(a *Args) int {
 	d, err := projectDir(a, true)
 	if err != nil {
 		return fail(err)
-	}
-	if !core.IsFile(filepath.Join(d, ".agents", core.Manifest)) {
-		return fail(fmt.Errorf("no .agents/skill-manifest.json in %s", d))
 	}
 	return resultsOut(a, core.Verify(d), nil)
 }
@@ -739,6 +778,10 @@ func cmdUpdate(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
+	if a.Has("dry-run") {
+		rs, err := core.PreviewProjectUpdate(d, a.Pos, a.Has("force"))
+		return resultsOut(a, rs, err)
+	}
 	rs, err := core.UpdateProject(d, a.Pos, a.Has("force"))
 	return resultsOut(a, rs, err)
 }
@@ -802,7 +845,15 @@ func cmdRepairLinks(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
-	msgs, err := core.RepairLinks(d)
+	var msgs []string
+	switch {
+	case a.Str("mode", "") == "copy":
+		msgs, err = core.ConvertCopies(d, a.Has("dry-run"))
+	case a.Has("mode") || a.Has("dry-run"):
+		return usage("use --mode copy with --dry-run")
+	default:
+		msgs, err = core.RepairLinks(d)
+	}
 	if err != nil {
 		return fail(err)
 	}
@@ -830,6 +881,37 @@ func cmdProjects(a *Args) int {
 }
 
 // ───────────── setup ─────────────
+
+func cmdBootstrap(a *Args) int {
+	pack := a.Str("pack", "")
+	if pack == "" || len(a.Pos) > 0 {
+		return usage("skillman bootstrap --pack <core|web-vue|postgres> [--dry-run] [--allow-risky] [--json]")
+	}
+	items, err := core.Bootstrap(pack, a.Has("dry-run"), a.Has("allow-risky"))
+	if err != nil {
+		return fail(err)
+	}
+	ok := true
+	for _, it := range items {
+		if it.Status == "failed" || it.Status == "unavailable" {
+			ok = false
+		}
+		if !a.Has("json") {
+			source := ""
+			if it.Source != nil {
+				source = fmt.Sprintf("%s@%s:%s", it.Source.Repo, it.Source.Commit, it.Source.Subpath)
+			}
+			outf("%-32s %-16s %s %s\n", it.Name, it.Status, source, it.Detail)
+		}
+	}
+	if a.Has("json") {
+		printJSON(map[string]any{"pack": pack, "ok": ok, "skills": items, "dry_run": a.Has("dry-run")})
+	}
+	if !ok {
+		return 1
+	}
+	return 0
+}
 
 func cmdInit(a *Args) int {
 	for _, d := range []string{core.SKILLS, core.PACKS, core.STAGING} {
@@ -888,6 +970,7 @@ func cmdInit(a *Args) int {
 		return fail(err)
 	}
 	outf("library ready at %s (%d skills)\n", core.LIB, len(core.LibraryNames()))
+	outf("Preview starter sources: skillman bootstrap --pack core --dry-run\n")
 	return 0
 }
 
@@ -916,6 +999,15 @@ func cmdAgentSetup(a *Args) int {
 	rc := 0
 	for _, t := range targets {
 		lp := filepath.Join(t, core.SelfSkill)
+		if runtime.GOOS == "windows" && !core.IsSymlink(lp) {
+			if err := core.SetupSkillCopy(src, lp, a.Has("remove"), dry); err != nil {
+				errfln("%s", err)
+				rc = 1
+			} else {
+				outf("%s\n", lp)
+			}
+			continue
+		}
 		switch {
 		case a.Has("remove"):
 			if core.IsSymlink(lp) {

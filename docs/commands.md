@@ -16,7 +16,7 @@ Exit codes: `0` success, `1` a check failed or an item could not be processed, `
 
 | Command | Description |
 |---|---|
-| `recommend [dir] [--extra N] [--json]` | Detected stacks → packs with their curated skills plus up to N (default 5, `-1` all) other skills of the same stacks, each with project state, `in_library` and token cost, plus an install hint |
+| `recommend [dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]` | Up to N local choices (default 5) with evidence, matching keywords, state and estimated added tokens. Repeated or comma-separated stack IDs select the recommendation scope and work in an empty project. Without stack evidence or a declaration, recommendations use the local `@core` pack. `--extra` controls the additional skills per detailed group. |
 | `suggest [dir] [--json]` | Packs for the project's stack and the file that triggered each |
 | `search <words…> [--domain D] [--stack S] [--limit N] [-C dir] [--json]` | Ranked search (exact name, name prefix, name, description, source) |
 | `info <skill> [--body] [-C dir] [--json]` | Description, source and commit, domain/stacks, packs, tokens, validation findings, state in the project |
@@ -33,18 +33,22 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | Command | Description |
 |---|---|
 | `add <name\|@pack>… [dir] [--force] [--dry-run] [--json]` | Copy skills and whole packs into a project, link them, record them in the manifest. A pack member that is not in the library yet is reported as skipped; an explicitly named one fails |
-| `remove <name\|@pack>…` | Remove skills or a pack (skills still needed by another pack or added manually stay). Goes to trash |
-| `status [dir] [--json]` | State of every project skill (see [states](#project-skill-states)) |
+| `remove <name\|@pack>…` | Remove skills or a pack to trash. Project manifest ownership determines which shared or manually added copies stay. For older manifests missing an association, re-add the pack you want to keep before removing the other one. |
+| `status [dir] [--agents [--include-global]] [--json]` | State of every project skill. `--agents` lists on-disk locations for Claude Code, Codex, Cursor, GitHub Copilot CLI and OpenCode. Add `--include-global` to compare with their standard personal skill directories. |
 | `doctor [dir] [--json]` | Links, drift, shadowing by global skills, description token budget, packs with missing skills |
 | `diff <name>` | Unified diff library → project copy |
-| `update [names] [--force]` | Refresh `outdated` copies (`--force` also replaces `modified`) |
+| `update [names] [--force] [--dry-run] [--json]` | Refresh `outdated` copies. Explicit names can include local edits or pins with `--force`. Use `--dry-run` to preview eligible and blocked updates without writing files. Exit 1 if any selected update is blocked. |
 | `update-projects [--dry-run]` | Refresh outdated skills in every registered project |
 | `adopt [names]` | Start tracking copies that were added before the manifest existed |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
 | `repair-links [dir]` | Recreate missing or broken `.claude/skills` links |
-| `verify [dir] [--json]` | **CI check.** Exit 1 unless the committed copies match the manifest hashes. Needs no library |
+| `verify [dir] [--json]` | **CI check.** Requires a valid manifest, matching copies and a valid Claude link or mirror. Pinned edits are accepted when the layout is intact. Needs no library. |
 | `audit [dir \| skill-dir] [--library] [--fail-on review\|error\|never] [-q] [--json]` | **Offline risk scan**: validation errors, hooks, pipe-to-shell, credential reads, broad `allowed-tools`, symlinks, executables |
 | `projects [--json]` | Projects where skillman installed skills |
+
+`add --dry-run` reports the requested action and reason for each skill, including blocked paths and
+skipped pack members. A computed preview exits 0. Check its `ok` field before applying. `added_tokens`
+counts eligible new or restored skills and `budget_after` also accounts for replacements.
 
 ### Project skill states
 
@@ -87,6 +91,8 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `library build-packs` | Regenerate `packs/vendor/*` (one pack per upstream owner with ≥ 3 skills) |
 | `trash list \| restore <id> \| empty --yes [ids]` | Removed project copies and deleted packs |
 | `init` | Create or refresh the library: starter packs, `repos.txt`, the `skillman` skill, `.gitignore`, git |
+| `import <source> [--list] [--skill name] [-C dir] [--dry-run] [--commit SHA] [--allow-risky] [--json]` | Accepts a GitHub slug, repository URL or skill directory URL. Lists choices for multi-skill sources. Repeat `--skill` to select several. The default destination is the library. Add `-C` to install into a project. Dry-run fetches into the cache and returns commit-pinned `apply_args`. |
+| `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--allow-risky] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. After inspecting audit findings, `--allow-risky` accepts review-level findings. Validation errors and missing licenses still block import. |
 | `agent-setup [--dry-run] [--remove] [--no-claude] [--no-codex]` | Link the `skillman` skill into `~/.claude/skills` and `~/.agents/skills` |
 
 ## Import pipeline

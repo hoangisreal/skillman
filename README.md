@@ -28,6 +28,11 @@ manifest), and updates them only after checking what changed upstream. It is one
 
 ## Getting started
 
+For an empty project, declare your stack with `skillman recommend -C . --stack vue --stack postgres`.
+If the stack is open, preview `skillman add -C . @core --dry-run`. A new library starts with
+`skillman init` and `skillman bootstrap --pack core --dry-run` to review pinned sources before importing.
+Run `skillman add -C . <selected skills> --dry-run` before installing your selection.
+
 ```sh
 skillman upstream verify && skillman upstream tick --pack core web-vue && skillman upstream import  # fill the library
 cd ~/code/my-app
@@ -37,6 +42,20 @@ skillman                    # browse, install, update and remove in the TUI
 ```
 
 ## Installation
+
+### Download a binary
+
+Download the archive for your CPU (`amd64` or `arm64`) and `SHA256SUMS` from the same tagged [GitHub release](https://github.com/hoangisreal/skillman/releases). Compare the SHA-256 digest of the downloaded archive with its entry in that file.
+
+| System | Verify the download | Extract and start |
+|---|---|---|
+| Windows (PowerShell) | `Get-FileHash .\skillman-*.zip -Algorithm SHA256` | `Expand-Archive .\skillman-*.zip -DestinationPath .\tools` then `.\tools\skillman.exe init` |
+| macOS | `shasum -a 256 skillman-*.tar.gz` | `tar -xzf skillman-*-darwin-*.tar.gz` then `./skillman init` |
+| Linux | `sha256sum skillman-*.tar.gz` | `tar -xzf skillman-*-linux-*.tar.gz` then `./skillman init` |
+
+Place the extracted executable on your PATH. Run `skillman agent-setup` to make the bundled instructions available to local agents. Run `skillman recommend -C . --brief --json` in a project or launch `skillman` for the TUI. Git is needed for GitHub imports, upstream updates and library history.
+
+### Build from source
 
 1. **Install the binary**
 
@@ -69,6 +88,11 @@ skillman                    # browse, install, update and remove in the TUI
    `staging/repos.txt` lists 103 curated upstream repos. Verify them, tick what you want and import:
 
    ```sh
+   # For a first project, preview and import just one starter pack:
+   skillman bootstrap --pack web-vue --dry-run
+   skillman bootstrap --pack web-vue
+
+   # To explore the broader collection:
    skillman upstream verify -j 8                    # sparse clones, lists ~3000 candidates
    skillman upstream tick --pack core web-vue postgres
    skillman upstream tick --tier official --max-per-repo 40   # or in bulk
@@ -121,13 +145,13 @@ Re-file a skill or add your own domains in `~/skill-library/taxonomy.yaml` ([gui
 ### Add skills to a project
 
 ```sh
-skillman recommend .                  # detected stacks → packs and extra skills, installed state, tokens
+skillman recommend . --task "vue test" --brief --json # ranked local choices, evidence, state and added tokens
 skill-add @postgres vitest --dry-run  # what would be copied and what it costs per session
 skill-add @postgres vitest            # copy, link and record
 ```
 
-Each skill lands in `.agents/skills/<name>/` (a real, committed copy for Codex and OpenCode), gets a link in
-`.claude/skills/` for Claude Code, and is recorded with its upstream commit and content hash in
+Each skill lands in `.agents/skills/<name>/` (a real, committed copy for Codex and OpenCode), gets a link or
+managed copy in `.claude/skills/` for Claude Code, and is recorded with its upstream commit and content hash in
 `.agents/skill-manifest.json`. Commit all three.
 
 ### Group skills into packs
@@ -143,8 +167,11 @@ docker). 34 starter packs ship with skillman. Edit them in tab 3 or with
 <img src="docs/screenshots/4-project.svg" alt="Project tab: per-skill drift state and token budget" width="100%">
 
 Tab 4 (or `skillman status`) shows each skill as `ok`, `outdated`, `modified`, `conflict`, `untracked`, `missing` or
-`orphan`. `skillman update` refreshes outdated copies, `diff` shows what changed, `pin` keeps a deliberate local
-edit, `remove` moves a copy to the trash. `doctor` checks links, shadowing and the description token budget.
+`orphan`. Run `skillman update --dry-run` to see which copies would refresh before running `skillman update`.
+Use `diff` to review changes, `pin` to keep a deliberate local edit and `remove` to move a copy to the trash.
+`doctor` checks links, shadowing and the description token budget.
+Run `skillman status --agents` for on-disk locations and duplicates per client. Add `--include-global` to
+include the standard personal skill directories.
 
 ### Update the library from upstream
 
@@ -269,7 +296,14 @@ No. Removing a skill, replacing a modified copy or deleting a pack moves it to a
 <details>
 <summary>Does it run on Windows?</summary>
 
-Not yet: it relies on POSIX file locks and symlinks. Linux and macOS are tested in CI.
+New Windows projects keep a managed Claude copy alongside the canonical `.agents/skills` tree. Both directories and `.agents/skill-manifest.json` belong in version control. Windows does not need Developer Mode for this layout. On another OS, Skillman follows the layout saved in the manifest. For an older project, preview `skillman repair-links -C . --mode copy --dry-run` and rerun without `--dry-run` to convert tracked links.
+
+Commit the generated `.gitattributes` in each managed skills directory to preserve file bytes across Git checkouts. Skillman preserves existing attributes files. For a repository with custom attributes, ensure these rules apply and ignore `.agents/.skillman.lock` in `.gitignore`.
+
+```gitattributes
+.agents/skills/** -text
+.claude/skills/** -text
+```
 </details>
 
 ## Alternatives
@@ -278,6 +312,8 @@ Not yet: it relies on POSIX file locks and symlinks. Linux and macOS are tested 
   [skills.sh](https://skills.sh) directory.
 - [`gh skill`](https://github.blog/changelog/2026-04-16-manage-agent-skills-with-github-cli/): skills from the GitHub CLI.
 - [Skills Manager](https://github.com/xingkongliang/skills-manager): desktop app with a central repo and presets.
+- [Caliber](https://github.com/caliber-ai-org/ai-setup): generates and checks coding-agent context and syncs skills,
+  rules, plugins and MCP configuration across agents.
 
 Pick skillman if you keep a large private collection and want to control, and review, what reaches each project.
 

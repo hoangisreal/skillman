@@ -119,7 +119,7 @@ var SuggestRules = []SuggestRule{
 	{"research-writing", []string{"*.tex", "*.bib"}, nil},
 }
 
-var skipScan = set("node_modules", ".git", ".venv", "venv", "dist", "build", "target", ".next", ".nuxt", "__pycache__")
+var skipScan = set("node_modules", ".git", ".claude", ".agents", ".codex", ".opencode", ".venv", "venv", "dist", "build", "target", ".next", ".nuxt", "__pycache__")
 
 // scanFiles walks d to depth 3 (plus .github/workflows), skipping vendored dirs. Returns relative paths.
 func scanFiles(d string) []string {
@@ -168,18 +168,34 @@ func pathMatch(rel, pattern string) bool {
 type Suggestion struct {
 	Pack   string `json:"pack"`
 	Reason string `json:"reason"`
+	Stack  string `json:"stack,omitempty"` // a detected stack without a curated pack
 }
 
 // SuggestPacks proposes library packs from the project's manifests.
 func SuggestPacks(d string) []Suggestion {
-	files := scanFiles(d)
+	signals := ProjectSignals(d)
+	packs := signals[:0]
+	for _, s := range signals {
+		if s.Pack != "" {
+			packs = append(packs, s)
+		}
+	}
+	return packs
+}
+
+func ProjectSignals(d string) []Suggestion {
 	available := map[string]bool{}
 	for _, p := range ListPacks() {
 		available[p] = true
 	}
+	return projectSignals(d, available)
+}
+
+func projectSignals(d string, available map[string]bool) []Suggestion {
+	files := scanFiles(d)
 	var out []Suggestion
 	if available["core"] {
-		out = append(out, Suggestion{"core", "baseline"})
+		out = append(out, Suggestion{Pack: "core", Reason: "baseline"})
 	}
 	for _, r := range SuggestRules {
 		if !available[r.Pack] {
@@ -197,7 +213,7 @@ func SuggestPacks(d string) []Suggestion {
 				continue
 			}
 			if r.Rx == nil {
-				out = append(out, Suggestion{r.Pack, f})
+				out = append(out, Suggestion{Pack: r.Pack, Reason: f})
 				break
 			}
 			st, err := os.Stat(filepath.Join(d, f))
@@ -206,14 +222,14 @@ func SuggestPacks(d string) []Suggestion {
 			}
 			b, err := os.ReadFile(filepath.Join(d, f))
 			if err == nil && r.Rx.Match(b) {
-				out = append(out, Suggestion{r.Pack, f})
+				out = append(out, Suggestion{Pack: r.Pack, Reason: f})
 				break
 			}
 		}
 	}
 	for _, s := range out {
 		if (s.Pack == "web-vue" || s.Pack == "web-react" || s.Pack == "web-svelte") && available["web-quality"] {
-			out = append(out, Suggestion{"web-quality", "web frontend detected"})
+			out = append(out, Suggestion{Pack: "web-quality", Reason: s.Reason})
 			break
 		}
 	}
@@ -226,6 +242,12 @@ func SuggestPacks(d string) []Suggestion {
 		}
 		seen[s.Pack] = len(dd)
 		dd = append(dd, s)
+	}
+	for _, file := range files {
+		if pathMatch(file, "go.mod") {
+			dd = append(dd, Suggestion{Stack: "go", Reason: file})
+			break
+		}
 	}
 	return dd
 }
@@ -296,72 +318,74 @@ func Audit(target string, library bool) ([]AuditReport, error) {
 	}
 	out := []AuditReport{}
 	for _, d := range dirs {
-		name := filepath.Base(d)
-		if IsSymlink(d) {
-			t, _ := os.Readlink(d)
-			out = append(out, AuditReport{Name: name, Path: d, Level: "review", Errors: []string{},
-				Review: []string{fmt.Sprintf("skill dir is a symlink -> %s (not scanned)", t)}, Executables: []string{}})
-			continue
-		}
-		errs, warns, _ := CheckSkill(d, "")
-		review := []string{}
-		for _, w := range warns {
-			if strings.HasPrefix(w, "REVIEW:") {
-				review = append(review, strings.TrimPrefix(w, "REVIEW: "))
-			}
-		}
-		files := Rglob(d)
-		for _, f := range files {
-			parts := relParts(f.Rel)
-			covered := f.Rel == "SKILL.md" || (len(parts) == 2 && parts[0] == "scripts")
-			if covered || f.IsSymlink() || !f.Mode.IsRegular() {
-				continue
-			}
-			st, err := os.Stat(f.Path)
-			if err != nil || st.Size() > 2_000_000 {
-				continue
-			}
-			raw, err := os.ReadFile(f.Path)
-			if err != nil {
-				continue
-			}
-			head := raw
-			if len(head) > 8192 {
-				head = head[:8192]
-			}
-			if strings.IndexByte(string(head), 0) >= 0 {
-				continue // binary
-			}
-			for _, l := range SuspiciousLabels(strings.ToValidUTF8(string(raw), "")) {
-				review = append(review, fmt.Sprintf("%s in %s", l, f.Rel))
-			}
-		}
-		exe := []string{}
-		for _, f := range files {
-			if f.IsSymlink() {
-				review = append(review, "symlink inside skill: "+f.Rel)
-			}
-		}
-		for _, f := range files {
-			if f.Mode.IsRegular() && isExecutable(f.Path, f.Mode) {
-				exe = append(exe, f.Rel)
-			}
-		}
-		if errs == nil {
-			errs = []string{}
-		}
-		level := "ok"
-		switch {
-		case len(errs) > 0:
-			level = "error"
-		case len(review) > 0:
-			level = "review"
-		case len(exe) > 0:
-			level = "info"
-		}
-		out = append(out, AuditReport{name, d, level, errs, review, exe})
+		out = append(out, auditSkill(d, filepath.Base(d)))
 	}
 	return out, nil
+}
+
+func auditSkill(d, name string) AuditReport {
+	if IsSymlink(d) {
+		t, _ := os.Readlink(d)
+		return AuditReport{Name: name, Path: d, Level: "review", Errors: []string{},
+			Review: []string{fmt.Sprintf("skill dir is a symlink -> %s (not scanned)", t)}, Executables: []string{}}
+	}
+	errs, warns, _ := CheckSkill(d, name)
+	review := []string{}
+	for _, w := range warns {
+		if strings.HasPrefix(w, "REVIEW:") {
+			review = append(review, strings.TrimPrefix(w, "REVIEW: "))
+		}
+	}
+	files := Rglob(d)
+	for _, f := range files {
+		parts := relParts(f.Rel)
+		covered := f.Rel == "SKILL.md" || (len(parts) == 2 && parts[0] == "scripts")
+		if covered || f.IsSymlink() || !f.Mode.IsRegular() {
+			continue
+		}
+		st, err := os.Stat(f.Path)
+		if err != nil || st.Size() > 2_000_000 {
+			continue
+		}
+		raw, err := os.ReadFile(f.Path)
+		if err != nil {
+			continue
+		}
+		head := raw
+		if len(head) > 8192 {
+			head = head[:8192]
+		}
+		if strings.IndexByte(string(head), 0) >= 0 {
+			continue // binary
+		}
+		for _, l := range SuspiciousLabels(strings.ToValidUTF8(string(raw), "")) {
+			review = append(review, fmt.Sprintf("%s in %s", l, f.Rel))
+		}
+	}
+	exe := []string{}
+	for _, f := range files {
+		if f.IsSymlink() {
+			review = append(review, "symlink inside skill: "+f.Rel)
+		}
+	}
+	for _, f := range files {
+		if f.Mode.IsRegular() && isExecutable(f.Path, f.Mode) {
+			exe = append(exe, f.Rel)
+		}
+	}
+	if errs == nil {
+		errs = []string{}
+	}
+	level := "ok"
+	switch {
+	case len(errs) > 0:
+		level = "error"
+	case len(review) > 0:
+		level = "review"
+	case len(exe) > 0:
+		level = "info"
+	}
+	return AuditReport{name, d, level, errs, review, exe}
 }
 
 func AuditFailed(rep []AuditReport, failOn string) bool {

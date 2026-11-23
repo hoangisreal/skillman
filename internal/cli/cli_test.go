@@ -8,10 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/hoangisreal/skillman/internal/core"
+	"github.com/hoangisreal/skillman/internal/search"
 )
 
 func mkskill(t *testing.T, lib, name, desc string) {
@@ -168,6 +171,260 @@ func TestAgentWorkflow(t *testing.T) {
 	stdout = os.Stdout
 	if !core.Exists(filepath.Join(proj, ".agents/skills/tdd")) {
 		t.Errorf("skill-add name dir: %s", o.String())
+	}
+}
+
+func TestUpdateDryRun(t *testing.T) {
+	lib, proj := setup(t)
+	if rc, out, errOut := run(t, "update", "--dry-run", "-C", proj); rc != 0 || !strings.Contains(out, "nothing to do") || core.Exists(filepath.Join(proj, ".agents")) {
+		t.Fatalf("preview of a fresh project: rc=%d, %s%s", rc, out, errOut)
+	}
+	if rc, _, errOut := run(t, "repair-links", "--mode", "copy", "-C", proj); rc != 0 {
+		t.Fatalf("set copy mode: %s", errOut)
+	}
+	if rc, _, errOut := run(t, "add", "vitest", "tdd", "-C", proj); rc != 0 {
+		t.Fatalf("add: %s", errOut)
+	}
+	before := core.TreeHash(proj)
+	mkskill(t, lib, "vitest", "Updated Vitest instructions")
+	var preview struct {
+		OK      bool          `json:"ok"`
+		Results []core.Result `json:"results"`
+	}
+	rc := runJSON(t, &preview, "update", "--dry-run", "-C", proj)
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("update --dry-run changed the project or trash")
+	}
+	if want := []core.Result{{Name: "vitest", OK: true, Message: "would update"}}; rc != 0 || !preview.OK || !slices.Equal(preview.Results, want) {
+		t.Fatalf("preview: rc=%d, %+v", rc, preview)
+	}
+	if rc, _, errOut := run(t, "pin", "vitest", "-C", proj); rc != 0 {
+		t.Fatalf("pin: %s", errOut)
+	}
+	before = core.TreeHash(proj)
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "-C", proj); rc != 1 || preview.OK || len(preview.Results) != 1 || !strings.Contains(preview.Results[0].Message, "pinned") {
+		t.Fatalf("pinned preview: rc=%d, %+v", rc, preview)
+	}
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "--force", "-C", proj); rc != 0 || !preview.OK || len(preview.Results) != 1 || preview.Results[0].Message != "would update" {
+		t.Fatalf("forced preview: rc=%d, %+v", rc, preview)
+	}
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("forced preview changed the project or trash")
+	}
+	mirror := filepath.Join(core.LinkP(proj, "vitest"), "SKILL.md")
+	original, err := os.ReadFile(mirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mirror, []byte("local Claude edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before = core.TreeHash(proj)
+	if rc := runJSON(t, &preview, "update", "vitest", "--dry-run", "--force", "-C", proj); rc != 1 || preview.OK || len(preview.Results) != 1 || !strings.Contains(preview.Results[0].Message, "modified or unmanaged Claude copy") {
+		t.Fatalf("modified Claude copy: rc=%d, %+v", rc, preview)
+	}
+	if got := core.TreeHash(proj); got != before || len(core.ListTrash("")) != 0 {
+		t.Fatal("blocked preview changed the project or trash")
+	}
+	if err := os.WriteFile(mirror, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if rc, out, errOut := run(t, "update", "vitest", "--force", "-C", proj); rc != 0 || !strings.Contains(out, "vitest: updated") {
+		t.Fatalf("update: rc=%d, %s%s", rc, out, errOut)
+	}
+	if rc, _, errOut := run(t, "verify", "-C", proj); rc != 0 {
+		t.Fatalf("verify: %s", errOut)
+	}
+}
+
+func TestTaskSelection(t *testing.T) {
+	lib, original := setup(t)
+	project := filepath.Join(filepath.Dir(original), "repo 'with spaces'")
+	if err := os.Rename(original, project); err != nil {
+		t.Fatal(err)
+	}
+	resolvedProject, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mkskill(t, lib, "postgres-database-migration", "Review database migrations for PostgreSQL")
+	mkskill(t, lib, "golang-testing", "Testing Go modules")
+	for path, data := range map[string]string{"go.mod": "module example.test/sample", ".claude/worktrees/demo/pyproject.toml": "[project]"} {
+		file := filepath.Join(project, path)
+		if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(data), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ task, want, evidence string }{
+		{"test Vue components", "vue-testing-best-practices", "package.json"},
+		{"review database migrations", "postgres-database-migration", "package.json"},
+		{"golang", "golang-testing", "go.mod"},
+	} {
+		var rec search.Recommendation
+		if rc := runJSON(t, &rec, "recommend", project, "--task", tc.task, "--limit", "3", "--extra", "0"); rc != 0 {
+			t.Fatal(rc)
+		}
+		if len(rec.Shortlist) == 0 || len(rec.Shortlist) > 3 || rec.Shortlist[0].Name != tc.want || rec.Shortlist[0].Evidence != tc.evidence {
+			t.Fatalf("%s: %+v", tc.task, rec.Shortlist)
+		}
+		for _, g := range rec.Groups {
+			if g.Pack == "python" {
+				t.Fatal("detected another worktree")
+			}
+		}
+		var planned struct {
+			Project string
+			Skills  []struct{ Name string }
+		}
+		if rc := runJSON(t, &planned, append(rec.InstallArgs, "--dry-run")...); rc != 0 || planned.Project != resolvedProject || planned.Skills[0].Name != tc.want {
+			t.Fatal(planned)
+		}
+		var result struct {
+			OK      bool
+			Summary core.InstallSummary
+		}
+		if rc := runJSON(t, &result, "add", "-C", project, tc.want); rc != 0 || result.Summary.Installed != 1 {
+			t.Fatal(result)
+		}
+		rec = search.Recommendation{}
+		runJSON(t, &rec, "recommend", project, "--task", tc.task)
+		if rec.Shortlist[0].AddedTokens != 0 || slices.Contains(rec.InstallArgs, tc.want) {
+			t.Fatal(rec)
+		}
+		if err := os.RemoveAll(core.Dest(project, tc.want)); err != nil {
+			t.Fatal(err)
+		}
+		rec = search.Recommendation{}
+		runJSON(t, &rec, "recommend", project, "--task", tc.task, "--limit", "1")
+		if len(rec.Shortlist) != 1 || rec.Shortlist[0].State != "missing" || !slices.Contains(rec.InstallArgs, tc.want) {
+			t.Fatal(rec)
+		}
+		var dry struct {
+			Added int `json:"added_tokens"`
+		}
+		if rc := runJSON(t, &dry, append(slices.Clone(rec.InstallArgs), "--dry-run")...); rc != 0 || dry.Added == 0 || dry.Added != rec.Shortlist[0].AddedTokens {
+			t.Fatal(rec, dry)
+		}
+		if rc := runJSON(t, &result, rec.InstallArgs...); rc != 0 || result.Summary.Installed != 1 {
+			t.Fatal(result)
+		}
+	}
+	var rec search.Recommendation
+	runJSON(t, &rec, "recommend", project, "--task", "zzzznothing")
+	if len(rec.Shortlist) != 0 || rec.Message == "" || len(rec.InstallArgs) != 0 {
+		t.Fatal(rec)
+	}
+}
+
+func TestBriefRecommendation(t *testing.T) {
+	lib, p := setup(t)
+	firstVue := func() string {
+		t.Helper()
+		var rec search.Recommendation
+		if rc := runJSON(t, &rec, "recommend", "-C", p, "--task", "vue", "--limit", "1", "--brief"); rc != 0 || len(rec.Shortlist) != 1 {
+			t.Fatal(rc, rec)
+		}
+		return rec.Shortlist[0].Name
+	}
+	if name := firstVue(); name != "vue-best-practices" {
+		t.Fatalf("first candidate: %s", name)
+	}
+	// Remove a top-ranked name after indexing. Both modes should fill the vacant slot.
+	if err := os.RemoveAll(filepath.Join(lib, "skills", "vue-best-practices")); err != nil {
+		t.Fatal(err)
+	}
+	if name := firstVue(); name != "vue-testing-best-practices" {
+		t.Fatalf("replacement: %s", name)
+	}
+	for _, task := range []string{"", "vue test", "no-matching-skill"} {
+		args := []string{"recommend", "-C", p, "--limit", "3", "--task", task}
+		var full, brief map[string]any
+		runJSON(t, &full, args...)
+		runJSON(t, &brief, append(args, "--brief")...)
+		for _, key := range []string{"project", "budget", "shortlist", "install_args", "message"} {
+			if !reflect.DeepEqual(full[key], brief[key]) {
+				t.Fatalf("different %s: %v vs %v", key, full, brief)
+			}
+		}
+		if _, ok := brief["groups"]; ok {
+			t.Fatal("brief includes groups")
+		}
+		if task != "" {
+			continue
+		}
+		shortlist := brief["shortlist"].([]any)
+		if len(shortlist) != 3 {
+			t.Fatal(shortlist)
+		}
+		packs := map[string]bool{}
+		for _, v := range shortlist {
+			c := v.(map[string]any)
+			packs[c["reason"].(string)] = true
+			if c["name"] == "vue-best-practices" {
+				t.Fatal("stale skill selected")
+			}
+		}
+		if !packs["@web-vue"] || !packs["@postgres"] || !packs["@docker"] {
+			t.Fatal(packs)
+		}
+	}
+}
+
+func TestAddOutcomesAndPackOwners(t *testing.T) {
+	lib, p := setup(t)
+	for _, pack := range []core.Pack{
+		{Name: "empty-lib", Skills: []string{"absent"}},
+		{Name: "first", Skills: []string{"tdd", "vitest", "review-pr"}},
+		{Name: "second", Skills: []string{"vitest", "review-pr"}},
+	} {
+		if err := core.SavePack(&pack); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var result struct {
+		OK      bool
+		Summary core.InstallSummary
+	}
+	add := func(args ...string) int { return runJSON(t, &result, append([]string{"add", "-C", p}, args...)...) }
+	if rc := add("@empty-lib"); rc != 1 || result.OK || result.Summary.Skipped != 1 {
+		t.Fatal(result)
+	}
+	if rc := add("review-pr", "@first", "@second", "@empty-lib"); rc != 0 || result.Summary.Installed != 3 || result.Summary.Skipped != 1 {
+		t.Fatal(result)
+	}
+	if rc := add("review-pr"); rc != 0 || result.Summary.Present != 1 {
+		t.Fatal(result)
+	}
+	if rc, _, e := run(t, "pack", "add", "second", "tdd"); rc != 0 {
+		t.Fatal(e)
+	}
+	if rc, _, _ := run(t, "remove", "-C", p, "@first"); rc != 0 {
+		t.Fatal(rc)
+	}
+	man := core.ReadManifest(p)
+	if man.Skills["tdd"] != nil || !man.Skills["vitest"].HasPack("second") || !man.Skills["review-pr"].Manual {
+		t.Fatal(man.Skills)
+	}
+	if rc, _, _ := run(t, "remove", "-C", p, "@second"); rc != 0 {
+		t.Fatal(rc)
+	}
+	if !core.IsDir(core.Dest(p, "review-pr")) || core.IsDir(core.Dest(p, "vitest")) {
+		t.Fatal("incorrect retained skills")
+	}
+	if err := core.CopyTree(filepath.Join(lib, "skills", "vitest"), core.Dest(p, "vitest"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if rc := add("vitest"); rc != 1 || result.Summary.Failed != 1 || core.ReadManifest(p).Skills["vitest"] != nil {
+		t.Fatal(result)
+	}
+	if rc, _, _ := run(t, "adopt", "vitest", "-C", p); rc != 0 {
+		t.Fatal(rc)
 	}
 }
 

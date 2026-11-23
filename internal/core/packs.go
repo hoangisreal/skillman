@@ -207,19 +207,19 @@ func RenamePack(oldName, newName string) error {
 }
 
 // ExpandPack resolves extends (depth-first, in order) and dedups.
-func ExpandPack(name string) ([]string, error) { return expandPack(name, nil) }
+func ExpandPack(name string) ([]string, error) { return expandPack(name, nil, LoadPack) }
 
-func expandPack(name string, stack []string) ([]string, error) {
+func expandPack(name string, stack []string, load func(string) (*Pack, error)) ([]string, error) {
 	if contains(stack, name) {
 		return nil, errf("pack cycle: %s", strings.Join(append(append([]string{}, stack...), name), " -> "))
 	}
-	pk, err := LoadPack(name)
+	pk, err := load(name)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
 	for _, e := range pk.Extends {
-		sub, err := expandPack(e, append(append([]string{}, stack...), name))
+		sub, err := expandPack(e, append(append([]string{}, stack...), name), load)
 		if err != nil {
 			return nil, err
 		}
@@ -275,18 +275,31 @@ func PacksBySkill() map[string][]string {
 
 // Item is one install request: a skill, optionally attributed to a pack.
 type Item struct {
-	Name string
-	Pack string // "" = manual
+	Name       string
+	Pack       string // "" = manual
+	OtherPacks []string
+	Manual     bool // explicitly requested in addition to a pack
 }
 
-// ExpandItems turns ["@web-vue", "vitest"] into items (dedup, first pack wins).
+// ExpandItems copies each skill once while retaining every reason for installing it.
 func ExpandItems(items []string) ([]Item, error) {
 	var out []Item
-	seen := map[string]bool{}
+	positions := map[string]int{}
 	add := func(n, p string) {
-		if !seen[n] {
-			seen[n] = true
-			out = append(out, Item{n, p})
+		i, exists := positions[n]
+		if !exists {
+			positions[n] = len(out)
+			out = append(out, Item{Name: n, Pack: p, Manual: p == ""})
+			return
+		}
+		it := &out[i]
+		switch {
+		case p == "":
+			it.Manual = true
+		case it.Pack == "":
+			it.Pack = p
+		case p != it.Pack && !contains(it.OtherPacks, p):
+			it.OtherPacks = append(it.OtherPacks, p)
 		}
 	}
 	for _, it := range items {

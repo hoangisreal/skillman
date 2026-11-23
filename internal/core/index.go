@@ -33,10 +33,12 @@ type Finding struct {
 
 // RebuildIndex validates every skill and writes INDEX.json/INDEX.md (when writeIndex) and VALIDATION.md.
 func RebuildIndex(writeIndex bool) ([]IndexRow, []Finding, []Finding, error) {
+	return rebuildIndex(writeIndex, LoadTaxonomy(), PacksBySkill())
+}
+
+func rebuildIndex(writeIndex bool, tax *Taxonomy, pbs map[string][]string) ([]IndexRow, []Finding, []Finding, error) {
 	var errs, warns []Finding
 	var rows []IndexRow
-	pbs := PacksBySkill()
-	tax := LoadTaxonomy()
 	for _, e := range SortedDir(SKILLS) {
 		n := e.Name()
 		p := filepath.Join(SKILLS, n)
@@ -93,11 +95,15 @@ func RebuildIndex(writeIndex bool) ([]IndexRow, []Finding, []Finding, error) {
 // LoadIndex reads INDEX.json and (re)classifies every row with the current taxonomy and packs, so taxonomy
 // edits and pack changes show up without rebuilding the index.
 func LoadIndex() []IndexRow {
+	return loadClassifiedIndex(LoadTaxonomy(), PacksBySkill())
+}
+
+func loadClassifiedIndex(tax *Taxonomy, packs map[string][]string) []IndexRow {
 	var rows []IndexRow
 	if !LoadJSON(filepath.Join(LIB, "INDEX.json"), &rows) {
 		return nil
 	}
-	ClassifyRows(rows, LoadTaxonomy(), PacksBySkill())
+	ClassifyRows(rows, tax, packs)
 	return rows
 }
 

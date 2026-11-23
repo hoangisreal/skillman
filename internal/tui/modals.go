@@ -166,13 +166,14 @@ func (a *askModal) view(m *Model, w, h int) ([]string, rect) {
 type option struct{ value, label string }
 
 type pickModal struct {
-	title  string
-	opts   []option
-	shown  []int
-	filter input
-	list   *table
-	pick   func(m *Model, v string) tea.Cmd
-	area   rect
+	title    string
+	opts     []option
+	shown    []int
+	filter   input
+	list     *table
+	pick     func(m *Model, v string) tea.Cmd
+	pickMany func(m *Model, names []string) tea.Cmd
+	area     rect
 }
 
 func pick(title string, opts []option, fn func(m *Model, v string) tea.Cmd) *pickModal {
@@ -183,6 +184,9 @@ func pick(title string, opts []option, fn func(m *Model, v string) tea.Cmd) *pic
 	p.list.focused = true
 	p.list.cell = func(i, c int) string {
 		o := p.opts[p.shown[i]]
+		if p.pickMany != nil {
+			return p.list.mark(i) + " " + stBold.Render(o.value) + "  " + stDim.Render(o.label)
+		}
 		if o.label == "" {
 			return o.value
 		}
@@ -219,6 +223,14 @@ func (p *pickModal) apply() {
 }
 
 func (p *pickModal) choose(m *Model) tea.Cmd {
+	if p.pickMany != nil {
+		names := p.list.targets()
+		if len(names) == 0 {
+			return nil
+		}
+		m.pop()
+		return p.pickMany(m, names)
+	}
 	v := p.list.current()
 	if v == "" {
 		return nil
@@ -229,6 +241,10 @@ func (p *pickModal) choose(m *Model) tea.Cmd {
 
 func (p *pickModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 	k := msg.String()
+	if p.pickMany != nil && k == "space" {
+		p.list.toggle()
+		return nil
+	}
 	switch k {
 	case "esc":
 		m.pop()
@@ -263,6 +279,10 @@ func (p *pickModal) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 		}
 		if i := p.list.rowAt(mm.X, mm.Y); i >= 0 { // one click chooses
 			p.list.cursor = i
+			if p.pickMany != nil {
+				p.list.toggle()
+				return nil
+			}
 			return p.choose(m)
 		}
 	}

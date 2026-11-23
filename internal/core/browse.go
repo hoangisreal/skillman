@@ -2,7 +2,6 @@ package core
 
 import (
 	"sort"
-	"strings"
 )
 
 // StackNode is one stack of the Browse tree with the skills classified into it.
@@ -114,6 +113,9 @@ func BuildTree(rows []IndexRow, tax *Taxonomy, detected map[string]bool, packs m
 func DetectedStacks(sugg []Suggestion, tax *Taxonomy) map[string]bool {
 	out := map[string]bool{}
 	for _, s := range sugg {
+		if s.Stack != "" {
+			out[s.Stack] = true
+		}
 		for _, st := range tax.StacksForPack(s.Pack) {
 			out[st.ID] = true
 		}
@@ -129,7 +131,7 @@ type RecSkill struct {
 	Source      string `json:"source"`
 	InPack      bool   `json:"in_pack"`
 	InLibrary   bool   `json:"in_library"`
-	State       string `json:"state,omitempty"` // project state when installed
+	State       string `json:"state"` // project state when installed
 	Tokens      int    `json:"tokens"`
 }
 
@@ -143,51 +145,153 @@ type RecGroup struct {
 }
 
 type Recommendation struct {
+	HasStack     bool       `json:"-"`
+	Err          error      `json:"-"`
 	Project      string     `json:"project"`
 	Groups       []RecGroup `json:"groups"`
 	Budget       Budget     `json:"budget"`
-	InstallHint  string     `json:"install_hint"`
 	ProjectState []string   `json:"installed"`
+}
+
+// RecommendationCatalog shares the same taxonomy and pack definitions between
+// index classification, stack detection and pack expansion for one request.
+type RecommendationCatalog struct {
+	tax       *Taxonomy
+	packs     map[string]*Pack
+	available map[string]bool
+	bySkill   map[string][]string
+}
+
+func NewRecommendationCatalog() *RecommendationCatalog {
+	c := &RecommendationCatalog{LoadTaxonomy(), map[string]*Pack{}, map[string]bool{}, map[string][]string{}}
+	for _, name := range ListPacks() {
+		c.available[name] = true
+		if pk, err := LoadPack(name); err == nil {
+			c.packs[name] = pk
+			for _, skill := range pk.Skills {
+				c.bySkill[skill] = append(c.bySkill[skill], name)
+			}
+		}
+	}
+	return c
+}
+
+func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
+	if rows := loadClassifiedIndex(c.tax, c.bySkill); rows != nil {
+		return rows, nil
+	}
+	if !IsDir(SKILLS) {
+		return nil, errf("library not found: %s (run: skillman init, or set SKILL_LIBRARY)", LIB)
+	}
+	rows, _, _, err := rebuildIndex(true, c.tax, c.bySkill)
+	return rows, err
+}
+
+func (c *RecommendationCatalog) pack(name string) (*Pack, error) {
+	if p := c.packs[name]; p != nil {
+		return p, nil
+	}
+	return nil, errf("pack not found: %s", name)
+}
+
+// ResolveRecSkill checks indexed metadata against the current library.
+func ResolveRecSkill(s RecSkill) RecSkill {
+	dir := SKILLS + "/" + s.Name
+	if s.InLibrary && IsFile(dir+"/SKILL.md") {
+		s.Tokens = SkillTokens(dir)
+	} else {
+		s.Description, s.Source, s.InLibrary = "⚠ not in library", "", false
+	}
+	return s
 }
 
 // Recommend proposes skills for a project: every detected pack with its curated skills, then extra library
 // skills classified into the same stacks (in_pack=false), each with its state in the project and token cost.
 // extra caps the non-pack skills per group (0 = none, -1 = all).
 func Recommend(d string, rows []IndexRow, extra int) Recommendation {
-	tax := LoadTaxonomy()
-	sugg := SuggestPacks(d)
-	st := StatusMap(ProjectStatus(d))
-	man := ReadManifest(d)
+	r := NewRecommendationCatalog().Candidates(d, rows, extra)
+	for i := range r.Groups {
+		for j, s := range r.Groups[i].Skills {
+			r.Groups[i].Skills[j] = ResolveRecSkill(s)
+		}
+	}
+	return r
+}
+
+// DeclaredSignals maps explicit stack IDs to local packs and packless groups.
+func (c *RecommendationCatalog) DeclaredSignals(ids []string) ([]Suggestion, error) {
+	var signals []Suggestion
+	for _, id := range dedup(ids) {
+		stack := c.tax.Stack(id)
+		if stack == nil {
+			return nil, errf("unknown stack %q (see: skillman taxonomy)", id)
+		}
+		start := len(signals)
+		for _, pack := range stack.Packs {
+			if c.available[pack] {
+				signals = append(signals, Suggestion{Pack: pack, Stack: id, Reason: "declared:" + id})
+			}
+		}
+		if len(signals) == start {
+			signals = append(signals, Suggestion{Stack: id, Reason: "declared:" + id})
+		}
+	}
+	return signals, nil
+}
+
+// Candidates builds groups from index metadata, leaving filesystem checks to the caller.
+func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int, declared ...Suggestion) Recommendation {
+	tax := c.tax
+	sugg := declared
+	if len(sugg) == 0 {
+		sugg = projectSignals(d, c.available)
+	}
+	status, man, err := InspectProject(d)
+	if err != nil {
+		return Recommendation{Project: d, Err: err}
+	}
+	st := StatusMap(status)
 	byName := map[string]*IndexRow{}
 	for i := range rows {
 		byName[rows[i].Name] = &rows[i]
 	}
 	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}}
-	for _, s := range ProjectStatus(d) {
+	for _, s := range status {
 		rec.ProjectState = append(rec.ProjectState, s.Name)
 	}
-	var hint []string
 	for _, sg := range sugg {
+		rec.HasStack = rec.HasStack || sg.Reason != "baseline"
 		g := RecGroup{Pack: sg.Pack, Reason: sg.Reason, Stacks: []string{}, Skills: []RecSkill{}, Installed: man.Packs.Has(sg.Pack)}
-		if pk, err := LoadPack(sg.Pack); err == nil {
-			g.Description = pk.Description
+		var members []string
+		if sg.Pack != "" {
+			if pk, err := c.pack(sg.Pack); err == nil {
+				g.Description = pk.Description
+			}
+			members, _ = expandPack(sg.Pack, nil, c.pack)
 		}
 		stackIDs := map[string]bool{}
-		for _, s := range tax.StacksForPack(sg.Pack) {
-			g.Stacks = append(g.Stacks, s.ID)
-			stackIDs[s.ID] = true
+		if sg.Stack != "" {
+			g.Stacks = []string{sg.Stack}
+			if stack := tax.Stack(sg.Stack); stack != nil {
+				g.Description = stack.Title
+			}
+			stackIDs[sg.Stack] = true
+		}
+		if len(declared) == 0 && sg.Pack != "" {
+			for _, s := range tax.StacksForPack(sg.Pack) {
+				g.Stacks = append(g.Stacks, s.ID)
+				stackIDs[s.ID] = true
+			}
 		}
 		mk := func(name string, inPack bool) RecSkill {
 			r := RecSkill{Name: name, InPack: inPack, State: st[name].State}
-			if row := byName[name]; row != nil {
+			if row := byName[name]; row != nil && KEBAB.MatchString(name) {
 				r.Description, r.Source, r.InLibrary = row.Description, row.Source, true
 			} else {
 				r.Description = "⚠ not in library"
 			}
-			r.Tokens = SkillTokens(SKILLS + "/" + name)
 			return r
 		}
-		members, _ := ExpandPack(sg.Pack)
 		seen := map[string]bool{}
 		for _, m := range members {
 			seen[m] = true
@@ -213,15 +317,9 @@ func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 			}
 		}
 		rec.Groups = append(rec.Groups, g)
-		if !g.Installed {
-			hint = append(hint, "@"+sg.Pack)
-		}
 	}
 	if rec.Groups == nil {
 		rec.Groups = []RecGroup{}
-	}
-	if len(hint) > 0 {
-		rec.InstallHint = "skillman add " + strings.Join(hint, " ")
 	}
 	return rec
 }

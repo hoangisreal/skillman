@@ -193,7 +193,7 @@ func tick() tea.Cmd {
 
 func (m *Model) loadStatus() tea.Cmd {
 	p := m.project
-	return func() tea.Msg { return statusMsg{core.ProjectStatus(p), core.SuggestPacks(p)} }
+	return func() tea.Msg { return statusMsg{core.ProjectStatus(p), core.ProjectSignals(p)} }
 }
 
 func (m *Model) notify(s string, isErr bool) tea.Cmd {

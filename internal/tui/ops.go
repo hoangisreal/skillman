@@ -58,7 +58,7 @@ func (m *Model) installItems(items []core.Item, label string, after func()) tea.
 			missing = append(missing, it.Name)
 			continue
 		}
-		if m.d.state(it.Name) != "" {
+		if !core.NeedsProjectCopy(m.d.state(it.Name)) {
 			have++
 			continue
 		}
@@ -94,7 +94,9 @@ func (m *Model) installItems(items []core.Item, label string, after func()) tea.
 			if err != nil {
 				return doneMsg{note: err.Error(), isErr: true}
 			}
-			note, bad := summarize(rs, "installed / up to date")
+			s := core.SummarizeInstall(rs)
+			note := fmt.Sprintf("%d installed, %d already present, %d skipped, %d failed", s.Installed, s.Present, s.Skipped, s.Failed)
+			bad := !s.OK()
 			d := doneMsg{note: note, isErr: bad, reload: true}
 			if bad {
 				d.text, d.title = fmtResults(rs), "install "+label
