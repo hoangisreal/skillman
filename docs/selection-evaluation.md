@@ -53,6 +53,14 @@ after one warmup per build. The baseline is `207c313`. File opens are from a sep
 A live terminal run selected a Vue Router skill in place of the proposed Vue testing skill, cancelled
 and reopened the preview, installed the manual selection and verified all seven tracked copies.
 
+### Client runs with the task-first workflow
+
+| Client | Local shortlist | Preview and install exactly one skill | Ordinary code edit |
+|---|---|---|---|
+| Codex | Called `recommend --brief --json` and left the fixture unchanged | Previewed, installed and verified the selected Vue testing skill | Updated `double.js` without calling Skillman |
+| Claude Code | One `recommend --brief --json` call and no fixture changes | Called preview, add, status and verify, but the environment reported a read-only filesystem and no install appeared | Updated `double.js` and ran Node without calling Skillman |
+| OpenCode | Timed out without reaching the fixture binary | Timed out without reaching the fixture binary | Timed out before editing |
+
 ### Earlier client runs
 
 Each agent received a fresh Vue project containing both `skillman` and `find-skills`. A wrapper recorded arguments passed to the fixture binary. Project changes were checked independently of the agent's response.

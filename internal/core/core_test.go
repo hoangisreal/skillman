@@ -169,13 +169,15 @@ func TestLifecycle(t *testing.T) {
 	// ── project install / status ──
 	proj := filepath.Join(f.root, "proj")
 	os.MkdirAll(proj, 0o755)
+	_, err = ConvertClaudeMode(proj, "symlink", false)
+	must(t, err)
 	items, _ := ExpandItems([]string{"@big", "loc"})
 	rs, err := Install(proj, items, false)
 	check(t, err == nil && allOK(rs), "install @pack + manual skill: %v %v", err, rs)
 	man := ReadManifest(proj)
 	check(t, reflect.DeepEqual(man.Skills["alpha"].Packs, []string{"big"}) && man.Skills["loc"].Manual, "manifest records pack/manual")
 	lt, _ := os.Readlink(filepath.Join(proj, ".claude/skills/alpha"))
-	check(t, lt == "../../.agents/skills/alpha", "relative .claude link")
+	check(t, filepath.ToSlash(lt) == "../../.agents/skills/alpha", "relative .claude link")
 	for _, s := range ProjectStatus(proj) {
 		check(t, s.State == "ok", "all ok after install: %s=%s", s.Name, s.State)
 	}
@@ -324,10 +326,21 @@ func TestLifecycle(t *testing.T) {
 	check(t, CheckUpdates([]string{"delta"}, 2, nil).Items[0].Status == "license-gone", "license removal detected")
 
 	os.WriteFile(filepath.Join(f.up, "LICENSE"), []byte("MIT\n"), 0o644)
-	os.Symlink("/etc/hostname", filepath.Join(f.up, "skills/delta/leak.txt"))
-	os.Symlink("../alpha/SKILL.md", filepath.Join(f.up, "skills/delta/alpha-ref.md"))
-	os.Symlink("../../../../outside", filepath.Join(f.up, "skills/delta/escape.md"))
-	c4 := f.push("v4")
+	sh(t, f.up, "git", "add", "LICENSE")
+	// Store the same raw link targets on each platform.
+	for name, target := range map[string]string{
+		"leak.txt": "/etc/hostname", "alpha-ref.md": "../alpha/SKILL.md", "escape.md": "../../../../outside",
+	} {
+		cmd := exec.Command("git", "hash-object", "-w", "--stdin")
+		cmd.Dir = f.up
+		cmd.Stdin = strings.NewReader(target)
+		hash, err := cmd.Output()
+		must(t, err)
+		sh(t, f.up, "git", "update-index", "--add", "--cacheinfo", "120000,"+strings.TrimSpace(string(hash))+",skills/delta/"+name)
+	}
+	sh(t, f.up, "git", "commit", "-qm", "v4")
+	sh(t, f.up, "git", "push", "-q", f.bare, "main")
+	c4 := sh(t, f.up, "git", "rev-parse", "HEAD")
 	staged, mods, err := Materialize("acme/skills", c4, "skills/delta", "delta", "", nil)
 	check(t, err == nil, "materialize v4: %v", err)
 	check(t, !Lexists(filepath.Join(staged, "leak.txt")) && !Lexists(filepath.Join(staged, "escape.md")) &&
@@ -395,6 +408,8 @@ func TestLifecycle(t *testing.T) {
 	// verify: frozen manifest check
 	p4 := filepath.Join(f.root, "p4")
 	os.MkdirAll(p4, 0o755)
+	_, err = ConvertClaudeMode(p4, "symlink", false)
+	must(t, err)
 	items, _ = ExpandItems([]string{"delta", "my-flow"})
 	Install(p4, items, false)
 	check(t, allOK(Verify(p4)), "verify passes on a fresh install")
@@ -538,6 +553,8 @@ func TestBootstrapPinnedSource(t *testing.T) {
 func TestInstallRollback(t *testing.T) {
 	f, _ := newFixture(t, nil, []string{"alpha", "beta"})
 	project := filepath.Join(f.root, "app")
+	_, err := ConvertClaudeMode(project, "symlink", false)
+	must(t, err)
 	items := []Item{{Name: "alpha"}}
 	rs, err := Install(project, items, false)
 	if err != nil || !allOK(rs) {

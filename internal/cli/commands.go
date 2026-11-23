@@ -889,7 +889,8 @@ func cmdRepairLinks(a *Args) int {
 
 func cmdExport(a *Args) int {
 	output := a.Str("output", "")
-	if len(a.Pos) != 0 || a.Str("format", "markdown") != "markdown" || (output == "" && (a.Has("output") || a.Has("force"))) {
+	badFormat := a.Has("format") && a.Str("format", "") != "markdown"
+	if len(a.Pos) != 0 || badFormat || (output == "" && (a.Has("output") || a.Has("force"))) {
 		return usage("skillman export [-C dir] [--format markdown] [--output file [--force]]")
 	}
 	project, err := projectDir(a, false)
