@@ -42,11 +42,12 @@ var stateStyle = map[string]lipgloss.Style{
 	"ERROR":         stErr, "WARN": stWarn, "review": stWarn, "info": stDim,
 }
 
-func styled(s string) string {
+func (l language) styled(s string) string {
+	text := l.text(s)
 	if st, ok := stateStyle[s]; ok && s != "" {
-		return st.Render(s)
+		return st.Render(text)
 	}
-	return s
+	return text
 }
 
 // fit pads or truncates s (may contain ANSI) to exactly w cells.
@@ -323,7 +324,7 @@ func (t *table) layout(w int) {
 }
 
 // render draws header + visible rows into exactly r.h lines of width r.w.
-func (t *table) render(r rect) []string {
+func (t *table) render(lang language, r rect) []string {
 	if r.h <= 0 || r.w <= 0 {
 		t.area = rect{}
 		return nil
@@ -337,12 +338,12 @@ func (t *table) render(r rect) []string {
 		if i > 0 {
 			hb.WriteByte(' ')
 		}
-		hb.WriteString(fit(c.title, t.widths[i]))
+		hb.WriteString(fit(lang.text(c.title), t.widths[i]))
 	}
 	lines = append(lines, stHeader.Render(fit(hb.String(), r.w)))
 	h := r.h - 1
 	if t.n == 0 && t.empty != "" {
-		lines = append(lines, stDim.Render(fit("  "+t.empty, r.w)))
+		lines = append(lines, stDim.Render(fit("  "+lang.text(t.empty), r.w)))
 	}
 	for row := t.offset; row < t.offset+h && row < t.n; row++ {
 		var sb strings.Builder
@@ -463,7 +464,7 @@ func (in *input) key(msg tea.KeyPressMsg) (bool, bool) {
 	return false, false
 }
 
-func (in *input) render(w int, prompt string) string {
+func (in *input) render(lang language, w int, prompt string) string {
 	in.area.w = w
 	pw := ansi.StringWidth(prompt)
 	avail := w - pw
@@ -471,7 +472,7 @@ func (in *input) render(w int, prompt string) string {
 		return fit(prompt, w)
 	}
 	if len(in.val) == 0 && !in.focused {
-		return fit(prompt+stDim.Render(in.placeholder), w)
+		return fit(prompt+stDim.Render(lang.text(in.placeholder)), w)
 	}
 	// keep the cursor visible
 	start := 0
@@ -491,7 +492,7 @@ func (in *input) render(w int, prompt string) string {
 		sb.WriteString(stCursor.Render(" "))
 	}
 	if len(in.val) == 0 && in.focused {
-		sb.WriteString(stDim.Render(in.placeholder))
+		sb.WriteString(stDim.Render(lang.text(in.placeholder)))
 	}
 	return fit(prompt+sb.String(), w)
 }

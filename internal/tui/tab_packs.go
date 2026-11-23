@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -70,12 +69,12 @@ func newPacksTab(m *Model) *packsTab {
 			return "@" + s.Name
 		case 1:
 			if s.Error != "" {
-				return stErr.Render("ERR")
+				return stErr.Render(m.lang.text("ERR"))
 			}
 			return itoa(s.Count)
 		case 2:
 			if t.inst[s.Name] {
-				return styled("ok")
+				return m.lang.styled("ok")
 			}
 			return ""
 		case 3:
@@ -95,14 +94,14 @@ func newPacksTab(m *Model) *packsTab {
 			if t.own[n] {
 				return n
 			}
-			return n + stDim.Render(" (extends)")
+			return n + stDim.Render(" "+m.lang.text("(extends)"))
 		case 1:
-			return styled(m.d.state(n))
+			return m.lang.styled(m.d.state(n))
 		case 2:
 			if d := m.d.ix.Get(n); d != nil {
 				return stDim.Render(d.Row.Description)
 			}
-			return stWarn.Render("⚠ not in library")
+			return stWarn.Render("⚠ " + m.lang.text("not in library"))
 		}
 		return ""
 	}
@@ -156,10 +155,10 @@ func (t *packsTab) loadMembers(m *Model) {
 	for _, s := range stacks {
 		st = append(st, s.Title)
 	}
-	t.info = fmt.Sprintf("@%s: %s\nextends: %s · %d/%d available · ≈%d tokens · stacks: %s",
+	t.info = m.lang.format("@%s: %s\nextends: %s · %d/%d available · ≈%d tokens · stacks: %s",
 		p, pk.Description, orDash(strings.Join(pk.Extends, ", ")), available, len(all), tok, orDash(strings.Join(st, ", ")))
 	if available == 0 && len(all) > 0 {
-		t.info += "\n" + core.PackImportHint(p)
+		t.info += "\n" + m.lang.text(core.PackImportHint(p))
 	}
 	t.mem.n = len(all)
 	t.mem.clamp()
@@ -199,16 +198,16 @@ func (t *packsTab) actions(m *Model) []action {
 			return nil
 		}},
 		{key: "n", label: "new", run: func(m *Model) tea.Cmd {
-			m.push(ask("New pack name (kebab-case, optional group/):", "", "my-stack", func(m *Model, name string) tea.Cmd {
+			m.push(ask(m.lang.text("New pack name (kebab-case, optional group/):"), "", "my-stack", func(m *Model, name string) tea.Cmd {
 				if name == "" {
 					return nil
 				}
 				if p, err := core.PackPath(name); err != nil {
 					return m.notify(err.Error(), true)
 				} else if core.Exists(p) {
-					return m.notify("pack exists", true)
+					return m.notify(m.lang.text("pack exists"), true)
 				}
-				return save(m, &core.Pack{Name: name}, "created @"+name+"; add skills with a here or p in Library/Browse")
+				return save(m, &core.Pack{Name: name}, m.lang.format("created @%s; add skills with a here or p in Library/Browse", name))
 			}))
 			return nil
 		}},
@@ -224,7 +223,7 @@ func (t *packsTab) actions(m *Model) []action {
 					opts = append(opts, option{d.Row.Name, "[" + d.Row.Domain + "] " + d.Row.Description})
 				}
 			}
-			m.push(pick("Add skill to @"+p, opts, func(m *Model, s string) tea.Cmd {
+			m.push(pick(m.lang.format("Add skill to @%s", p), opts, func(m *Model, s string) tea.Cmd {
 				pk.Skills = append(pk.Skills, s)
 				return save(m, pk, s+" → @"+p)
 			}))
@@ -233,14 +232,14 @@ func (t *packsTab) actions(m *Model) []action {
 		{key: "x", label: "remove skill", run: func(m *Model) tea.Cmd {
 			p, s := cur(), t.mem.current()
 			if t.focus != 1 || s == "" {
-				return m.notify("focus a skill in the member list (tab) first", true)
+				return m.notify(m.lang.text("focus a skill in the member list (tab) first"), true)
 			}
 			pk, err := core.LoadPack(p)
 			if err != nil {
 				return m.notify(err.Error(), true)
 			}
 			if !core.Contains(pk.Skills, s) {
-				return m.notify(s+" comes from an extended pack; edit that pack instead", true)
+				return m.notify(m.lang.format("%s comes from an extended pack; edit that pack instead", s), true)
 			}
 			var keep []string
 			for _, x := range pk.Skills {
@@ -249,7 +248,7 @@ func (t *packsTab) actions(m *Model) []action {
 				}
 			}
 			pk.Skills = keep
-			return save(m, pk, s+" removed from @"+p)
+			return save(m, pk, m.lang.format("%s removed from @%s", s, p))
 		}},
 		{key: "e", label: "description", run: func(m *Model) tea.Cmd {
 			p := cur()
@@ -257,9 +256,9 @@ func (t *packsTab) actions(m *Model) []action {
 			if err != nil {
 				return m.notify(err.Error(), true)
 			}
-			m.push(ask("Description of @"+p+":", pk.Description, "", func(m *Model, v string) tea.Cmd {
+			m.push(ask(m.lang.format("Description of @%s:", p), pk.Description, "", func(m *Model, v string) tea.Cmd {
 				pk.Description = v
-				return save(m, pk, "description saved")
+				return save(m, pk, m.lang.text("description saved"))
 			}))
 			return nil
 		}},
@@ -269,35 +268,35 @@ func (t *packsTab) actions(m *Model) []action {
 			if err != nil {
 				return m.notify(err.Error(), true)
 			}
-			m.push(ask("@"+p+" extends (space-separated packs):", strings.Join(pk.Extends, " "), "web-vue postgres", func(m *Model, v string) tea.Cmd {
+			m.push(ask(m.lang.format("@%s extends (space-separated packs):", p), strings.Join(pk.Extends, " "), "web-vue postgres", func(m *Model, v string) tea.Cmd {
 				pk.Extends = nil
 				for _, x := range strings.Fields(strings.ReplaceAll(v, ",", " ")) {
 					pk.Extends = append(pk.Extends, strings.TrimPrefix(x, "@"))
 				}
-				return save(m, pk, "extends saved")
+				return save(m, pk, m.lang.text("extends saved"))
 			}))
 			return nil
 		}},
 		{key: "r", label: "rename", run: func(m *Model) tea.Cmd {
 			p := cur()
-			m.push(ask("Rename @"+p+" to:", p, "", func(m *Model, v string) tea.Cmd {
+			m.push(ask(m.lang.format("Rename @%s to:", p), p, "", func(m *Model, v string) tea.Cmd {
 				if v == "" || v == p {
 					return nil
 				}
 				if err := core.RenamePack(p, v); err != nil {
 					return m.notify(err.Error(), true)
 				}
-				return tea.Batch(m.notify("renamed @"+p+" → @"+v, false), m.reload(false))
+				return tea.Batch(m.notify(m.lang.format("renamed @%s → @%s", p, v), false), m.reload(false))
 			}))
 			return nil
 		}},
 		{key: "d", label: "delete", run: func(m *Model) tea.Cmd {
 			p := cur()
-			m.push(confirm("Delete pack @"+p+"? (the file goes to the trash; skills are not touched)", true, func(m *Model) tea.Cmd {
+			m.push(confirm(m.lang.format("Delete pack @%s? (the file goes to the trash; skills are not touched)", p), true, func(m *Model) tea.Cmd {
 				if _, err := core.DeletePack(p); err != nil {
 					return m.notify(err.Error(), true)
 				}
-				return tea.Batch(m.notify("@"+p+" moved to trash", false), m.reload(false))
+				return tea.Batch(m.notify(m.lang.format("@%s moved to trash", p), false), m.reload(false))
 			}))
 			return nil
 		}},
@@ -360,7 +359,7 @@ func (t *packsTab) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 
 func (t *packsTab) view(m *Model, r rect) []string {
 	lw := r.w / 2
-	left := box("Packs", t.tbl.render(rect{r.x + 1, r.y + 1, lw - 2, r.h - 2}), lw, r.h, t.focus == 0)
+	left := box(m.lang.text("Packs"), t.tbl.render(m.lang, rect{r.x + 1, r.y + 1, lw - 2, r.h - 2}), lw, r.h, t.focus == 0)
 	info := wrapPlain(t.info, r.w-lw-2)
 	if len(info) > 4 {
 		info = info[:4]
@@ -368,7 +367,7 @@ func (t *packsTab) view(m *Model, r rect) []string {
 	for i := range info {
 		info[i] = stDim.Render(info[i])
 	}
-	inner := append(info, t.mem.render(rect{r.x + lw + 1, r.y + 1 + len(info), r.w - lw - 2, r.h - 2 - len(info)})...)
-	right := box("Members", inner, r.w-lw, r.h, t.focus == 1)
+	inner := append(info, t.mem.render(m.lang, rect{r.x + lw + 1, r.y + 1 + len(info), r.w - lw - 2, r.h - 2 - len(info)})...)
+	right := box(m.lang.text("Members"), inner, r.w-lw, r.h, t.focus == 1)
 	return hjoin(left, right)
 }

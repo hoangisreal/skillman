@@ -23,7 +23,7 @@ type projectTab struct {
 func newProjectTab(m *Model) *projectTab {
 	t := &projectTab{}
 	t.tbl = newTable(column{title: " ", width: 1}, column{title: "skill", flex: 4}, column{title: "state", width: 10},
-		column{title: "packs", flex: 3}, column{title: "pin", width: 3}, column{title: "link", width: 6}, column{title: "source", flex: 4})
+		column{title: "packs", flex: 3}, column{title: "pin", width: 4}, column{title: "link", width: 6}, column{title: "source", flex: 4})
 	t.tbl.focused = true
 	t.tbl.empty = "no skills in this project yet — 2 Browse or 1 Library, then i; or s = suggest packs"
 	t.tbl.keyOf = func(i int) string { return t.rows[i].Name }
@@ -35,10 +35,10 @@ func newProjectTab(m *Model) *projectTab {
 		case 1:
 			return r.Name
 		case 2:
-			return styled(r.State)
+			return m.lang.styled(r.State)
 		case 3:
 			if len(r.Packs) == 0 && r.Manual {
-				return stDim.Render("manual")
+				return stDim.Render(m.lang.text("manual"))
 			}
 			return strings.Join(r.Packs, ",")
 		case 4:
@@ -47,7 +47,7 @@ func newProjectTab(m *Model) *projectTab {
 			}
 		case 5:
 			if !r.LinkOK && r.State != "missing" {
-				return stErr.Render("broken")
+				return stErr.Render(m.lang.text("broken"))
 			}
 		case 6:
 			if e := t.man.Skills[r.Name]; e != nil {
@@ -72,15 +72,16 @@ func (t *projectTab) refresh(m *Model) {
 
 func (t *projectTab) run(m *Model, label string, fn func() ([]core.Result, error)) tea.Cmd {
 	t.tbl.sel = map[string]bool{}
-	return m.async(label+" …", func(func(string)) tea.Msg {
+	lang := m.lang
+	return m.async(lang.text(label)+" …", func(func(string)) tea.Msg {
 		rs, err := fn()
 		if err != nil {
 			return doneMsg{note: err.Error(), isErr: true, reload: true}
 		}
-		note, bad := summarize(rs, label)
+		note, bad := summarize(lang, rs, label)
 		d := doneMsg{note: note, isErr: bad, reload: true}
 		if bad || len(rs) > 6 {
-			d.text, d.title = fmtResults(rs), label
+			d.text, d.title = fmtResults(lang, rs), label
 		}
 		return d
 	})
@@ -102,7 +103,7 @@ func (t *projectTab) actions(m *Model) []action {
 				}
 			}
 			if len(risky) > 0 {
-				m.push(confirm(strings.Join(risky, ", ")+" modified in the project. Replace with the library version? (old copy goes to trash)", true,
+				m.push(confirm(m.lang.format("%s modified in the project. Replace with the library version? (old copy goes to trash)", strings.Join(risky, ", ")), true,
 					func(m *Model) tea.Cmd {
 						return t.run(m, "updated", func() ([]core.Result, error) { return core.UpdateProject(p, names, true) })
 					}))
@@ -118,7 +119,7 @@ func (t *projectTab) actions(m *Model) []action {
 			if k == "" {
 				return nil
 			}
-			m.push(newTextModal("diff library ↔ project: "+k, core.DiffText(filepath.Join(core.SKILLS, k), core.Dest(p, k), "library", "project", 0)))
+			m.push(newTextModal(m.lang.format("diff library ↔ project: %s", k), core.DiffText(filepath.Join(core.SKILLS, k), core.Dest(p, k), "library", "project", 0)))
 			return nil
 		}},
 		{key: "x", label: "remove", run: func(m *Model) tea.Cmd {
@@ -127,13 +128,13 @@ func (t *projectTab) actions(m *Model) []action {
 		{key: "P", label: "remove pack", run: func(m *Model) tea.Cmd {
 			ps := t.man.PackNames()
 			if len(ps) == 0 {
-				return m.notify("no packs installed", false)
+				return m.notify(m.lang.text("no packs installed"), false)
 			}
 			var opts []option
 			for _, x := range ps {
 				opts = append(opts, option{x, ""})
 			}
-			m.push(pick("Remove which pack from the project?", opts, func(m *Model, v string) tea.Cmd { return m.uninstallPack(v) }))
+			m.push(pick(m.lang.text("Remove which pack from the project?"), opts, func(m *Model, v string) tea.Cmd { return m.uninstallPack(v) }))
 			return nil
 		}},
 		{key: "a", label: "adopt", run: func(m *Model) tea.Cmd {
@@ -144,7 +145,7 @@ func (t *projectTab) actions(m *Model) []action {
 				}
 			}
 			if len(names) == 0 {
-				return m.notify("select an untracked skill to adopt", false)
+				return m.notify(m.lang.text("select an untracked skill to adopt"), false)
 			}
 			return t.run(m, "adopted", func() ([]core.Result, error) { return core.Adopt(p, names) })
 		}},
@@ -158,7 +159,7 @@ func (t *projectTab) actions(m *Model) []action {
 		}},
 		{key: "s", label: "suggest", run: func(m *Model) tea.Cmd {
 			rows := m.d.rows
-			return m.async("suggesting skills …", func(func(string)) tea.Msg {
+			return m.async(m.lang.text("suggesting skills …"), func(func(string)) tea.Msg {
 				rec := search.Rank(core.NewRecommendationCatalog(), p, rows, "", 5, 0, true)
 				return doneMsg{then: func(m *Model) tea.Cmd {
 					if m.project != p || m.tab() != t {
@@ -169,20 +170,22 @@ func (t *projectTab) actions(m *Model) []action {
 			})
 		}},
 		{key: "o", label: "doctor", run: func(m *Model) tea.Cmd {
-			return m.async("doctor …", func(func(string)) tea.Msg {
+			lang := m.lang
+			return m.async(lang.text("doctor …"), func(func(string)) tea.Msg {
 				icon := map[string]string{"ok": "✓", "warn": "!", "error": "✗"}
 				var lines []string
 				for _, x := range core.Doctor(p) {
-					lines = append(lines, icon[x.Level]+" "+x.Message)
+					lines = append(lines, icon[x.Level]+" "+lang.text(x.Message))
 				}
 				return doneMsg{title: "doctor", text: strings.Join(lines, "\n")}
 			})
 		}},
 		{key: "v", label: "verify", run: func(m *Model) tea.Cmd {
 			if !core.IsFile(filepath.Join(p, ".agents", core.Manifest)) {
-				return m.notify("no .agents/skill-manifest.json: verify (and CI) would fail", true)
+				return m.notify(m.lang.text("no .agents/skill-manifest.json: verify (and CI) would fail"), true)
 			}
-			return m.async("verify …", func(func(string)) tea.Msg {
+			lang := m.lang
+			return m.async(lang.text("verify …"), func(func(string)) tea.Msg {
 				rs := core.Verify(p)
 				bad := 0
 				for _, r := range rs {
@@ -190,46 +193,48 @@ func (t *projectTab) actions(m *Model) []action {
 						bad++
 					}
 				}
-				head := fmt.Sprintf("%d/%d skills match the manifest", len(rs)-bad, len(rs))
+				head := lang.format("%d/%d skills match the manifest", len(rs)-bad, len(rs))
 				if bad > 0 {
-					head += fmt.Sprintf(" · %d would fail CI", bad)
+					head += " · " + lang.format("%d would fail CI", bad)
 				} else {
-					head += " · CI would pass"
+					head += " · " + lang.text("CI would pass")
 				}
-				return doneMsg{title: "verify (CI frozen check)", text: head + "\n\n" + fmtResults(rs)}
+				return doneMsg{title: "verify (CI frozen check)", text: head + "\n\n" + fmtResults(lang, rs)}
 			})
 		}},
 		{key: "A", label: "audit", run: func(m *Model) tea.Cmd {
-			return m.async("audit …", func(func(string)) tea.Msg {
+			lang := m.lang
+			return m.async(lang.text("audit …"), func(func(string)) tea.Msg {
 				rep, err := core.Audit(p, false)
 				if err != nil {
 					return doneMsg{note: err.Error(), isErr: true}
 				}
-				return doneMsg{title: "audit (offline risk scan)", text: auditText(rep)}
+				return doneMsg{title: "audit (offline risk scan)", text: auditText(lang, rep)}
 			})
 		}},
 		{key: "l", label: "fix links", run: func(m *Model) tea.Cmd {
-			return m.async("repairing Claude links and copies …", func(func(string)) tea.Msg {
+			lang := m.lang
+			return m.async(lang.text("repairing Claude links and copies …"), func(func(string)) tea.Msg {
 				msgs, err := core.RepairLinks(p)
 				if err != nil {
 					msgs = append(msgs, err.Error())
 					return doneMsg{title: "Claude paths needing review", text: strings.Join(msgs, "\n"), reload: true}
 				}
 				if len(msgs) == 0 {
-					msgs = []string{"nothing to repair"}
+					msgs = []string{lang.text("nothing to repair")}
 				}
 				return doneMsg{note: strings.Join(msgs, " · "), reload: true}
 			})
 		}},
 		{key: "c", label: "change project", run: func(m *Model) tea.Cmd {
 			var opts []option
-			opts = append(opts, option{"…", "type a path"})
+			opts = append(opts, option{"…", m.lang.text("type a path")})
 			for _, rp := range core.RegisteredProjects() {
 				opts = append(opts, option{rp, ""})
 			}
-			m.push(pick("Switch project", opts, func(m *Model, v string) tea.Cmd {
+			m.push(pick(m.lang.text("Switch project"), opts, func(m *Model, v string) tea.Cmd {
 				if v == "…" {
-					m.push(ask("Project directory:", m.project, "", func(m *Model, v string) tea.Cmd { return m.switchProject(v) }))
+					m.push(ask(m.lang.text("Project directory:"), m.project, "", func(m *Model, v string) tea.Cmd { return m.switchProject(v) }))
 					return nil
 				}
 				return m.switchProject(v)
@@ -244,13 +249,13 @@ func (t *projectTab) actions(m *Model) []action {
 
 func (t *projectTab) showSuggestions(m *Model, rec search.Recommendation) tea.Cmd {
 	if len(rec.Shortlist) == 0 {
-		return m.notify(rec.Message, false)
+		return m.notify(m.lang.text(rec.Message), false)
 	}
 	var options []option
 	for _, c := range rec.Shortlist {
-		options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, c.Evidence, c.AddedTokens, c.State)})
+		options = append(options, option{c.Name, fmt.Sprintf("%s (%s) · +%dt %s", c.Reason, m.lang.text(c.Evidence), c.AddedTokens, m.lang.text(c.State))})
 	}
-	picker := pick("Suggested project skills", options, nil)
+	picker := pick(m.lang.text("Suggested project skills"), options, nil)
 	picker.filter.placeholder = "type to filter · space/click to mark · enter to preview"
 	picker.pickMany = func(m *Model, names []string) tea.Cmd {
 		items, err := core.ExpandItems(names)
@@ -263,14 +268,14 @@ func (t *projectTab) showSuggestions(m *Model, rec search.Recommendation) tea.Cm
 	return nil
 }
 
-func auditText(rep []core.AuditReport) string {
+func auditText(lang language, rep []core.AuditReport) string {
 	cnt := map[string]int{}
 	for _, r := range rep {
 		cnt[r.Level]++
 	}
 	var parts []string
 	for _, lv := range core.AuditLevels {
-		parts = append(parts, fmt.Sprintf("%s=%d", lv, cnt[lv]))
+		parts = append(parts, fmt.Sprintf("%s=%d", lang.text(lv), cnt[lv]))
 	}
 	lines := []string{strings.Join(parts, ", "), ""}
 	sorted := append([]core.AuditReport{}, rep...)
@@ -280,14 +285,14 @@ func auditText(rep []core.AuditReport) string {
 	for _, r := range sorted {
 		ex := ""
 		if len(r.Executables) > 0 {
-			ex = fmt.Sprintf("  (%d executable files)", len(r.Executables))
+			ex = "  " + lang.format("(%d executable files)", len(r.Executables))
 		}
 		lines = append(lines, icon[r.Level]+" "+r.Name+ex)
 		for _, e := range r.Errors {
-			lines = append(lines, "    error: "+e)
+			lines = append(lines, "    "+lang.format("error: %s", e))
 		}
 		for _, e := range r.Review {
-			lines = append(lines, "    review: "+e)
+			lines = append(lines, "    "+lang.format("review: %s", e))
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -303,7 +308,7 @@ func (m *Model) switchProject(p string) tea.Cmd {
 	}
 	m.project = d
 	m.d.loaded = false
-	return tea.Batch(m.notify("project: "+d, false), m.reload(false))
+	return tea.Batch(m.notify(m.lang.format("project: %s", d), false), m.reload(false))
 }
 
 func (t *projectTab) key(m *Model, msg tea.KeyPressMsg) (tea.Cmd, bool) {
@@ -327,21 +332,21 @@ func (t *projectTab) view(m *Model, r rect) []string {
 	sort.Strings(ks)
 	var parts []string
 	for _, k := range ks {
-		parts = append(parts, styled(k)+"="+itoa(cnt[k]))
+		parts = append(parts, m.lang.styled(k)+"="+itoa(cnt[k]))
 	}
-	meter := stOK.Render("ok")
+	meter := m.lang.styled("ok")
 	if t.tb.Total > t.tb.Budget {
-		meter = stErr.Render("over budget")
+		meter = stErr.Render(m.lang.text("over budget"))
 	}
 	loading := ""
 	if !m.d.loaded {
-		loading = stDim.Render(" (computing status…)")
+		loading = stDim.Render(" " + m.lang.text("(computing status…)"))
 	}
 	head := []string{
 		stBold.Render(tilde(m.project)) + loading,
-		"packs: " + orDash(strings.Join(t.man.PackNames(), ", ")) + " · " + strings.Join(parts, " "),
-		fmt.Sprintf("descriptions ≈ %d/%d tokens (%d project + %d global skills) ", t.tb.Total, t.tb.Budget, t.tb.ProjectSkills, t.tb.GlobalSkills) + meter,
+		m.lang.format("packs: %s", orDash(strings.Join(t.man.PackNames(), ", "))) + " · " + strings.Join(parts, " "),
+		m.lang.format("descriptions ≈ %d/%d tokens (%d project + %d global skills) ", t.tb.Total, t.tb.Budget, t.tb.ProjectSkills, t.tb.GlobalSkills) + meter,
 	}
 	out := head
-	return append(out, t.tbl.render(rect{r.x, r.y + len(head), r.w, r.h - len(head)})...)
+	return append(out, t.tbl.render(m.lang, rect{r.x, r.y + len(head), r.w, r.h - len(head)})...)
 }

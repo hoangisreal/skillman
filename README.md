@@ -96,6 +96,10 @@ Run `skillman` from your project. Press `/` to search, `Space` to select, and `i
 
 The Project tab shows what is installed, how it differs from the library, and how much description space it uses. [Project tab screenshot](docs/screenshots/4-project.png) · [All screenshots](docs/screenshots) · [Keyboard shortcuts](docs/commands.md#tui-keys)
 
+### Interface language
+
+Press `9` to open **Settings**, select **English** or **Tiếng Việt** with the arrow keys, and press `Enter`. The interface switches immediately and Skillman remembers your choice for future sessions. [Settings in Vietnamese](docs/screenshots/9-settings.png)
+
 ## Import a skill and recommend it by stack
 
 For a Vue project, start by inspecting a source and previewing a single skill. A GitHub import goes into your local library. Add `-C .` when you also want to install the skill in the current project.
@@ -161,7 +165,7 @@ Commit the converted folders, manifest, and generated `.gitattributes`. If you m
 | Environment variable | Default | Controls |
 | --- | --- | --- |
 | `SKILL_LIBRARY` | `~/skill-library` | Local skills, packs, and upstream sources |
-| `SKILLMAN_STATE` | `~/.local/state/skillman` | Project registry and trash |
+| `SKILLMAN_STATE` | `~/.local/state/skillman` | Project registry, trash, and personal settings |
 | `SKILL_TOKEN_BUDGET` | `2000` | Description token budget reported by `doctor` |
 
 ## Documentation

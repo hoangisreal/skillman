@@ -114,7 +114,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 
 ## TUI keys
 
-Global: `1`–`8` or `[` `]` switch tabs · `tab`/`shift+tab` move between panes · `/` search or filter ·
+Global: `1`–`9` or `[` `]` switch tabs · `tab`/`shift+tab` move between panes · `/` search or filter ·
 `↑↓ j k PgUp PgDn g G` move · `space` select · `ctrl+a` select all shown · `esc` clear · `enter` open ·
 `ctrl+p` command palette · `?` help · `ctrl+r` reload · `q` quit.
 
@@ -131,3 +131,6 @@ the pane under the pointer; drag the `│` divider in Library to resize the prev
 | 6 Upstream | `space` tick · `I` preview import (Enter to continue to confirmation) · `t` only ticked · `V` verify repos · `/` filter |
 | 7 Validation | `/` filter · `enter` open in Library · `v` re-validate |
 | 8 Trash | `R` restore · `D` diff vs library · `x` delete forever · `E` empty |
+| 9 Settings | `↑↓` select English or Tiếng Việt · `enter` apply and save |
+
+Skillman saves the interface language in `settings.json` under `SKILLMAN_STATE` (`~/.local/state/skillman` by default). A fresh installation uses English.

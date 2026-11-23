@@ -48,17 +48,17 @@ func (p *preview) show(m *Model, name string, w int) {
 			}
 			head = append(head, stDim.Render(cls))
 			if len(doc.StackPacks) > 0 {
-				head = append(head, stDim.Render("packs: @"+strings.Join(doc.StackPacks, " @")))
+				head = append(head, stDim.Render(m.lang.format("packs: %s", "@"+strings.Join(doc.StackPacks, " @"))))
 			}
 			if st := m.d.state(name); st != "" {
-				head = append(head, "project: "+styled(st))
+				head = append(head, m.lang.format("project: %s", m.lang.styled(st)))
 			}
 		}
 		text, err := core.ReadText(filepath.Join(core.SKILLS, name, "SKILL.md"))
 		if err != nil {
-			text = "(missing SKILL.md)"
+			text = m.lang.text("(missing SKILL.md)")
 		}
-		lines = append(head, renderMarkdown(text, w, 16000)...)
+		lines = append(head, renderMarkdown(m.lang, text, w, 16000)...)
 		p.cache[ck] = lines
 		p.order = append(p.order, ck)
 		if len(p.order) > 256 { // small LRU-ish bound
@@ -108,7 +108,7 @@ func newLibraryTab(m *Model) *libraryTab {
 		case 3:
 			return d.Row.Source
 		case 4:
-			return styled(d.State)
+			return m.lang.styled(d.State)
 		case 5:
 			if len(d.StackPacks) > 2 {
 				return strings.Join(d.StackPacks[:2], ",") + "…"
@@ -162,7 +162,7 @@ func (t *libraryTab) actions(m *Model) []action {
 			for _, n := range t.tbl.targets() {
 				items = append(items, core.Item{Name: n})
 			}
-			return m.installItems(items, itoa(len(items))+" skill(s)", clear)
+			return m.installItems(items, m.lang.format("%d skill(s)", len(items)), clear)
 		}},
 		{key: "x", label: "remove", run: func(m *Model) tea.Cmd {
 			var names []string
@@ -172,7 +172,7 @@ func (t *libraryTab) actions(m *Model) []action {
 				}
 			}
 			if len(names) == 0 {
-				return m.notify("none of these skills is in the project", true)
+				return m.notify(m.lang.text("none of these skills is in the project"), true)
 			}
 			return m.uninstallSkills(names, clear)
 		}},
@@ -304,19 +304,19 @@ func clampF(v, lo, hi float64) float64 {
 func (t *libraryTab) view(m *Model, r rect) []string {
 	info := " " + itoa(len(t.hits)) + "/" + itoa(len(m.d.ix.Docs))
 	if n := len(t.tbl.sel); n > 0 {
-		info += " · " + itoa(n) + " selected"
+		info += " · " + m.lang.format("%d selected", n)
 	}
 	t.q.area = rect{r.x, r.y, r.w, 1}
-	qline := t.q.render(r.w-len([]rune(info))-1, stAccentB.Render("/ ")) + " " + stDim.Render(info)
+	qline := t.q.render(m.lang, r.w-len([]rune(info))-1, stAccentB.Render("/ ")) + " " + stDim.Render(info)
 	if len(t.tbl.sel) > 0 {
-		qline = t.q.render(r.w-len([]rune(info))-1, stAccentB.Render("/ ")) + " " + stSel.Render(info)
+		qline = t.q.render(m.lang, r.w-len([]rune(info))-1, stAccentB.Render("/ ")) + " " + stSel.Render(info)
 	}
 	lw := int(float64(r.w) * t.split)
 	if r.w < 90 { // narrow terminal: list only, preview on enter
 		lw = r.w
 	}
 	bodyH := r.h - 1
-	listLines := t.tbl.render(rect{r.x, r.y + 1, lw, bodyH})
+	listLines := t.tbl.render(m.lang, rect{r.x, r.y + 1, lw, bodyH})
 	out := []string{fit(qline, r.w)}
 	if lw >= r.w {
 		t.divX = -10

@@ -9,12 +9,12 @@ import (
 
 // renderMarkdown is a small, fast Markdown-to-terminal renderer for SKILL.md previews: headings, lists,
 // quotes, code fences and inline `code` / **bold**. It wraps to w and never re-flows code blocks.
-func renderMarkdown(text string, w int, maxBytes int) []string {
+func renderMarkdown(locale language, text string, w int, maxBytes int) []string {
 	if w < 10 {
 		w = 10
 	}
 	if maxBytes > 0 && len(text) > maxBytes {
-		text = text[:maxBytes] + "\n\n… (truncated; enter = full view)"
+		text = text[:maxBytes] + "\n\n" + locale.text("… (truncated; enter = full view)")
 	}
 	var out []string
 	body := text
@@ -31,11 +31,11 @@ func renderMarkdown(text string, w int, maxBytes int) []string {
 				}
 				for _, k := range []string{"license", "allowed-tools", "version", "compatibility"} {
 					if v, ok := fm[k]; ok {
-						out = append(out, stDim.Render(ansi.Truncate(k+": "+strings.TrimSpace(fmtAny(v)), w, "…")))
+						out = append(out, stDim.Render(ansi.Truncate(locale.text(k)+": "+strings.TrimSpace(fmtAny(v)), w, "…")))
 					}
 				}
 				if _, ok := fm["hooks"]; ok {
-					out = append(out, stErr.Render("hooks: (registers hooks — review!)"))
+					out = append(out, stErr.Render(locale.text("hooks: (registers hooks — review!)")))
 				}
 				out = append(out, stBorder.Render(strings.Repeat("─", w)))
 			}
