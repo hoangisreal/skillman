@@ -42,6 +42,8 @@ type confirmModal struct {
 	btnYes rect
 	btnNo  rect
 	area   rect
+	offset int
+	last   int
 }
 
 func confirm(msg string, danger bool, yes func(m *Model) tea.Cmd) *confirmModal {
@@ -71,6 +73,12 @@ func (c *confirmModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 		return c.answer(m, false)
 	case "left", "right", "tab", "shift+tab", "h", "l":
 		c.focus = 1 - c.focus
+	case "up", "down":
+		delta := 1
+		if msg.String() == "up" {
+			delta = -1
+		}
+		c.offset = max(0, min(c.offset+delta, c.last))
 	case "enter", "space":
 		return c.answer(m, c.focus == 0)
 	}
@@ -78,6 +86,10 @@ func (c *confirmModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (c *confirmModal) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
+	if delta, ok := isWheel(msg); ok {
+		c.offset = max(0, min(c.offset+delta, c.last))
+		return nil
+	}
 	if mm, ok := isClick(msg); ok {
 		switch {
 		case c.btnYes.has(mm.X, mm.Y):
@@ -94,14 +106,22 @@ func (c *confirmModal) mouse(m *Model, msg tea.MouseMsg) tea.Cmd {
 func (c *confirmModal) paste(*Model, string) {}
 
 func (c *confirmModal) view(m *Model, w, h int) ([]string, rect) {
-	mw := min(max(50, w*2/3), 100)
+	mw := min(max(50, w*2/3), 100, w-2)
 	body := wrapPlain(c.msg, mw-4)
-	if len(body) > h-8 {
-		body = append(body[:h-9], "…")
+	hint := h >= 9
+	fixedRows := 3 // two borders and the button row
+	if hint {
+		fixedRows += 2
 	}
-	r := center(w, h, mw, len(body)+5)
+	visible := min(len(body), max(1, h-2-fixedRows))
+	c.last = len(body) - visible
+	c.offset = min(c.offset, c.last)
+	r := center(w, h, mw, visible+fixedRows)
 	c.area = r
 	yes, no := " Yes (y) ", " No (n) "
+	if len(yes)+len(no)+2 > r.w-2 {
+		yes, no = " Yes y ", " No n "
+	}
 	ys, ns := stTabOff, stTabOff
 	if c.focus == 0 {
 		ys = stTabOn
@@ -111,9 +131,16 @@ func (c *confirmModal) view(m *Model, w, h int) ([]string, rect) {
 	if c.danger && c.focus == 0 {
 		ys = stTabOn.Foreground(stErr.GetForeground())
 	}
-	inner := append([]string{}, body...)
-	inner = append(inner, "", ys.Render(yes)+"  "+ns.Render(no))
-	by := r.y + 1 + len(body) + 1
+	inner := append([]string{}, body[c.offset:c.offset+visible]...)
+	if hint {
+		line := ""
+		if c.last > 0 {
+			line = stDim.Render("↑↓ scroll")
+		}
+		inner = append(inner, line)
+	}
+	by := r.y + 1 + len(inner)
+	inner = append(inner, ys.Render(yes)+"  "+ns.Render(no))
 	c.btnYes = rect{r.x + 1, by, len(yes), 1}
 	c.btnNo = rect{r.x + 1 + len(yes) + 2, by, len(no), 1}
 	title := "Confirm"
@@ -303,18 +330,25 @@ func (p *pickModal) view(m *Model, w, h int) ([]string, rect) {
 // ───────────── text viewer ─────────────
 
 type textModal struct {
-	title string
-	text  string
-	v     viewer
-	width int
-	area  rect
+	title  string
+	text   string
+	v      viewer
+	width  int
+	area   rect
+	accept func(m *Model) tea.Cmd
 }
 
 func newTextModal(title, text string) *textModal { return &textModal{title: title, text: text} }
 
 func (t *textModal) key(m *Model, msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
-	case "esc", "q", "enter":
+	case "enter":
+		m.pop()
+		if t.accept != nil {
+			return t.accept(m)
+		}
+		return nil
+	case "esc", "q":
 		m.pop()
 		return nil
 	}
@@ -344,7 +378,11 @@ func (t *textModal) view(m *Model, w, h int) ([]string, rect) {
 		t.v.offset = off
 	}
 	inner := t.v.render(rect{r.x + 1, r.y + 1, r.w - 2, r.h - 3})
-	inner = append(inner, stDim.Render("↑↓ PgUp PgDn wheel · esc / q / enter = close"))
+	hint := "↑↓ PgUp PgDn wheel · esc / q / enter = close"
+	if t.accept != nil {
+		hint = "Enter to continue · Esc to cancel · ↑↓ to review"
+	}
+	inner = append(inner, stDim.Render(hint))
 	return box(t.title, inner, r.w, r.h, true), r
 }
 

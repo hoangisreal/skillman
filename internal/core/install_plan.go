@@ -29,7 +29,7 @@ func decideInstall(project, src string, item Item, prev *Entry, force, copies bo
 	if !decision.inLibrary {
 		if item.Pack != "" && !item.Manual {
 			decision.action = "skipped"
-			return refuse("skipped: not in the library yet (listed by @%s; import it: skillman upstream tick --pack %s)", item.Pack, item.Pack)
+			return refuse("skipped: not in the library yet (listed by @%s); %s", item.Pack, PackImportHint(item.Pack))
 		}
 		return refuse("not in library (try: skillman search %s)", strings.Split(name, "-")[0])
 	}

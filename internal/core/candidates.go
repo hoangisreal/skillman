@@ -69,25 +69,33 @@ func ReadCandidates() []Candidate {
 }
 
 func SetTicks(changes map[int]bool) error {
-	md := filepath.Join(STAGING, "CANDIDATES.md")
 	unlock, err := DirLock(STAGING)
 	if err != nil {
 		return err
 	}
 	defer unlock()
+	return setTicks(changes)
+}
+
+func setTicks(changes map[int]bool) error {
+	if len(changes) == 0 {
+		return nil
+	}
+	md := filepath.Join(STAGING, "CANDIDATES.md")
 	t, err := ReadText(md)
 	if err != nil {
 		return err
 	}
 	lines := strings.Split(strings.TrimSuffix(t, "\n"), "\n")
 	for i, on := range changes {
-		if i >= 0 && i < len(lines) && candRx.MatchString(lines[i]) {
-			mark := "- [ ]"
-			if on {
-				mark = "- [x]"
-			}
-			lines[i] = mark + lines[i][5:]
+		if i < 0 || i >= len(lines) || !candRx.MatchString(lines[i]) {
+			return errf("line %d is not a candidate; run skillman upstream candidates for current line numbers", i)
 		}
+		mark := "- [ ]"
+		if on {
+			mark = "- [x]"
+		}
+		lines[i] = mark + lines[i][5:]
 	}
 	return AtomicWrite(md, []byte(strings.Join(lines, "\n")+"\n"))
 }
@@ -293,6 +301,19 @@ func VerifyRepos(reposFile string, jobs int, progress func(RepoResult)) ([]RepoR
 		}(i, e)
 	}
 	wg.Wait()
+	unlock, err := DirLock(STAGING)
+	if err != nil {
+		return results, err
+	}
+	defer unlock()
+	previous := loadCandidatesMeta()
+	type selection struct{ repo, commit, name, path string }
+	selected := map[selection]bool{}
+	for _, c := range ReadCandidates() {
+		if c.Ticked {
+			selected[selection{c.Repo, previous[c.Repo].Commit, c.Name, c.Path}] = true
+		}
+	}
 	b, _ := MarshalPy(results, 1)
 	if err := AtomicWrite(filepath.Join(STAGING, "candidates.json"), b); err != nil {
 		return results, err
@@ -340,7 +361,11 @@ func VerifyRepos(reposFile string, jobs int, progress func(RepoResult)) ([]RepoR
 				if len(flags) > 0 {
 					fl = " · " + strings.Join(flags, " ")
 				}
-				md = append(md, fmt.Sprintf("- [ ] `%s` — %s <sub>%s · %dL%s</sub>", s.Name, runeCut(s.Description, 140), s.Path, s.Lines, fl))
+				mark := " "
+				if selected[selection{r.Repo, r.Commit, s.Name, s.Path}] {
+					mark = "x"
+				}
+				md = append(md, fmt.Sprintf("- [%s] `%s` — %s <sub>%s · %dL%s</sub>", mark, s.Name, runeCut(s.Description, 140), s.Path, s.Lines, fl))
 			}
 		}
 		md = append(md, "")
@@ -382,6 +407,11 @@ type TickOptions struct {
 
 // Tick marks candidates by rule; never ticks `collides`. Returns a summary line.
 func Tick(o TickOptions) (string, error) {
+	unlock, err := DirLock(STAGING)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	meta := loadCandidatesMeta()
 	if len(meta) == 0 {
 		return "", errf("no staging/candidates.json (run: skillman upstream verify)")
@@ -408,9 +438,6 @@ func Tick(o TickOptions) (string, error) {
 				wanted[s] = true
 			}
 		}
-		if o.Repos == nil && o.Tier == "" {
-			okRepos = map[string]bool{}
-		}
 	}
 	cands := ReadCandidates()
 	pick := map[string]int{}
@@ -420,7 +447,7 @@ func Tick(o TickOptions) (string, error) {
 			return len(meta[ordered[i].Repo].Licenses) > 0 && len(meta[ordered[j].Repo].Licenses) == 0
 		})
 		for _, c := range ordered {
-			if _, done := pick[c.Name]; wanted[c.Name] && !done && !c.Collides && (okRepos[c.Repo] || len(okRepos) == 0) {
+			if _, done := pick[c.Name]; wanted[c.Name] && !done && !c.Collides && okRepos[c.Repo] {
 				pick[c.Name] = c.Line
 			}
 		}
@@ -439,7 +466,7 @@ func Tick(o TickOptions) (string, error) {
 			changes[c.Line] = on
 		}
 	}
-	if err := SetTicks(changes); err != nil {
+	if err := setTicks(changes); err != nil {
 		return "", err
 	}
 	after := ReadCandidates()
@@ -484,17 +511,46 @@ func Tick(o TickOptions) (string, error) {
 type ImportLine struct {
 	Repo   string `json:"repo"`
 	Name   string `json:"name"`
+	Commit string `json:"commit,omitempty"`
+	Path   string `json:"path,omitempty"`
 	Result string `json:"result"` // IMPORTED UPDATED SKIPPED FAILED DRY-RUN
 	Detail string `json:"detail"`
 }
 
+type QueueImportOptions struct {
+	DryRun, Update, RenameCollisions, AllowRisky bool
+	Reviewed                                     []ImportLine // optional preview to require at apply time
+}
+
 // ImportTicked imports skills ticked [x] in CANDIDATES.md through the safety pipeline (import-skills.py).
-func ImportTicked(dry, update, renameCollisions bool, progress func(ImportLine)) ([]ImportLine, error) {
-	meta := loadCandidatesMeta()
+func ImportTicked(opts QueueImportOptions, progress func(ImportLine)) ([]ImportLine, error) {
+	if !IsDir(STAGING) {
+		if opts.Reviewed != nil {
+			return nil, errf("upstream selection changed; preview the import again")
+		}
+		return nil, nil
+	}
+	unlock, err := DirLock(STAGING)
+	if err != nil {
+		return nil, err
+	}
 	var picks []Candidate
 	for _, c := range ReadCandidates() {
 		if c.Ticked {
 			picks = append(picks, c)
+		}
+	}
+	meta := loadCandidatesMeta()
+	unlock()
+	if opts.Reviewed != nil {
+		if len(picks) != len(opts.Reviewed) {
+			return nil, errf("upstream selection changed; preview the import again")
+		}
+		for i, c := range picks {
+			prev := opts.Reviewed[i]
+			if prev.Repo != c.Repo || prev.Name != c.Name || prev.Path != c.Path || prev.Commit != meta[c.Repo].Commit {
+				return nil, errf("upstream selection changed; preview the import again")
+			}
 		}
 	}
 	if len(picks) == 0 {
@@ -503,40 +559,71 @@ func ImportTicked(dry, update, renameCollisions bool, progress func(ImportLine))
 	if len(meta) == 0 {
 		return nil, errf("no staging/candidates.json (run: skillman upstream verify)")
 	}
-	os.MkdirAll(CACHE, 0o755)
+	if !opts.DryRun {
+		unlock, err := DirLock(SKILLS)
+		if err != nil {
+			return nil, err
+		}
+		defer unlock()
+	}
 	stamp := Now()
 	var log []ImportLine
-	add := func(l ImportLine) {
-		log = append(log, l)
-		if progress != nil {
-			progress(l)
-		}
-	}
-	for _, c := range picks {
+	for i, c := range picks {
 		r, ok := meta[c.Repo]
+		add := func(result, detail string) {
+			l := ImportLine{Repo: c.Repo, Name: c.Name, Commit: r.Commit, Path: c.Path, Result: result, Detail: detail}
+			log = append(log, l)
+			if progress != nil {
+				progress(l)
+			}
+		}
+		if opts.Reviewed != nil && opts.Reviewed[i].Result != "DRY-RUN" {
+			prev := opts.Reviewed[i]
+			add(prev.Result, prev.Detail)
+			continue
+		}
 		if !ok || r.Commit == "" {
-			add(ImportLine{c.Repo, c.Name, "FAILED", "repo not in candidates.json; rerun upstream verify"})
+			add("FAILED", "repo not in candidates.json; rerun upstream verify")
+			continue
+		}
+		if err := CheckName(c.Name); err != nil {
+			add("FAILED", err.Error())
 			continue
 		}
 		destName, target := c.Name, filepath.Join(SKILLS, c.Name)
 		if Lexists(target) {
+			if IsSymlink(target) || IsSymlink(filepath.Join(target, "SOURCE.json")) {
+				add("FAILED", "symlink at library destination")
+				continue
+			}
 			src := LoadMap(filepath.Join(target, "SOURCE.json"))
-			same := getStr(src, "repo") == c.Repo
+			same := getStr(src, "repo") == c.Repo && path.Clean(getStr(src, "subpath")) == c.Path
 			mods := len(strList(src["local_modifications"])) > 0
+			pinned, _ := src["pinned"].(bool)
 			switch {
-			case same && update && !mods:
+			case same && opts.Update && !mods && !pinned:
+				if err := requireCleanLibrary("skills/" + c.Name); err != nil {
+					add("FAILED", err.Error())
+					continue
+				}
+				if getStr(src, "commit") == r.Commit {
+					add("SKIPPED", "already at the selected commit")
+					continue
+				}
 			case same:
 				d := "exists (use --update)"
-				if mods {
+				if pinned {
+					d = "pinned in the library"
+				} else if mods {
 					d = "has local_modifications (use skillman library check/apply)"
 				}
-				add(ImportLine{c.Repo, c.Name, "SKIPPED", d})
+				add("SKIPPED", d)
 				continue
-			case renameCollisions:
+			case opts.RenameCollisions:
 				destName = strings.ToLower(strings.SplitN(c.Repo, "/", 2)[0]) + "-" + c.Name
 				target = filepath.Join(SKILLS, destName)
 				if Lexists(target) {
-					add(ImportLine{c.Repo, c.Name, "SKIPPED", destName + " also exists"})
+					add("SKIPPED", destName+" also exists")
 					continue
 				}
 			default:
@@ -544,12 +631,12 @@ func ImportTicked(dry, update, renameCollisions bool, progress func(ImportLine))
 				if o == "" {
 					o = "local skill"
 				}
-				add(ImportLine{c.Repo, c.Name, "SKIPPED", "name collides with " + o})
+				add("SKIPPED", "name collides with "+o)
 				continue
 			}
 		}
 		if !KEBAB.MatchString(destName) {
-			add(ImportLine{c.Repo, c.Name, "SKIPPED", "name not kebab-case"})
+			add("SKIPPED", "name not kebab-case")
 			continue
 		}
 		staged, mods, err := Materialize(c.Repo, r.Commit, c.Path, destName, r.Tier, nil)
@@ -558,39 +645,52 @@ func ImportTicked(dry, update, renameCollisions bool, progress func(ImportLine))
 			if strings.Contains(err.Error(), "license") {
 				kind = "SKIPPED"
 			}
-			add(ImportLine{c.Repo, c.Name, kind, err.Error()})
+			add(kind, err.Error())
 			continue
 		}
-		if dry {
+		note, err := checkImportAudit(staged, destName, opts.AllowRisky)
+		if err != nil {
+			os.RemoveAll(staged)
+			add("FAILED", err.Error())
+			continue
+		}
+		if note != "" {
+			mods = append(mods, note)
+		}
+		if opts.DryRun {
 			os.RemoveAll(staged)
 			d := "-> skills/" + destName
 			if len(mods) > 0 {
 				d += " (" + strings.Join(mods, "; ") + ")"
 			}
-			add(ImportLine{c.Repo, c.Name, "DRY-RUN", d})
+			add("DRY-RUN", d)
 			continue
 		}
 		existed, err := InstallIntoLibrary(staged, destName)
 		if err != nil {
-			add(ImportLine{c.Repo, c.Name, "FAILED", err.Error()})
+			os.RemoveAll(staged)
+			add("FAILED", err.Error())
 			continue
 		}
 		kind := "IMPORTED"
 		if existed {
 			kind = "UPDATED"
 		}
-		add(ImportLine{c.Repo, c.Name, kind, "skills/" + destName})
+		detail := "skills/" + destName
+		if note != "" {
+			detail += " (" + note + ")"
+		}
+		add(kind, detail)
+	}
+	if opts.DryRun {
+		return log, nil
 	}
 	p := filepath.Join(LIB, "IMPORT_LOG.md")
 	head := ""
 	if !Exists(p) {
 		head = "# Import log\n"
 	}
-	dr := ""
-	if dry {
-		dr = " (dry-run)"
-	}
-	lines := []string{fmt.Sprintf("\n## %s%s", stamp, dr), "", "| repo | skill | result | detail |", "|---|---|---|---|"}
+	lines := []string{fmt.Sprintf("\n## %s", stamp), "", "| repo | skill | result | detail |", "|---|---|---|---|"}
 	for _, l := range log {
 		lines = append(lines, fmt.Sprintf("| %s | %s | %s | %s |", l.Repo, l.Name, l.Result, strings.ReplaceAll(l.Detail, "|", "/")))
 	}

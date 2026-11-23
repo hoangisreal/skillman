@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -294,6 +293,10 @@ func (c installChange) rollback() error {
 
 func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry, reason string) (c installChange, err error) {
 	c.dest, c.link = Dest(d, name), LinkP(d, name)
+	hasMirror := copies && Lexists(c.link)
+	if hasMirror && !replaceableMirror(d, name, previous) {
+		return c, errf("modified or unmanaged Claude copy: %s", c.link)
+	}
 	if IsSymlink(c.link) {
 		c.previousLink, err = os.Readlink(c.link)
 		if err != nil {
@@ -334,10 +337,7 @@ func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry,
 		c.copied = true
 	}
 	if copies {
-		if Lexists(c.link) {
-			if !managedMirror(c.link, previous) {
-				return c, errf("modified or unmanaged Claude copy: %s", c.link)
-			}
+		if hasMirror {
 			if TreeHash(c.link) == TreeHash(c.dest) {
 				return c, nil
 			}
@@ -401,7 +401,7 @@ func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, err
 		}
 		dest, lp := Dest(d, name), LinkP(d, name)
 		mirror := man.copyMode() && Lexists(lp)
-		if mirror && !managedMirror(lp, man.Skills[name]) {
+		if mirror && !replaceableMirror(d, name, man.Skills[name]) {
 			out = append(out, res(name, false, "modified or unmanaged Claude copy: %s", lp))
 			continue
 		}
@@ -567,7 +567,7 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 			r.LinkOK = linkOK(d, name, copies, hash)
 		}
 		switch {
-		case IsSymlink(dest) || (Exists(dest) && !IsDir(dest)):
+		case IsSymlink(dest) || (Exists(dest) && !regularSkill(dest)):
 			r.State = "invalid"
 		case !Exists(dest):
 			r.State = "missing"
@@ -639,27 +639,40 @@ func RepairLinks(d string) ([]string, error) {
 	}
 	copies := man.copyMode()
 	var msgs []string
-	for _, p := range DanglingLinks(d) {
-		os.Remove(p)
-		msgs = append(msgs, "removed dangling link "+filepath.Base(p))
+	var problems []error
+	if !copies {
+		for _, p := range DanglingLinks(d) {
+			if err := os.Remove(p); err != nil {
+				problems = append(problems, err)
+				continue
+			}
+			msgs = append(msgs, "removed dangling link "+filepath.Base(p))
+		}
 	}
 	sk := filepath.Join(d, ".agents", "skills")
 	for _, e := range SortedDir(sk) {
-		p := filepath.Join(sk, e.Name())
-		if IsDir(p) && !IsSymlink(p) && !strings.HasPrefix(e.Name(), ".") && !linkOK(d, e.Name(), copies, TreeHash) {
-			lp := LinkP(d, e.Name())
-			if Lexists(lp) && !IsSymlink(lp) {
-				msgs = append(msgs, fmt.Sprintf("skip %s: %s is a real directory", e.Name(), lp))
-				continue
-			}
-			if err := link(d, e.Name(), copies); err != nil {
-				msgs = append(msgs, err.Error())
-				continue
-			}
-			msgs = append(msgs, "linked "+e.Name())
+		name := e.Name()
+		if !KEBAB.MatchString(name) || !regularSkill(Dest(d, name)) || linkOK(d, name, copies, TreeHash) {
+			continue
+		}
+		prev := man.Skills[name]
+		if copies && prev != nil && Lexists(LinkP(d, name)) && !replaceableMirror(d, name, prev) {
+			problems = append(problems, errf("%s: %s", name, mirrorProblem(d, name, prev, TreeHash)))
+			continue
+		}
+		change, err := installFiles(d, name, "", false, copies, prev, "")
+		if err != nil {
+			problems = append(problems, errf("%s: %v", name, err))
+			continue
+		}
+		change.finish()
+		if copies {
+			msgs = append(msgs, "refreshed Claude copy "+name)
+		} else {
+			msgs = append(msgs, "linked "+name)
 		}
 	}
-	return msgs, nil
+	return msgs, errors.Join(problems...)
 }
 
 // UpdateProject refreshes outdated skills (pinned skipped; modified/conflict need force).
@@ -695,7 +708,7 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 	}
 	rows := projectStatus(d, man)
 	st := StatusMap(rows)
-	targets := names
+	targets := dedup(names)
 	if len(targets) == 0 {
 		for _, r := range rows {
 			if r.State == "outdated" {
@@ -721,15 +734,26 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 		case r.Pinned && !force:
 			out = append(out, res(name, false, "pinned (unpin or --force)"))
 			continue
+		case r.State == "missing" && (!force || !r.InLibrary):
+			msg := "project copy is missing and unavailable in the library"
+			if r.InLibrary {
+				msg = "project copy is missing; run skillman add or update --force to restore it"
+			}
+			out = append(out, res(name, false, "%s", msg))
+			continue
 		case (r.State == "modified" || r.State == "conflict") && !force:
 			out = append(out, res(name, false, "%s locally (review diff; --force to replace)", r.State))
 			continue
-		case !(r.State == "outdated" || r.State == "modified" || r.State == "conflict") || !r.InLibrary:
+		case !(r.State == "outdated" || r.State == "modified" || r.State == "conflict" || r.State == "missing") || !r.InLibrary:
 			out = append(out, res(name, false, "cannot update from state %s", r.State))
 			continue
 		}
 		src := filepath.Join(SKILLS, name)
 		prev := man.Skills[name]
+		verb := "update"
+		if r.State == "missing" {
+			verb = "restore missing copy"
+		}
 		if dry {
 			switch {
 			case IsSymlink(filepath.Join(src, "SKILL.md")):
@@ -738,7 +762,7 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 				if err := checkInstallTargets(d, name, prev, copies); err != nil {
 					out = append(out, res(name, false, "%v", err))
 				} else {
-					out = append(out, res(name, true, "would update"))
+					out = append(out, res(name, true, "would %s", verb))
 				}
 			}
 			continue
@@ -752,9 +776,13 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 		e := newEntry(src, "", prev)
 		e.Manual = prev != nil && prev.Manual
 		man.Skills[name] = e
-		out = append(out, res(name, true, "updated"))
+		message := "updated"
+		if r.State == "missing" {
+			message = "restored missing copy"
+		}
+		out = append(out, res(name, true, "%s", message))
 	}
-	if dry {
+	if dry || len(changes) == 0 {
 		return out, nil
 	}
 	if err := WriteManifest(d, man); err != nil {
@@ -786,7 +814,7 @@ func Adopt(d string, names []string) ([]Result, error) {
 		return nil, err
 	}
 	st := StatusMap(rows)
-	targets := names
+	targets := dedup(names)
 	if len(targets) == 0 {
 		for _, r := range rows {
 			if r.State == "untracked" {
@@ -802,8 +830,14 @@ func Adopt(d string, names []string) ([]Result, error) {
 	}
 	copies := man.copyMode()
 	var out []Result
+	var changes []installChange
+	adopted := false
 	for _, name := range targets {
 		r, ok := st[name]
+		if ok && !r.Tracked && r.State == "invalid" {
+			out = append(out, res(name, false, "invalid project skill: expected a real folder with a regular SKILL.md"))
+			continue
+		}
 		if !ok || r.State != "untracked" {
 			out = append(out, res(name, false, "not untracked"))
 			continue
@@ -817,21 +851,39 @@ func Adopt(d string, names []string) ([]Result, error) {
 		if !same {
 			e.TreeHash = TreeHash(Dest(d, name)) // current copy is the baseline -> outdated
 		}
-		if err := link(d, name, copies); err != nil {
-			out = append(out, res(name, false, "%v", err))
-			continue
+		if !linkOK(d, name, copies, TreeHash) {
+			change, err := installFiles(d, name, "", false, copies, nil, "")
+			if err != nil {
+				out = append(out, res(name, false, "%v", err))
+				continue
+			}
+			changes = append(changes, change)
 		}
 		man.Skills[name] = e
+		adopted = true
 		msg := "adopted"
 		if !same {
 			msg += " (differs from library → outdated)"
 		}
 		out = append(out, res(name, true, "%s", msg))
 	}
-	err = WriteManifest(d, man)
+	if !adopted {
+		unlock()
+		return out, nil
+	}
+	if err := WriteManifest(d, man); err != nil {
+		for i := len(changes) - 1; i >= 0; i-- {
+			err = errors.Join(err, changes[i].rollback())
+		}
+		unlock()
+		return out, err
+	}
+	for _, c := range changes {
+		c.finish()
+	}
 	unlock()
 	RegisterProject(d)
-	return out, err
+	return out, nil
 }
 
 func SetPin(d string, names []string, pinned bool) ([]Result, error) {
@@ -947,12 +999,14 @@ func Doctor(d string) []Diagnostic {
 	add := func(lv, f string, a ...any) { out = append(out, Diagnostic{lv, sprintf(f, a...)}) }
 	copies := man.copyMode()
 	for _, r := range rows {
-		if copies && r.Tracked && !r.LinkOK && r.State != "missing" {
-			add("warn", "%s: Claude copy missing or differs from %s", LinkP(d, r.Name), Dest(d, r.Name))
+		if copies && r.Tracked && !r.LinkOK && r.State != "missing" && r.State != "invalid" {
+			add("warn", "%s: %s", r.Name, mirrorProblem(d, r.Name, man.Skills[r.Name], TreeHash))
 		}
 		switch s := r.State; {
 		case s == "ok" && !r.LinkOK && !copies:
 			add("warn", "%s: .claude/skills link missing/broken (fix: repair-links)", r.Name)
+		case s == "invalid" && !r.Tracked:
+			add("error", "%s: invalid project skill (expected a real folder with a regular SKILL.md)", r.Name)
 		case s == "missing" || s == "invalid":
 			add("error", "%s: %s (manifest says installed)", r.Name, s)
 		case s == "outdated" || s == "modified" || s == "conflict" || s == "orphan" || s == "untracked":
@@ -1040,7 +1094,11 @@ func Verify(d string) []Result {
 		case !regularSkill(dest):
 			out = append(out, res(name, false, "missing, or not a real directory"))
 		case !linkOK(d, name, copies, hash):
-			out = append(out, res(name, false, "broken .claude/skills link (run: skillman repair-links)"))
+			msg := "broken .claude/skills link (run: skillman repair-links)"
+			if copies {
+				msg = mirrorProblem(d, name, e, hash)
+			}
+			out = append(out, res(name, false, "%s", msg))
 		case hash(dest) != e.TreeHash:
 			if e.Pinned {
 				out = append(out, res(name, true, "pinned, edited locally"))
@@ -1061,11 +1119,11 @@ type Affected struct {
 }
 
 func ProjectsAffected(names []string) []Affected {
-	var out []Affected
+	out := []Affected{}
 	for _, p := range RegisteredProjects() {
 		var st []string
 		for _, r := range ProjectStatus(p) {
-			if r.State == "outdated" && (len(names) == 0 || contains(names, r.Name)) {
+			if r.State == "outdated" && !r.Pinned && (len(names) == 0 || contains(names, r.Name)) {
 				st = append(st, r.Name)
 			}
 		}

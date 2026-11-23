@@ -41,12 +41,14 @@ if [ "$GLOBAL_SKILL" = 1 ]; then
 fi
 
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "add $BIN to PATH";; esac
-LIB="${SKILL_LIBRARY:-$HOME/skill-library}"
-cat <<EOF
+cat <<'EOF'
 
-Next:
-  skillman upstream verify -j 8                       # list candidate skills from $LIB/staging/repos.txt
-  skillman upstream tick --tier official --max-per-repo 40   # or tick in the TUI (tab 6, space)
-  skillman upstream import                            # import through the safety gates
-  cd your-project && skillman recommend . && skillman  # pick skills, or browse them in the TUI (tab 2)
+Preview and import the core starter skills.
+  skillman bootstrap --pack core --dry-run
+  skillman bootstrap --pack core
+
+From your project directory, see recommendations and preview an install.
+  skillman recommend --brief
+  skillman add tdd --dry-run
+  skillman                                            # open the terminal UI
 EOF

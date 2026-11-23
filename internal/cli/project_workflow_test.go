@@ -211,3 +211,147 @@ func TestProjectVerifyClaudeLinkTarget(t *testing.T) {
 	runOK(t, "repair-links", "-C", project)
 	runOK(t, "verify", "-C", project)
 }
+
+func TestProjectRecovery(t *testing.T) {
+	lib, project := setup(t)
+	runOK(t, "repair-links", "-C", project, "--mode", "copy")
+	runOK(t, "add", "-C", project, "vitest")
+	canon := filepath.Join(core.Dest(project, "vitest"), "SKILL.md")
+	mirror := filepath.Join(core.LinkP(project, "vitest"), "SKILL.md")
+	read := func(path string) string {
+		t.Helper()
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(body)
+	}
+	write := func(path, contents string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	projectEdit := read(canon) + "\nEdited in the project."
+	write(canon, projectEdit)
+	runOK(t, "repair-links", "-C", project)
+	if read(mirror) != projectEdit {
+		t.Fatal("repair did not refresh the unchanged Claude copy")
+	}
+	runOK(t, "pin", "-C", project, "vitest")
+	runOK(t, "verify", "-C", project)
+
+	mirrorEdit := read(mirror) + "\nIndependent Claude edit."
+	write(mirror, mirrorEdit)
+	if rc, _, err := run(t, "verify", "-C", project); rc != 1 || !strings.Contains(err, "Claude copy has local changes") {
+		t.Fatalf("verify: rc=%d %s", rc, err)
+	}
+	var blocked struct{ Error string }
+	if rc := runJSON(t, &blocked, "repair-links", "-C", project); rc != 1 || !strings.Contains(blocked.Error, "Claude copy has local changes") {
+		t.Fatalf("repair: rc=%d %+v", rc, blocked)
+	}
+	if read(mirror) != mirrorEdit || read(canon) != projectEdit {
+		t.Fatal("repair changed user edits")
+	}
+	write(mirror, projectEdit)
+	runOK(t, "unpin", "-C", project, "vitest")
+	runOK(t, "add", "-C", project, "vitest", "--force")
+	runOK(t, "verify", "-C", project)
+
+	runOK(t, "add", "-C", project, "tdd")
+	runOK(t, "pin", "-C", project, "tdd")
+	libraryTDD := filepath.Join(lib, "skills", "tdd", "SKILL.md")
+	original := read(libraryTDD)
+	write(libraryTDD, original+"\nLibrary revision.")
+	var affected struct{ Projects []core.Affected }
+	if rc := runJSON(t, &affected, "update-projects", "--dry-run"); rc != 0 || affected.Projects == nil || len(affected.Projects) != 0 {
+		t.Fatalf("pinned skill should not be offered for a project update: rc=%d %+v", rc, affected)
+	}
+	runOK(t, "update-projects")
+	write(libraryTDD, original)
+	runOK(t, "unpin", "-C", project, "tdd")
+	if err := os.RemoveAll(core.Dest(project, "tdd")); err != nil {
+		t.Fatal(err)
+	}
+	if rc, _, err := run(t, "update", "-C", project, "tdd", "--dry-run"); rc != 1 || !strings.Contains(err, "skillman add") {
+		t.Fatalf("missing copy guidance: rc=%d %s", rc, err)
+	}
+	runOK(t, "update", "-C", project, "tdd", "--force", "--dry-run")
+	if core.Lexists(core.Dest(project, "tdd")) {
+		t.Fatal("preview restored a copy")
+	}
+	runOK(t, "update", "-C", project, "tdd", "--force")
+	runOK(t, "verify", "-C", project)
+
+	invalid := core.Dest(project, "review-pr")
+	if err := os.Mkdir(invalid, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if rc, _, msg := run(t, "adopt", "-C", project, "review-pr"); rc != 1 || !strings.Contains(msg, "regular SKILL.md") {
+		t.Fatalf("adopt invalid directory: rc=%d %s", rc, msg)
+	}
+	if core.Lexists(core.LinkP(project, "review-pr")) || core.ReadManifest(project).Skills["review-pr"] != nil {
+		t.Fatal("adopt recorded an invalid directory")
+	}
+	if err := os.Remove(invalid); err != nil {
+		t.Fatal(err)
+	}
+
+	stateFile := filepath.Join(t.TempDir(), "unusable-state")
+	write(stateFile, "Force the in-project fallback")
+	t.Setenv("SKILLMAN_STATE", stateFile)
+	core.Configure()
+	runOK(t, "remove", "-C", project, "tdd")
+	var trash struct{ Entries []core.TrashEntry }
+	if rc := runJSON(t, &trash, "trash", "list", "-C", project); rc != 0 || len(trash.Entries) != 1 {
+		t.Fatalf("fallback trash: rc=%d %+v", rc, trash)
+	}
+	id := trash.Entries[0].S("id")
+	var restored struct{ ID string }
+	if rc := runJSON(t, &restored, "trash", "restore", id, "-C", project); rc != 0 || restored.ID != id {
+		t.Fatalf("restore fallback trash: rc=%d %+v", rc, restored)
+	}
+	runOK(t, "verify", "-C", project)
+	runOK(t, "remove", "-C", project, "tdd")
+	var empty struct{ Deleted int }
+	if rc := runJSON(t, &empty, "trash", "empty", "--yes", "-C", project); rc != 0 || empty.Deleted != 1 {
+		t.Fatalf("empty fallback trash: rc=%d %+v", rc, empty)
+	}
+	if len(core.ListTrash(project)) != 0 {
+		t.Fatal("trash empty left fallback entries")
+	}
+}
+
+func TestTrashReportsFailedDeletion(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("requires POSIX file permissions as a non-root user")
+	}
+	setup(t)
+	runOK(t, "pack", "create", "qa-trash", "vitest")
+	runOK(t, "pack", "delete", "qa-trash")
+	entries := core.ListTrash("")
+	if len(entries) != 1 {
+		t.Fatalf("expected one trash entry, got %+v", entries)
+	}
+	slot := entries[0].S("slot")
+	if err := os.Chmod(slot, 0555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(slot, 0755)
+	var report struct {
+		Deleted int
+		Error   string
+	}
+	id := entries[0].S("id")
+	if rc := runJSON(t, &report, "trash", "empty", "--yes", id); rc != 1 || report.Deleted != 0 || report.Error == "" {
+		t.Fatalf("read-only trash deletion: rc=%d %+v", rc, report)
+	}
+	if !core.IsFile(filepath.Join(slot, "qa-trash.yaml")) {
+		t.Fatal("failed deletion did not preserve the trashed pack")
+	}
+	if err := os.Chmod(slot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runOK(t, "trash", "restore", id)
+	runOK(t, "pack", "show", "qa-trash")
+}

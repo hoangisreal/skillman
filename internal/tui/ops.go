@@ -48,57 +48,56 @@ func summarize(rs []core.Result, verb string) (string, bool) {
 // installItems confirms (with the token cost) and installs into the current project.
 func (m *Model) installItems(items []core.Item, label string, after func()) tea.Cmd {
 	if len(items) == 0 {
+		return m.notify("no skills to install", true)
+	}
+	proj, originTab := m.project, m.tab()
+	return m.async("checking install …", func(func(string)) tea.Msg {
+		preview, err := core.PreviewInstall(proj, items, false)
+		if err != nil {
+			return doneMsg{note: err.Error(), isErr: true}
+		}
+		return doneMsg{then: func(m *Model) tea.Cmd {
+			if m.project != proj || m.tab() != originTab {
+				return nil
+			}
+			return m.confirmInstall(preview, items, label, after)
+		}}
+	})
+}
+
+func (m *Model) confirmInstall(plan core.InstallPreview, items []core.Item, label string, after func()) tea.Cmd {
+	var ready, problems []string
+	for _, s := range plan.Skills {
+		line := fmt.Sprintf("%s · %s", s.Name, s.Reason)
+		if s.Action == "blocked" || s.Action == "skipped" {
+			problems = append(problems, line)
+		} else {
+			ready = append(ready, line)
+		}
+	}
+	if len(ready) == 0 {
+		m.push(newTextModal("No skills can be installed", strings.Join(problems, "\n")))
 		return nil
 	}
-	tok, have := 0, 0
-	var missing []string
-	for _, it := range items {
-		src := filepath.Join(core.SKILLS, it.Name)
-		if !core.IsFile(filepath.Join(src, "SKILL.md")) {
-			missing = append(missing, it.Name)
-			continue
-		}
-		if !core.NeedsProjectCopy(m.d.state(it.Name)) {
-			have++
-			continue
-		}
-		tok += core.SkillTokens(src)
-	}
-	tb := core.TokenBudgetOf(m.project)
-	names := make([]string, 0, 12)
-	for i, it := range items {
-		if i == 12 {
-			names = append(names, "…")
-			break
-		}
-		names = append(names, it.Name)
-	}
-	msg := fmt.Sprintf("Install %s into\n%s\n\n%d skill(s): %s\n≈%d tokens of descriptions → %d/%d", label, m.project,
-		len(items), strings.Join(names, ", "), tok, tb.Total+tok, tb.Budget)
-	if have > 0 {
-		msg += fmt.Sprintf("\n(%d already in the project)", have)
-	}
-	if len(missing) > 0 {
-		msg += "\n⚠ not in library: " + strings.Join(missing, ", ")
-	}
-	if tb.Total+tok > tb.Budget {
+	msg := fmt.Sprintf("Install %s into\n%s\n\n%d ready · %d blocked or skipped\n≈%d added description tokens → %d/%d",
+		label, plan.Project, len(ready), len(problems), plan.AddedTokens, plan.BudgetAfter, plan.Budget)
+	if plan.BudgetAfter > plan.Budget {
 		msg += "\n⚠ over the description token budget"
 	}
-	proj := m.project
-	m.push(confirm(msg, false, func(m *Model) tea.Cmd {
+	msg += "\n\n" + strings.Join(append(problems, ready...), "\n")
+	m.push(confirm(msg, len(problems) > 0, func(m *Model) tea.Cmd {
 		if after != nil {
 			after()
 		}
 		return m.async("installing "+label+" …", func(func(string)) tea.Msg {
-			rs, err := core.Install(proj, items, false)
+			rs, err := core.Install(plan.Project, items, false)
 			if err != nil {
 				return doneMsg{note: err.Error(), isErr: true}
 			}
 			s := core.SummarizeInstall(rs)
 			note := fmt.Sprintf("%d installed, %d already present, %d skipped, %d failed", s.Installed, s.Present, s.Skipped, s.Failed)
-			bad := !s.OK()
-			d := doneMsg{note: note, isErr: bad, reload: true}
-			if bad {
+			d := doneMsg{note: note, isErr: !s.OK(), reload: true}
+			if d.isErr {
 				d.text, d.title = fmtResults(rs), "install "+label
 			}
 			return d

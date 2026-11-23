@@ -301,9 +301,18 @@ func progressLine(json bool) func(string, int, int) {
 }
 
 func printUpdateReport(a *Args, rep *core.UpdateReport, mode string) int {
+	rc := 0
+	for _, result := range rep.Results {
+		if !result.OK {
+			rc = 1
+		}
+	}
+	if len(rep.Errors) > 0 {
+		rc = 1
+	}
 	if a.Has("json") {
 		printJSON(rep)
-		return 0
+		return rc
 	}
 	cnt := map[string]int{}
 	for _, it := range rep.Items {
@@ -336,10 +345,7 @@ func printUpdateReport(a *Args, rep *core.UpdateReport, mode string) int {
 	for _, e := range rep.Errors {
 		errfln("  error: %s", e)
 	}
-	rc := 0
-	if len(rep.Results) > 0 {
-		rc = printResults(rep.Results)
-	}
+	printResults(rep.Results)
 	if aff := core.ProjectsAffected(nil); len(aff) > 0 && mode != "check" {
 		outf("projects with outdated skills (run: skillman update-projects):\n")
 		for _, p := range aff {
@@ -444,7 +450,7 @@ func cmdLibrary(a *Args) int {
 				for _, p := range missing {
 					ps[p.Pack] = true
 				}
-				outf("packs reference %d skill(s) not in the library yet (%d packs). Import them: skillman upstream tick --pack <name> && skillman upstream import\n", len(missing), len(ps))
+				outf("packs reference %d skill(s) not in the library yet (%d packs). Start with skillman bootstrap --pack core --dry-run or review sources with skillman upstream verify.\n", len(missing), len(ps))
 				if a.Has("v") {
 					for _, p := range missing {
 						outf("  %s: %s\n", p.Pack, p.Problem)
@@ -569,6 +575,9 @@ func cmdUpstream(a *Args) int {
 		return 0
 	case "tick":
 		if lines := a.List("line"); len(lines) > 0 {
+			if len(rest) > 0 {
+				return usage("skillman upstream tick --line N")
+			}
 			ch := map[int]bool{}
 			for _, l := range lines {
 				n, err := strconv.Atoi(l)
@@ -588,7 +597,12 @@ func cmdUpstream(a *Args) int {
 			o.Repos = a.List("repo")
 		}
 		if a.Has("pack") {
-			o.Packs = a.List("pack")
+			o.Packs = append(a.List("pack"), rest...)
+			if len(o.Packs) == 0 {
+				return usage("skillman upstream tick --pack <name>…")
+			}
+		} else if len(rest) > 0 {
+			return usage("skillman upstream tick [--pack <name>…] [--repo <owner/repo>]")
 		}
 		msg, err := core.Tick(o)
 		if err != nil {
@@ -598,7 +612,8 @@ func cmdUpstream(a *Args) int {
 		return 0
 	case "import":
 		dry := a.Has("dry-run")
-		log, err := core.ImportTicked(dry, a.Has("update"), a.Has("rename-collisions"), func(l core.ImportLine) {
+		opts := core.QueueImportOptions{DryRun: dry, Update: a.Has("update"), RenameCollisions: a.Has("rename-collisions"), AllowRisky: a.Has("allow-risky")}
+		log, err := core.ImportTicked(opts, func(l core.ImportLine) {
 			if !a.Has("json") {
 				outf("%-9s %s:%s  %s\n", l.Result, l.Repo, l.Name, l.Detail)
 			}
@@ -607,12 +622,17 @@ func cmdUpstream(a *Args) int {
 			return fail(err)
 		}
 		if log == nil {
-			outf("nothing ticked in staging/CANDIDATES.md\n")
-			return 0
+			log = []core.ImportLine{}
+			if !a.Has("json") {
+				outf("nothing ticked in staging/CANDIDATES.md\n")
+			}
 		}
-		changed := false
+		rc, changed := 0, false
 		for _, l := range log {
 			changed = changed || l.Result == "IMPORTED" || l.Result == "UPDATED"
+			if l.Result == "FAILED" {
+				rc = 1
+			}
 		}
 		if changed {
 			rows, e, w, err := core.RebuildIndex(true)
@@ -626,7 +646,7 @@ func cmdUpstream(a *Args) int {
 		if a.Has("json") {
 			printJSON(map[string]any{"dry_run": dry, "results": log})
 		}
-		return 0
+		return rc
 	}
 	return helpFor("upstream")
 }
@@ -638,9 +658,20 @@ func cmdTrash(a *Args) int {
 	if len(a.Pos) > 0 {
 		sub = a.Pos[0]
 	}
+	project := ""
+	if a.Has("C") {
+		if a.Str("C", "") == "" {
+			return usage("skillman trash " + sub + " [-C dir]")
+		}
+		var err error
+		project, err = core.ResolveProject(a.Str("C", ""), false)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	switch sub {
 	case "list":
-		es := core.ListTrash("")
+		es := core.ListTrash(project)
 		if a.Has("json") {
 			if es == nil {
 				es = []core.TrashEntry{}
@@ -656,13 +687,17 @@ func cmdTrash(a *Args) int {
 		if len(a.Pos) != 2 {
 			return usage("skillman trash restore <id>")
 		}
-		for _, e := range core.ListTrash("") {
+		for _, e := range core.ListTrash(project) {
 			if e.S("id") == a.Pos[1] {
 				msg, err := core.RestoreTrash(e.S("slot"))
 				if err != nil {
 					return fail(err)
 				}
-				outf("%s\n", msg)
+				if a.Has("json") {
+					printJSON(map[string]any{"id": e.S("id"), "message": msg})
+				} else {
+					outf("%s\n", msg)
+				}
 				return 0
 			}
 		}
@@ -671,18 +706,29 @@ func cmdTrash(a *Args) int {
 		if !a.Has("yes") {
 			return fail(fmt.Errorf("refusing to empty trash without --yes"))
 		}
-		var slots []string
-		if len(a.Pos) > 1 {
-			for _, e := range core.ListTrash("") {
-				if core.Contains(a.Pos[1:], e.S("id")) {
-					slots = append(slots, e.S("slot"))
-				}
-			}
-			if slots == nil {
-				return fail(fmt.Errorf("no matching trash entries"))
+		slots := []string{}
+		for _, e := range core.ListTrash(project) {
+			if len(a.Pos) == 1 || core.Contains(a.Pos[1:], e.S("id")) {
+				slots = append(slots, e.S("slot"))
 			}
 		}
-		outf("deleted %d trash entries\n", core.EmptyTrash(slots))
+		if len(a.Pos) > 1 && len(slots) == 0 {
+			return fail(fmt.Errorf("no matching trash entries"))
+		}
+		deleted, err := core.EmptyTrash(slots)
+		if a.Has("json") {
+			report := map[string]any{"deleted": deleted}
+			if err != nil {
+				report["error"] = err.Error()
+			}
+			printJSON(report)
+		} else {
+			outf("deleted %d trash entries\n", deleted)
+		}
+		if err != nil {
+			errfln("skillman: %v", err)
+			return 1
+		}
 		return 0
 	}
 	return helpFor("trash")

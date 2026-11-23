@@ -504,9 +504,20 @@ func (m *Model) render() string {
 	// tab bar
 	m.tabZones = m.tabZones[:0]
 	var tb strings.Builder
-	x := 0
+	total := 0
+	for _, t := range m.tabs {
+		total += 4 + ansi.StringWidth(t.title())
+	}
+	x, titleWidth := 0, (w-4*len(m.tabs))/len(m.tabs)
 	for i, t := range m.tabs {
 		label := " " + itoa(i+1) + " " + t.title() + " "
+		if total > w {
+			if titleWidth > 0 {
+				label = " " + itoa(i+1) + " " + ansi.Truncate(t.title(), titleWidth, "…") + " "
+			} else {
+				label = itoa(i+1) + " "
+			}
+		}
 		lw := ansi.StringWidth(label)
 		if i == m.active {
 			tb.WriteString(stTabOn.Render(label))
@@ -545,6 +556,8 @@ func (m *Model) render() string {
 		} else {
 			st = stOK.Render("✓ ") + m.note
 		}
+	case len(m.d.rows) == 1 && m.d.rows[0].Name == core.SelfSkill:
+		st = stDim.Render("Load starter skills. " + core.PackImportHint("core"))
 	}
 	proj := stDim.Render(" project: " + tilde(m.project))
 	if ansi.StringWidth(st)+ansi.StringWidth(proj) < w {
@@ -563,17 +576,13 @@ func (m *Model) footer(w int) string {
 	m.hintZone = m.hintZone[:0]
 	var sb strings.Builder
 	x := 0
-	acts := m.tab().actions(m)
-	acts = append(acts, action{key: "?", label: "help", run: func(m *Model) tea.Cmd { m.push(newHelpModal(m)); return nil }},
-		action{key: "ctrl+p", label: "commands", run: func(m *Model) tea.Cmd { m.push(newPalette(m)); return nil }})
-	for _, a := range acts {
-		if a.hidden {
-			continue
-		}
+	help := action{key: "?", label: "help", run: func(m *Model) tea.Cmd { m.push(newHelpModal(m)); return nil }}
+	palette := action{key: "ctrl+p", label: "commands", run: func(m *Model) tea.Cmd { m.push(newPalette(m)); return nil }}
+	add := func(a action, limit int) bool {
 		seg := stKey.Render(a.key) + " " + a.label + "  "
 		sw := ansi.StringWidth(seg)
-		if x+sw > w {
-			break
+		if x+sw > limit {
+			return false
 		}
 		sb.WriteString(seg)
 		m.hintZone = append(m.hintZone, struct {
@@ -581,7 +590,15 @@ func (m *Model) footer(w int) string {
 			a action
 		}{rect{x, m.h - 1, sw - 2, 1}, a})
 		x += sw
+		return true
 	}
+	for _, a := range m.tab().actions(m) {
+		if !a.hidden && !add(a, w-len("? help  ")) {
+			break
+		}
+	}
+	add(help, w)
+	add(palette, w)
 	return fit(sb.String(), w)
 }
 

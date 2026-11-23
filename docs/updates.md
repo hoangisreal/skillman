@@ -82,9 +82,11 @@ The same checks run offline over any project or the whole library with `skillman
   Updates tab (5), where `enter` shows the upstream changelog, the risk verdict and the full diff.
 - `library apply` applies what you selected; risky items still need `--allow-risky`.
 - The directory swap is atomic, `SOURCE.json` gets the new commit, the index is rebuilt and the library repo gets a
-  commit listing each skill and its `old → new` upstream commit.
+  commit listing each skill and its `old → new` upstream commit. Unrelated staged changes stay in the index.
 - `library rollback <name>` restores the previous version from the library's git history and pins it, so the next check
   does not offer the same update again. `library unpin` releases it.
+
+Library update commands return exit code 1 when a check fails or an update is blocked. This applies to both text and JSON output. An `auto-safe` run can apply some updates and queue others, so check the individual results.
 
 ## Projects
 

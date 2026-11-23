@@ -335,6 +335,20 @@ func TestTUIFlow(t *testing.T) {
 	d.press("c")
 	check(t, up.items["alpha"].Status == "changed" && up.items["beta"].Status == "changed", "check all: %v %v", up.items["alpha"].Status, up.items["beta"].Status)
 	up.tbl.cursor = 0
+	d.press("enter")
+	if len(m.modals) != 1 || !strings.Contains(d.screen(), "v2") {
+		t.Fatal("missing first staged diff")
+	}
+	d.press("esc")
+	mkskill(t, filepath.Join(e.up, "skills"), "alpha", "alpha v3", "Latest upstream revision.\n")
+	sh(t, e.up, "git", "add", "-A")
+	sh(t, e.up, "git", "commit", "-qm", "v3")
+	sh(t, e.up, "git", "push", "-q", e.bare, "main")
+	d.press("c", "enter")
+	if len(m.modals) != 1 || !strings.Contains(m.modals[0].(*textModal).text, "Latest upstream revision.") {
+		t.Fatal("re-check still showed a stale staged diff")
+	}
+	d.press("esc")
 	d.press("space", "space", "a")
 	_, ok = m.modals[len(m.modals)-1].(*pickModal)
 	check(t, ok, "risky choice dialog")
@@ -343,7 +357,7 @@ func TestTUIFlow(t *testing.T) {
 	check(t, !strings.Contains(string(b), "v2"), "esc on the risky dialog cancels everything")
 	d.press("a", "enter") // first option: safe only
 	b, _ = os.ReadFile(filepath.Join(e.lib, "skills/alpha/SKILL.md"))
-	check(t, strings.Contains(string(b), "v2"), "safe update applied")
+	check(t, strings.Contains(string(b), "Latest upstream revision."), "latest safe update applied")
 	b, _ = os.ReadFile(filepath.Join(e.lib, "skills/beta/SKILL.md"))
 	check(t, !strings.Contains(string(b), "hooks"), "risky update not applied")
 	check(t, strings.Contains(sh(t, e.lib, "git", "log", "-1", "--format=%s"), "Update 1 skill"), "library commit")
@@ -415,6 +429,96 @@ func TestAdoptUsesProjectSelection(t *testing.T) {
 	d.press("down", "a")
 	if !installed(e.proj)["beta"] {
 		t.Fatal("selected untracked skill was not adopted")
+	}
+}
+
+func TestInstallPreviewShowsBlockedAndUnavailableSkills(t *testing.T) {
+	e := setup(t)
+	if err := core.CopyTree(filepath.Join(core.SKILLS, "alpha"), core.Dest(e.proj, "alpha"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.SavePack(&core.Pack{Name: "core", Skills: []string{"not-downloaded"}}); err != nil {
+		t.Fatal(err)
+	}
+	d := newDriver(t, e.proj)
+	d.press("/", "a", "l", "p", "h", "a", "enter", "i")
+	m := d.m
+	if len(m.modals) != 1 {
+		t.Fatalf("missing preview: %d modals", len(m.modals))
+	}
+	info, ok := m.modals[0].(*textModal)
+	if !ok || !strings.Contains(info.text, "skillman adopt") {
+		t.Fatalf("preview did not explain the untracked copy: %v", m.modals[0])
+	}
+	d.press("y")
+	if core.Lexists(core.LinkP(e.proj, "alpha")) || len(installed(e.proj)) != 0 {
+		t.Fatal("preview accepted a blocked install")
+	}
+	d.press("esc", "3")
+	packs := m.tabs[2].(*packsTab)
+	if !strings.Contains(packs.info, "0/1 available") || !strings.Contains(packs.info, "skillman bootstrap --pack core --dry-run") {
+		t.Fatalf("empty starter pack guidance: %s", packs.info)
+	}
+	d.press("i")
+	if len(m.modals) != 1 {
+		t.Fatalf("missing preview for unavailable pack: %d modals", len(m.modals))
+	}
+	info, ok = m.modals[0].(*textModal)
+	if !ok || !strings.Contains(info.text, "skillman bootstrap --pack core") {
+		t.Fatalf("preview did not explain how to populate @core: %v", m.modals[0])
+	}
+}
+
+func TestUpstreamRequiresReadingPreviewBeforeConfirmation(t *testing.T) {
+	e := setup(t)
+	mkskill(t, filepath.Join(e.up, "skills"), "fresh-docs", "Documentation review", "Review Markdown.\n")
+	mkskill(t, filepath.Join(e.up, "skills"), "other-docs", "Another documentation skill", "Read the examples.\n")
+	sh(t, e.up, "git", "add", "-A")
+	sh(t, e.up, "git", "commit", "-qm", "add documentation skill")
+	sh(t, e.up, "git", "push", "-q", e.bare, "main")
+	repos := filepath.Join(core.STAGING, "repos.txt")
+	if err := os.WriteFile(repos, []byte("official core acme/skills\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	d := newDriver(t, e.proj)
+	d.press("6", "V", "y", "/")
+	d.typeText("fresh-docs")
+	d.press("enter", "space", "I")
+	if len(d.m.modals) != 1 {
+		t.Fatalf("expected a single preview modal: %d", len(d.m.modals))
+	}
+	pre, ok := d.m.modals[0].(*textModal)
+	if !ok || !strings.Contains(pre.text, "fresh-docs") || pre.accept == nil {
+		t.Fatalf("missing preview or continue action: %v", d.m.modals[0])
+	}
+	d.press("enter")
+	if len(d.m.modals) != 1 {
+		t.Fatal("confirmation did not replace the preview")
+	}
+	if _, ok := d.m.modals[0].(*confirmModal); !ok {
+		t.Fatal("expected confirmation after preview")
+	}
+	other := -1
+	for _, c := range core.ReadCandidates() {
+		if c.Name == "other-docs" {
+			other = c.Line
+			break
+		}
+	}
+	if err := core.SetTicks(map[int]bool{other: true}); err != nil {
+		t.Fatal(err)
+	}
+	d.press("y")
+	if !strings.Contains(d.m.note, "selection changed") || core.IsDir(filepath.Join(core.SKILLS, "fresh-docs")) || core.IsDir(filepath.Join(core.SKILLS, "other-docs")) {
+		t.Fatal("confirmed an import after the reviewed selection changed")
+	}
+	if err := core.SetTicks(map[int]bool{other: false}); err != nil {
+		t.Fatal(err)
+	}
+	d.press("I", "enter")
+	d.press("y")
+	if !core.IsFile(filepath.Join(core.SKILLS, "fresh-docs", "SKILL.md")) {
+		t.Fatal("confirmed candidate did not import")
 	}
 }
 
@@ -502,7 +606,7 @@ func sortFloats(xs []float64) {
 func TestRenderAnySize(t *testing.T) {
 	e := setup(t)
 	d := newDriver(t, e.proj)
-	for _, sz := range [][2]int{{1, 1}, {8, 3}, {20, 6}, {40, 12}, {80, 24}, {120, 40}, {250, 70}} {
+	for _, sz := range [][2]int{{1, 1}, {8, 3}, {20, 6}, {50, 8}, {40, 12}, {80, 24}, {120, 40}, {250, 70}} {
 		d.send(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
 		for i := range d.m.tabs {
 			d.m.setTab(i)
@@ -520,6 +624,18 @@ func TestRenderAnySize(t *testing.T) {
 		d.m.setTab(0)
 		d.press("enter")
 		d.screen()
+		d.press("esc", "i")
+		screen := ansi.Strip(d.screen())
+		if sz[0] >= 20 && sz[1] >= 6 && !strings.Contains(screen, "Yes") {
+			t.Fatalf("missing confirm buttons at %v:\n%s", sz, screen)
+		}
 		d.press("esc")
+		if sz[0] == 80 {
+			d.press("4")
+			screen = ansi.Strip(d.screen())
+			if !strings.Contains(screen, "8 Trash") || !strings.Contains(screen, "? help") {
+				t.Fatalf("narrow view hid navigation or help:\n%s", screen)
+			}
+		}
 	}
 }
