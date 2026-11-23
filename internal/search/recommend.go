@@ -51,8 +51,12 @@ func Recommend(project string, rows []core.IndexRow, task string, limit, extra i
 	return Rank(core.NewRecommendationCatalog(), project, rows, task, limit, extra, false)
 }
 
-func Rank(catalog *core.RecommendationCatalog, project string, rows []core.IndexRow, task string, limit, extra int, brief bool) Recommendation {
-	r := Recommendation{Recommendation: catalog.Candidates(project, rows, -1), Shortlist: []Choice{}, InstallArgs: []string{}}
+func Rank(catalog *core.RecommendationCatalog, project string, rows []core.IndexRow, task string, limit, extra int, brief bool, declared ...core.Suggestion) Recommendation {
+	r := Recommendation{Recommendation: catalog.Candidates(project, rows, -1, declared...), Shortlist: []Choice{}, InstallArgs: []string{}}
+	if r.Err != nil {
+		r.Message = r.Err.Error()
+		return r
+	}
 	words := strings.Fields(strings.ToLower(task))
 	var ranked []Choice
 	// Only resolve a name once, even when several groups contain it.
@@ -152,7 +156,10 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		r.Groups = nil
 	}
 	if len(r.Shortlist) == 0 {
-		r.Message = "No matching local skills. Browse the library or preview a starter pack with skillman bootstrap --pack <pack> --dry-run."
+		r.Message = "No matching local skills. Browse the library, preview a starter pack (core, web-vue, postgres) with skillman bootstrap --pack <pack> --dry-run, or preview an import from a chosen source."
+	}
+	if !r.HasStack {
+		r.Message = strings.TrimSpace("No project stack detected. Pass --stack <id> when known, or preview @core with skillman add -C <project> @core --dry-run. " + r.Message)
 	}
 	for _, c := range r.Shortlist {
 		if !core.NeedsProjectCopy(c.State) {

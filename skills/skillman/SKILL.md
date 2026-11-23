@@ -13,14 +13,17 @@ Every command is non-interactive; add `--json` to read results reliably. `skillm
 ## Choose skills for this project
 Start with one call to **`skillman recommend -C <project> --brief --json`**. For a specific task, add
 `--task "<keywords>"`. Translate Vietnamese requests into a few catalog keywords, such as `vue test`
-or `postgres migration`. Omit the task for a cross-stack selection.
+or `postgres migration`. Omit the task for a cross-stack selection. In a new folder, use `--stack <id>`
+for a stack the user has chosen, repeating it for multiple stacks. If the stack is open, offer the local
+`@core` pack as a starting point.
 
 Show the shortlisted names with their source, stack evidence file, matched keywords, project state
 and added tokens. Use `info <name> --json` only when a decision needs more detail. If the shortlist is
 empty, say which capability is missing locally.
 
 After the user chooses, run `skillman add -C <project> <chosen names> --dry-run --json` using the exact
-project path returned. Install those names with the same arguments without `--dry-run` and report the
+project path returned. Check preview `ok` and each `action` for blocked or skipped skills. Install the
+approved names with the same arguments without `--dry-run` and report the
 actual results. Check `status -C <project> --json` and `verify -C <project> --json`.
 
 ## Import a supplied GitHub source
@@ -44,6 +47,7 @@ installation failed, use `retry_args` after resolving the reported cause.
 
 ## Inspect
 - `skillman status --json` — state per skill: ok, outdated, modified, conflict, untracked, missing, orphan.
+- `skillman status --agents --json` — locations and duplicates by client. Add `--include-global` when checking personal skills.
 - `skillman doctor --json` — links, shadowing by global skills, token budget, packs with missing skills.
 - `skillman audit . --json` — offline risk scan (hooks, download-piped-to-shell, credential reads, broad
   `allowed-tools`, symlinks, executables). `skillman verify .` is the CI check (needs no library).

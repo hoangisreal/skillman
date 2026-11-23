@@ -1,5 +1,17 @@
 # Project skill selection measurements
 
+## Project status in copy mode
+
+On Linux, `status -C <project> --json` compared 100 tracked skills against matching Claude copies and a matching
+local library. Each tree had a `SKILL.md` and a roughly 3 KB reference. Both binaries reported 100 healthy rows.
+Timing uses 50 fresh processes per binary after five warmups, with the order alternated and the OS file cache enabled.
+A separate `strace` counted successful opens of the manifest and one representative canonical `SKILL.md`.
+
+| Build | p50 | p95 | Manifest opens | Canonical `SKILL.md` opens per skill |
+|---|---:|---:|---:|---:|
+| `f8f2929` | 56.59 ms | 68.17 ms | 101 | 2 |
+| Shared manifest and hashes | 20.36 ms | 26.90 ms | 1 | 1 |
+
 ## Recommendation CLI
 
 Each cell shows the full JSON command at `d8d8e84` followed by the new `--brief --json` command. Both ran `recommend -C <project> --task "vue test"` against the same files. Every run ranked `vue-testing-best-practices` first.

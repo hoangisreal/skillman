@@ -145,6 +145,8 @@ type RecGroup struct {
 }
 
 type Recommendation struct {
+	HasStack     bool       `json:"-"`
+	Err          error      `json:"-"`
 	Project      string     `json:"project"`
 	Groups       []RecGroup `json:"groups"`
 	Budget       Budget     `json:"budget"`
@@ -216,12 +218,38 @@ func Recommend(d string, rows []IndexRow, extra int) Recommendation {
 	return r
 }
 
+// DeclaredSignals maps explicit stack IDs to local packs and packless groups.
+func (c *RecommendationCatalog) DeclaredSignals(ids []string) ([]Suggestion, error) {
+	var signals []Suggestion
+	for _, id := range dedup(ids) {
+		stack := c.tax.Stack(id)
+		if stack == nil {
+			return nil, errf("unknown stack %q (see: skillman taxonomy)", id)
+		}
+		start := len(signals)
+		for _, pack := range stack.Packs {
+			if c.available[pack] {
+				signals = append(signals, Suggestion{Pack: pack, Stack: id, Reason: "declared:" + id})
+			}
+		}
+		if len(signals) == start {
+			signals = append(signals, Suggestion{Stack: id, Reason: "declared:" + id})
+		}
+	}
+	return signals, nil
+}
+
 // Candidates builds groups from index metadata, leaving filesystem checks to the caller.
-func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int) Recommendation {
+func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int, declared ...Suggestion) Recommendation {
 	tax := c.tax
-	sugg := projectSignals(d, c.available)
-	man := ReadManifest(d)
-	status := projectStatus(d, man)
+	sugg := declared
+	if len(sugg) == 0 {
+		sugg = projectSignals(d, c.available)
+	}
+	status, man, err := InspectProject(d)
+	if err != nil {
+		return Recommendation{Project: d, Err: err}
+	}
 	st := StatusMap(status)
 	byName := map[string]*IndexRow{}
 	for i := range rows {
@@ -232,6 +260,7 @@ func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int)
 		rec.ProjectState = append(rec.ProjectState, s.Name)
 	}
 	for _, sg := range sugg {
+		rec.HasStack = rec.HasStack || sg.Reason != "baseline"
 		g := RecGroup{Pack: sg.Pack, Reason: sg.Reason, Stacks: []string{}, Skills: []RecSkill{}, Installed: man.Packs.Has(sg.Pack)}
 		var members []string
 		if sg.Pack != "" {
@@ -248,9 +277,11 @@ func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int)
 			}
 			stackIDs[sg.Stack] = true
 		}
-		for _, s := range tax.StacksForPack(sg.Pack) {
-			g.Stacks = append(g.Stacks, s.ID)
-			stackIDs[s.ID] = true
+		if len(declared) == 0 && sg.Pack != "" {
+			for _, s := range tax.StacksForPack(sg.Pack) {
+				g.Stacks = append(g.Stacks, s.ID)
+				stackIDs[s.ID] = true
+			}
 		}
 		mk := func(name string, inPack bool) RecSkill {
 			r := RecSkill{Name: name, InPack: inPack, State: st[name].State}

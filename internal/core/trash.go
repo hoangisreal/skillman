@@ -105,6 +105,7 @@ func RestoreTrash(slot string) (string, error) {
 	}
 	kind, name := getStr(m, "kind"), getStr(m, "name")
 	proj := getStr(m, "project")
+	var man *ManifestData
 	if kind == "skill" {
 		if err := CheckName(name); err != nil {
 			return "", err
@@ -117,6 +118,10 @@ func RestoreTrash(slot string) (string, error) {
 			return "", err
 		}
 		defer unlock()
+		man, _, err = LoadProjectManifest(proj)
+		if err != nil {
+			return "", err
+		}
 		if Lexists(origin) || Lexists(LinkP(proj, name)) {
 			return "", errf("restore destination occupied")
 		}
@@ -128,11 +133,10 @@ func RestoreTrash(slot string) (string, error) {
 		return "", err
 	}
 	if kind == "skill" {
-		if err := link(proj, name); err != nil {
+		if err := link(proj, name, man.copyMode()); err != nil {
 			return "", errors.Join(err, Move(origin, payload[0]))
 		}
 		if me, ok := m["manifest_entry"].(map[string]any); ok && me != nil {
-			man := ReadManifest(proj)
 			man.Skills[name] = entryFromMap(me)
 			if err := WriteManifest(proj, man); err != nil {
 				return "", errors.Join(err, os.RemoveAll(LinkP(proj, name)), Move(origin, payload[0]))

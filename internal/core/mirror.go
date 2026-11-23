@@ -7,14 +7,34 @@ import (
 	"strings"
 )
 
-func copyMode(d string) bool {
-	var mode string
-	return ReadManifest(d).top.Get("claude_mode", &mode) && mode == "copy"
+func managedMirror(p string, e *Entry) bool {
+	return e != nil && regularSkill(p) && TreeHash(p) == e.TreeHash
 }
 
-func managedMirror(d, name string, e *Entry) bool {
-	p := LinkP(d, name)
-	return e != nil && copyMode(d) && !IsSymlink(p) && IsDir(p) && TreeHash(p) == e.TreeHash
+func checkMirrorTarget(path string, prev *Entry, copies bool) error {
+	root := filepath.Dir(path)
+	for _, dir := range []string{filepath.Dir(root), root} {
+		info, err := os.Lstat(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return errf("%s is not a directory", dir)
+		}
+	}
+	if !Lexists(path) {
+		return nil
+	}
+	if copies && !managedMirror(path, prev) {
+		return errf("modified or unmanaged Claude copy: %s", path)
+	}
+	if !copies && !IsSymlink(path) {
+		return errf("%s exists and is not a symlink; refusing to overwrite", path)
+	}
+	return nil
 }
 func createMirror(src, dst string) error {
 	if Lexists(dst) {
@@ -65,7 +85,11 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		}
 		defer unlock()
 	}
-	m := ReadManifest(d)
+	m, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
+	copies := m.copyMode()
 	var msgs []string
 	var changes []installChange
 	rollback := func(err error) error {
@@ -82,7 +106,7 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		if IsSymlink(src) || !IsFile(filepath.Join(src, "SKILL.md")) {
 			return msgs, rollback(errf("invalid source: %s", src))
 		}
-		if managedMirror(d, n, m.Skills[n]) {
+		if copies && managedMirror(lp, m.Skills[n]) {
 			continue
 		}
 		if TreeHash(src) != m.Skills[n].TreeHash {

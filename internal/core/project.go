@@ -41,8 +41,9 @@ func CheckName(name string) error {
 // CheckProjectDirs refuses to write through symlinked .agents/.claude dirs (a repo could point them anywhere).
 func CheckProjectDirs(d string) error {
 	for _, sub := range []string{".agents", ".agents/skills", ".claude", ".claude/skills"} {
-		if IsSymlink(filepath.Join(d, sub)) {
-			return errf("%s is a symlink; refusing to write through it", filepath.Join(d, sub))
+		path := filepath.Join(d, sub)
+		if IsSymlink(path) {
+			return errf("%s is a symlink; refusing to write through it", path)
 		}
 	}
 	return nil
@@ -58,8 +59,8 @@ func ProjectLock(d string) (func(), error) {
 func Dest(d, name string) string  { return filepath.Join(d, ".agents", "skills", name) }
 func LinkP(d, name string) string { return filepath.Join(d, ".claude", "skills", name) }
 
-func link(d, name string) error {
-	if copyMode(d) {
+func link(d, name string, copies bool) error {
+	if copies {
 		return createMirror(Dest(d, name), LinkP(d, name))
 	}
 	return setSkillLink(LinkP(d, name), "../../.agents/skills/"+name)
@@ -94,11 +95,43 @@ func setSkillLink(lp, target string) error {
 }
 
 func LinkOK(d, name string) bool {
-	lp := LinkP(d, name)
-	if copyMode(d) {
-		return !IsSymlink(lp) && IsFile(filepath.Join(lp, "SKILL.md")) && TreeHash(lp) == TreeHash(Dest(d, name))
+	return linkOK(d, name, ReadManifest(d).copyMode(), TreeHash)
+}
+
+func linkOK(d, name string, copies bool, hash func(string) string) bool {
+	lp, dest := LinkP(d, name), Dest(d, name)
+	if !regularSkill(dest) {
+		return false
 	}
-	return IsSymlink(lp) && IsFile(filepath.Join(lp, "SKILL.md")) && !IsSymlink(filepath.Join(Dest(d, name), "SKILL.md"))
+	if copies {
+		return regularSkill(lp) && hash(lp) == hash(dest)
+	}
+	target, err := os.Readlink(lp)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(lp), target)
+	}
+	rel, err := filepath.Rel(dest, target)
+	return err == nil && rel == "."
+}
+
+func regularSkill(dir string) bool {
+	p := filepath.Join(dir, "SKILL.md")
+	return !IsSymlink(dir) && !IsSymlink(p) && IsFile(p)
+}
+
+func inspectionHashes() func(string) string {
+	hashes := map[string]string{}
+	return func(path string) string {
+		if h, ok := hashes[path]; ok {
+			return h
+		}
+		h := TreeHash(path)
+		hashes[path] = h
+		return h
+	}
 }
 
 func newEntry(src, pack string, prev *Entry) *Entry {
@@ -162,53 +195,21 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 	}
 	var out []Result
 	var changes []installChange
-	man := ReadManifest(d)
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	copies := man.copyMode()
 	for _, it := range items {
 		name := it.Name
-		if !KEBAB.MatchString(name) {
-			out = append(out, res(name, false, "invalid skill name"))
+		decision := decideInstall(d, it, man.Skills[name], force, copies)
+		if decision.action == "blocked" || decision.action == "skipped" {
+			out = append(out, decision.result(name))
 			continue
 		}
 		src := filepath.Join(SKILLS, name)
-		if !IsFile(filepath.Join(src, "SKILL.md")) {
-			if it.Pack != "" && !it.Manual {
-				out = append(out, res(name, true, "skipped: not in the library yet (listed by @%s; import it: skillman upstream tick --pack %s)", it.Pack, it.Pack))
-				continue
-			}
-			out = append(out, res(name, false, "not in library (try: skillman search %s)", strings.Split(name, "-")[0]))
-			continue
-		}
-		dest, lp := Dest(d, name), LinkP(d, name)
-		if Lexists(lp) && !IsSymlink(lp) && !managedMirror(d, name, man.Skills[name]) {
-			out = append(out, res(name, false, "%s exists and is not a symlink; refusing to overwrite", lp))
-			continue
-		}
-		if IsSymlink(dest) {
-			out = append(out, res(name, false, "%s is a symlink; refusing", dest))
-			continue
-		}
-		var state string
-		if Exists(dest) {
-			prev := man.Skills[name]
-			switch {
-			case prev == nil && !force:
-				out = append(out, res(name, false, "untracked project copy: inspect with skillman diff, then use skillman adopt"))
-				continue
-			case TreeHash(src) == TreeHash(dest):
-				state = "already up to date"
-			case force:
-				state = "replaced (--force)"
-			case prev != nil && prev.TreeHash == TreeHash(dest):
-				out = append(out, res(name, false, "outdated (library is newer) — run: skillman update -C <dir> %s", name))
-				continue
-			default:
-				out = append(out, res(name, false, "%s exists and differs from library (review with: skillman diff -C <dir> %s; or use --force)", dest, name))
-				continue
-			}
-		} else {
-			state = "copied"
-		}
-		change, err := installFiles(d, name, src, state != "already up to date", man.Skills[name], "replaced by --force")
+		change, err := installFiles(d, name, src, decision.copyNeeded, copies, man.Skills[name], "replaced by --force")
 		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
@@ -227,14 +228,14 @@ func Install(d string, items []Item, force bool) ([]Result, error) {
 				man.Packs.Set(p, map[string]string{"installed_at": Now()})
 			}
 		}
-		out = append(out, res(name, true, "%s", state))
+		out = append(out, decision.result(name))
 	}
 	summary := SummarizeInstall(out)
 	if summary.Installed+summary.Present == 0 {
 		unlock()
 		return out, nil
 	}
-	if copyMode(d) {
+	if copies {
 		man.top.Set("claude_mode", "copy")
 	}
 	err = WriteManifest(d, man)
@@ -291,7 +292,7 @@ func (c installChange) rollback() error {
 	return linkErr
 }
 
-func installFiles(d, name, src string, copyNeeded bool, previous *Entry, reason string) (c installChange, err error) {
+func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry, reason string) (c installChange, err error) {
 	c.dest, c.link = Dest(d, name), LinkP(d, name)
 	if IsSymlink(c.link) {
 		c.previousLink, err = os.Readlink(c.link)
@@ -332,9 +333,9 @@ func installFiles(d, name, src string, copyNeeded bool, previous *Entry, reason 
 		}
 		c.copied = true
 	}
-	if copyMode(d) {
+	if copies {
 		if Lexists(c.link) {
-			if !managedMirror(d, name, previous) {
+			if !managedMirror(c.link, previous) {
 				return c, errf("modified or unmanaged Claude copy: %s", c.link)
 			}
 			if TreeHash(c.link) == TreeHash(c.dest) {
@@ -348,11 +349,11 @@ func installFiles(d, name, src string, copyNeeded bool, previous *Entry, reason 
 		c.mirror = err == nil
 		return c, err
 	}
-	if err := link(d, name); err != nil {
+	if err := link(d, name, copies); err != nil {
 		return c, err
 	}
 	c.linked = c.previousLink != "../../.agents/skills/"+name
-	if !LinkOK(d, name) {
+	if !linkOK(d, name, copies, TreeHash) {
 		return c, errf("link does not resolve: %s", c.link)
 	}
 	return c, nil
@@ -383,7 +384,11 @@ func Uninstall(d string, names []string) ([]Result, error) {
 		return nil, err
 	}
 	defer unlock()
-	return uninstallLocked(d, names, ReadManifest(d))
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
+	return uninstallLocked(d, names, man)
 }
 
 func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, error) {
@@ -395,8 +400,8 @@ func uninstallLocked(d string, names []string, man *ManifestData) ([]Result, err
 			continue
 		}
 		dest, lp := Dest(d, name), LinkP(d, name)
-		mirror := copyMode(d) && Lexists(lp)
-		if mirror && !managedMirror(d, name, man.Skills[name]) {
+		mirror := man.copyMode() && Lexists(lp)
+		if mirror && !managedMirror(lp, man.Skills[name]) {
 			out = append(out, res(name, false, "modified or unmanaged Claude copy: %s", lp))
 			continue
 		}
@@ -461,7 +466,10 @@ func UninstallPack(d, pack string) ([]Result, error) {
 		return nil, err
 	}
 	defer unlock()
-	man := ReadManifest(d)
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
 	used := man.Packs.Has(pack)
 	for _, e := range man.Skills {
 		used = used || e.HasPack(pack)
@@ -516,7 +524,19 @@ type SkillStatus struct {
 
 // ProjectStatus: ok | outdated | modified | conflict | missing | orphan | untracked | invalid per skill.
 func ProjectStatus(d string) []SkillStatus {
-	return projectStatus(d, ReadManifest(d))
+	st, _, _ := InspectProject(d)
+	return st
+}
+
+func InspectProject(d string) ([]SkillStatus, *ManifestData, error) {
+	if err := CheckProjectDirs(d); err != nil {
+		return nil, nil, err
+	}
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, nil, err
+	}
+	return projectStatus(d, man), man, nil
 }
 
 func projectStatus(d string, man *ManifestData) []SkillStatus {
@@ -535,6 +555,7 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 	}
 	sort.Strings(sorted)
 	out := make([]SkillStatus, 0, len(sorted))
+	copies, hash := man.copyMode(), inspectionHashes()
 	for _, name := range sorted {
 		e := man.Skills[name]
 		dest, src := Dest(d, name), filepath.Join(SKILLS, name)
@@ -543,7 +564,7 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 			r.Packs, r.Pinned, r.Manual = append([]string{}, e.Packs...), e.Pinned, e.Manual
 		}
 		if Exists(dest) {
-			r.LinkOK = LinkOK(d, name)
+			r.LinkOK = linkOK(d, name, copies, hash)
 		}
 		switch {
 		case IsSymlink(dest) || (Exists(dest) && !IsDir(dest)):
@@ -553,14 +574,14 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 		case e == nil:
 			r.State = "untracked"
 			if r.InLibrary {
-				same := TreeHash(dest) == TreeHash(src)
+				same := hash(dest) == hash(src)
 				r.SameAsLibrary = &same
 			}
 		default:
-			cur, rec := TreeHash(dest), e.TreeHash
+			cur, rec := hash(dest), e.TreeHash
 			var lib string
 			if r.InLibrary {
-				lib = TreeHash(src)
+				lib = hash(src)
 			}
 			switch {
 			case !r.InLibrary:
@@ -607,9 +628,16 @@ func DanglingLinks(d string) []string {
 }
 
 func RepairLinks(d string) ([]string, error) {
-	if err := CheckProjectDirs(d); err != nil {
+	unlock, err := ProjectLock(d)
+	if err != nil {
 		return nil, err
 	}
+	defer unlock()
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
+	copies := man.copyMode()
 	var msgs []string
 	for _, p := range DanglingLinks(d) {
 		os.Remove(p)
@@ -618,13 +646,13 @@ func RepairLinks(d string) ([]string, error) {
 	sk := filepath.Join(d, ".agents", "skills")
 	for _, e := range SortedDir(sk) {
 		p := filepath.Join(sk, e.Name())
-		if IsDir(p) && !IsSymlink(p) && !strings.HasPrefix(e.Name(), ".") && !LinkOK(d, e.Name()) {
+		if IsDir(p) && !IsSymlink(p) && !strings.HasPrefix(e.Name(), ".") && !linkOK(d, e.Name(), copies, TreeHash) {
 			lp := LinkP(d, e.Name())
 			if Lexists(lp) && !IsSymlink(lp) {
 				msgs = append(msgs, fmt.Sprintf("skip %s: %s is a real directory", e.Name(), lp))
 				continue
 			}
-			if err := link(d, e.Name()); err != nil {
+			if err := link(d, e.Name(), copies); err != nil {
 				msgs = append(msgs, err.Error())
 				continue
 			}
@@ -661,7 +689,10 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 		}
 		defer unlock()
 	}
-	man := ReadManifest(d)
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
 	rows := projectStatus(d, man)
 	st := StatusMap(rows)
 	targets := names
@@ -677,7 +708,7 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 	}
 	var out []Result
 	var changes []installChange
-	copies := dry && copyMode(d)
+	copies := man.copyMode()
 	for _, name := range targets {
 		r, ok := st[name]
 		switch {
@@ -704,16 +735,16 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 			switch {
 			case IsSymlink(filepath.Join(src, "SKILL.md")):
 				out = append(out, res(name, false, "%s: expected a regular SKILL.md", name))
-			case copies && Lexists(lp) && !managedMirror(d, name, prev):
-				out = append(out, res(name, false, "modified or unmanaged Claude copy: %s", lp))
-			case !copies && Lexists(lp) && !IsSymlink(lp):
-				out = append(out, res(name, false, "%s exists and is not a symlink; refusing to overwrite", lp))
 			default:
-				out = append(out, res(name, true, "would update"))
+				if err := checkMirrorTarget(lp, prev, copies); err != nil {
+					out = append(out, res(name, false, "%v", err))
+				} else {
+					out = append(out, res(name, true, "would update"))
+				}
 			}
 			continue
 		}
-		change, err := installFiles(d, name, src, true, prev, "update")
+		change, err := installFiles(d, name, src, true, copies, prev, "update")
 		if err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
@@ -741,7 +772,20 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 
 // Adopt starts tracking copies that predate the manifest.
 func Adopt(d string, names []string) ([]Result, error) {
-	rows := ProjectStatus(d)
+	for _, n := range names {
+		if err := CheckName(n); err != nil {
+			return nil, err
+		}
+	}
+	unlock, err := ProjectLock(d)
+	if err != nil {
+		return nil, err
+	}
+	rows, man, err := InspectProject(d)
+	if err != nil {
+		unlock()
+		return nil, err
+	}
 	st := StatusMap(rows)
 	targets := names
 	if len(targets) == 0 {
@@ -753,14 +797,11 @@ func Adopt(d string, names []string) ([]Result, error) {
 	}
 	for _, n := range targets {
 		if err := CheckName(n); err != nil {
+			unlock()
 			return nil, err
 		}
 	}
-	unlock, err := ProjectLock(d)
-	if err != nil {
-		return nil, err
-	}
-	man := ReadManifest(d)
+	copies := man.copyMode()
 	var out []Result
 	for _, name := range targets {
 		r, ok := st[name]
@@ -777,7 +818,7 @@ func Adopt(d string, names []string) ([]Result, error) {
 		if !same {
 			e.TreeHash = TreeHash(Dest(d, name)) // current copy is the baseline -> outdated
 		}
-		if err := link(d, name); err != nil {
+		if err := link(d, name, copies); err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
@@ -805,7 +846,10 @@ func SetPin(d string, names []string, pinned bool) ([]Result, error) {
 		return nil, err
 	}
 	defer unlock()
-	man := ReadManifest(d)
+	man, _, err := LoadProjectManifest(d)
+	if err != nil {
+		return nil, err
+	}
 	var out []Result
 	for _, n := range names {
 		if e, ok := man.Skills[n]; ok {
@@ -896,10 +940,14 @@ type Diagnostic struct {
 }
 
 func Doctor(d string) []Diagnostic {
+	rows, man, err := InspectProject(d)
+	if err != nil {
+		return []Diagnostic{{"error", err.Error()}}
+	}
 	var out []Diagnostic
 	add := func(lv, f string, a ...any) { out = append(out, Diagnostic{lv, sprintf(f, a...)}) }
-	copies := copyMode(d)
-	for _, r := range ProjectStatus(d) {
+	copies := man.copyMode()
+	for _, r := range rows {
 		if copies && r.Tracked && !r.LinkOK && r.State != "missing" {
 			add("warn", "%s: Claude copy missing or differs from %s", LinkP(d, r.Name), Dest(d, r.Name))
 		}
@@ -925,7 +973,6 @@ func Doctor(d string) []Diagnostic {
 	}
 	add(lvl, "skill descriptions ≈ %d tokens (%d project ≈ %d, %d global ≈ %d) / budget %d",
 		tb.Total, tb.ProjectSkills, tb.ProjectTokens, tb.GlobalSkills, tb.GlobalTokens, tb.Budget)
-	man := ReadManifest(d)
 	for _, p := range man.PackNames() {
 		skills, err := ExpandPack(p)
 		if err != nil {
@@ -958,7 +1005,17 @@ func Doctor(d string) []Diagnostic {
 
 // Verify is the frozen CI check: committed copies must match the manifest hashes. Needs no library.
 func Verify(d string) []Result {
-	man := ReadManifest(d)
+	if err := CheckProjectDirs(d); err != nil {
+		return []Result{res(Manifest, false, "%v", err)}
+	}
+	man, present, err := LoadProjectManifest(d)
+	if err != nil {
+		return []Result{res(Manifest, false, "%v", err)}
+	}
+	if !present {
+		return []Result{res(Manifest, false, "no .agents/skill-manifest.json in %s", d)}
+	}
+	copies, hash := man.copyMode(), inspectionHashes()
 	names := map[string]bool{}
 	for n := range man.Skills {
 		names[n] = true
@@ -981,11 +1038,11 @@ func Verify(d string) []Result {
 		switch {
 		case e == nil:
 			out = append(out, res(name, false, "untracked: on disk but not in the manifest (run: skillman adopt)"))
-		case IsSymlink(dest) || !IsFile(filepath.Join(dest, "SKILL.md")):
+		case !regularSkill(dest):
 			out = append(out, res(name, false, "missing, or not a real directory"))
-		case !LinkOK(d, name):
+		case !linkOK(d, name, copies, hash):
 			out = append(out, res(name, false, "broken .claude/skills link (run: skillman repair-links)"))
-		case TreeHash(dest) != e.TreeHash:
+		case hash(dest) != e.TreeHash:
 			if e.Pinned {
 				out = append(out, res(name, true, "pinned, edited locally"))
 			} else {

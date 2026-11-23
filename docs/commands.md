@@ -16,7 +16,7 @@ Exit codes: `0` success, `1` a check failed or an item could not be processed, `
 
 | Command | Description |
 |---|---|
-| `recommend [dir] [--task words] [--limit N] [--extra N] [--brief] [--json]` | Up to N local choices (default 5), each with stack evidence, matching task keywords, source, state and estimated added description tokens. Detailed groups include curated members plus `--extra` additional skills per stack. Install arguments include the target directory. Use `--brief` for only the shortlist, budget, target, install arguments and any empty-result message. |
+| `recommend [dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]` | Up to N local choices (default 5) with evidence, matching keywords, state and estimated added tokens. Repeated or comma-separated stack IDs select the recommendation scope and work in an empty project. Without stack evidence or a declaration, recommendations use the local `@core` pack. `--extra` controls the additional skills per detailed group. |
 | `suggest [dir] [--json]` | Packs for the project's stack and the file that triggered each |
 | `search <words…> [--domain D] [--stack S] [--limit N] [-C dir] [--json]` | Ranked search (exact name, name prefix, name, description, source) |
 | `info <skill> [--body] [-C dir] [--json]` | Description, source and commit, domain/stacks, packs, tokens, validation findings, state in the project |
@@ -34,7 +34,7 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 |---|---|
 | `add <name\|@pack>… [dir] [--force] [--dry-run] [--json]` | Copy skills and whole packs into a project, link them, record them in the manifest. A pack member that is not in the library yet is reported as skipped; an explicitly named one fails |
 | `remove <name\|@pack>…` | Remove skills or a pack to trash. Project manifest ownership determines which shared or manually added copies stay. For older manifests missing an association, re-add the pack you want to keep before removing the other one. |
-| `status [dir] [--json]` | State of every project skill (see [states](#project-skill-states)) |
+| `status [dir] [--agents [--include-global]] [--json]` | State of every project skill. `--agents` lists on-disk locations for Claude Code, Codex, Cursor, GitHub Copilot CLI and OpenCode. Add `--include-global` to compare with their standard personal skill directories. |
 | `doctor [dir] [--json]` | Links, drift, shadowing by global skills, description token budget, packs with missing skills |
 | `diff <name>` | Unified diff library → project copy |
 | `update [names] [--force] [--dry-run] [--json]` | Refresh `outdated` copies. Explicit names can include local edits or pins with `--force`. Use `--dry-run` to preview eligible and blocked updates without writing files. Exit 1 if any selected update is blocked. |
@@ -42,9 +42,13 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | `adopt [names]` | Start tracking copies that were added before the manifest existed |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
 | `repair-links [dir]` | Recreate missing or broken `.claude/skills` links |
-| `verify [dir] [--json]` | **CI check.** Exit 1 unless the committed copies match the manifest hashes. Needs no library |
+| `verify [dir] [--json]` | **CI check.** Requires a valid manifest, matching copies and a valid Claude link or mirror. Pinned edits are accepted when the layout is intact. Needs no library. |
 | `audit [dir \| skill-dir] [--library] [--fail-on review\|error\|never] [-q] [--json]` | **Offline risk scan**: validation errors, hooks, pipe-to-shell, credential reads, broad `allowed-tools`, symlinks, executables |
 | `projects [--json]` | Projects where skillman installed skills |
+
+`add --dry-run` reports the requested action and reason for each skill, including blocked paths and
+skipped pack members. A computed preview exits 0. Check its `ok` field before applying. `added_tokens`
+counts eligible new or restored skills and `budget_after` also accounts for replacements.
 
 ### Project skill states
 

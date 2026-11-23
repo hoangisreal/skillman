@@ -28,10 +28,10 @@ func init() {
 	reg("browse", "[--domain D] [--stack S] [-C dir] [--json]",
 		"Skills grouped by domain › stack (the TUI Browse tab). Stacks used by the project are marked ★.",
 		[]string{"domain", "stack", "C"}, cmdBrowse)
-	reg("recommend", "[dir] [--task words] [--limit N] [--extra N] [--brief] [--json]",
+	reg("recommend", "[dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]",
 		"Recommend skills for a project: detected packs with their skills, plus up to N (default 5, -1 = all)\n"+
 			"other library skills of the same stacks. Shows what is installed and the token cost.",
-		[]string{"task", "limit", "extra", "C"}, cmdRecommend)
+		[]string{"stack", "task", "limit", "extra", "C"}, cmdRecommend)
 	reg("suggest", "[dir] [--json]", "Suggest packs from the project's manifests (package.json, pyproject.toml, go.mod, …).",
 		[]string{"C"}, cmdSuggest)
 	reg("taxonomy", "[--default] [--json]",
@@ -43,7 +43,7 @@ func init() {
 		"Copy skills and packs into a project (.agents/skills + .claude/skills link + manifest).", []string{"C"}, cmdAdd)
 	reg("remove", "<skill|@pack>… [-C dir] [--json]",
 		"Remove skills or a pack from a project (to trash; skills still used by another pack stay).", []string{"C"}, cmdRemove)
-	reg("status", "[dir] [--json]", "State of every project skill: ok outdated modified conflict untracked missing orphan invalid.",
+	reg("status", "[dir] [-C dir] [--agents [--include-global]] [--json]", "Project skill state, or on-disk skill locations by agent with --agents.",
 		[]string{"C"}, cmdStatus)
 	reg("doctor", "[dir] [--json]", "Check links, drift, shadowing by global skills and the description token budget.",
 		[]string{"C"}, cmdDoctor)
@@ -370,6 +370,14 @@ func cmdRecommend(a *Args) int {
 		return fail(err)
 	}
 	catalog := core.NewRecommendationCatalog()
+	ids := a.List("stack")
+	if a.Has("stack") && len(ids) == 0 {
+		return usage("--stack requires a taxonomy stack ID")
+	}
+	declared, err := catalog.DeclaredSignals(ids)
+	if err != nil {
+		return usage(err.Error())
+	}
 	rows, err := catalog.Index()
 	if err != nil {
 		return fail(err)
@@ -379,7 +387,10 @@ func cmdRecommend(a *Args) int {
 		return usage("--limit requires a positive integer")
 	}
 	brief := a.Has("brief")
-	rec := search.Rank(catalog, d, rows, a.Str("task", ""), limit, a.Int("extra", 5), brief)
+	rec := search.Rank(catalog, d, rows, a.Str("task", ""), limit, a.Int("extra", 5), brief, declared...)
+	if rec.Err != nil {
+		return fail(rec.Err)
+	}
 	if a.Has("json") {
 		if brief {
 			out := map[string]any{"project": rec.Project, "budget": rec.Budget, "shortlist": rec.Shortlist, "install_args": rec.InstallArgs}
@@ -525,47 +536,18 @@ func cmdAdd(a *Args) int {
 		return fail(err)
 	}
 	if a.Has("dry-run") {
-		st := stateMap(d)
-		tok := 0
-		type plan struct {
-			Name, Pack, State string
-			InLibrary         bool
-			Tokens            int
+		preview, err := core.PreviewInstall(d, its, a.Has("force"))
+		if err != nil {
+			return fail(err)
 		}
-		var ps []plan
-		for _, it := range its {
-			src := filepath.Join(core.SKILLS, it.Name)
-			p := plan{Name: it.Name, Pack: it.Pack, State: st[it.Name], InLibrary: core.IsFile(filepath.Join(src, "SKILL.md"))}
-			if p.InLibrary {
-				p.Tokens = core.SkillTokens(src)
-				if core.NeedsProjectCopy(p.State) {
-					tok += p.Tokens
-				}
-			}
-			ps = append(ps, p)
-		}
-		tb := core.TokenBudgetOf(d)
 		if a.Has("json") {
-			out := []map[string]any{}
-			for _, p := range ps {
-				out = append(out, map[string]any{"name": p.Name, "pack": p.Pack, "state": p.State, "in_library": p.InLibrary, "tokens": p.Tokens})
-			}
-			printJSON(map[string]any{"project": d, "skills": out, "added_tokens": tok, "budget_after": tb.Total + tok, "budget": tb.Budget})
+			printJSON(preview)
 			return 0
 		}
-		for _, p := range ps {
-			what := "copy"
-			switch {
-			case !p.InLibrary:
-				what = "NOT IN LIBRARY"
-			case p.State == "missing":
-				what = "restore missing copy"
-			case p.State != "":
-				what = "already " + p.State
-			}
-			outf("  %-34s %-16s %3dt  %s\n", p.Name, what, p.Tokens, p.Pack)
+		for _, item := range preview.Skills {
+			outf("  %-34s %-16s %3dt  %s\n", item.Name, item.Action, item.Tokens, item.Reason)
 		}
-		outf("would add ≈%d tokens → %d/%d (dry run, nothing changed)\n", tok, tb.Total+tok, tb.Budget)
+		outf("would add ≈%d tokens → %d/%d (dry run, nothing changed)\n", preview.AddedTokens, preview.BudgetAfter, preview.Budget)
 		return 0
 	}
 	rs, err := core.Install(d, its, a.Has("force"))
@@ -624,16 +606,48 @@ func cmdRemove(a *Args) int {
 }
 
 func cmdStatus(a *Args) int {
+	if a.Has("include-global") && !a.Has("agents") {
+		return usage("--include-global requires --agents")
+	}
 	d, err := projectDir(a, true)
 	if err != nil {
 		return fail(err)
 	}
-	st := core.ProjectStatus(d)
+	if a.Has("agents") {
+		report, err := core.InspectAgents(d, a.Has("include-global"))
+		if err != nil {
+			return fail(err)
+		}
+		if a.Has("json") {
+			printJSON(report)
+			return 0
+		}
+		outf("project: %s\n", report.Project)
+		for _, agent := range report.Agents {
+			outf("\n%s\n", agent.ID)
+			for _, root := range agent.Roots {
+				outf("  %s root: %s (%s)\n", root.Scope, root.Path, root.State)
+			}
+			for _, skill := range agent.Skills {
+				outf("  %-14s %-28s %s\n", skill.State, skill.Name, skill.Path)
+				for _, alias := range skill.Aliases {
+					outf("    also at %s\n", alias)
+				}
+			}
+			for _, duplicate := range agent.Duplicates {
+				outf("  duplicate %s: %s\n", duplicate.Name, strings.Join(duplicate.Paths, ", "))
+			}
+		}
+		return 0
+	}
+	st, man, err := core.InspectProject(d)
+	if err != nil {
+		return fail(err)
+	}
 	if a.Has("json") {
 		printJSON(st)
 		return 0
 	}
-	man := core.ReadManifest(d)
 	ps := strings.Join(man.PackNames(), ", ")
 	if ps == "" {
 		ps = "-"
@@ -684,9 +698,6 @@ func cmdVerify(a *Args) int {
 	d, err := projectDir(a, true)
 	if err != nil {
 		return fail(err)
-	}
-	if !core.IsFile(filepath.Join(d, ".agents", core.Manifest)) {
-		return fail(fmt.Errorf("no .agents/skill-manifest.json in %s", d))
 	}
 	return resultsOut(a, core.Verify(d), nil)
 }

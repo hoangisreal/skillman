@@ -35,6 +35,8 @@ skillman recommend -C ./shop --task "postgres migration" --brief --json
 The response contains the resolved project, budget, shortlist and `install_args`. Each choice includes its
 source, stack evidence file, matched keywords, project state and additional description tokens. With no task,
 directly detected stacks each get a turn. Omit `--brief` to inspect the detailed groups.
+For a new project with a chosen stack, pass `--stack vue --stack postgres` or `--stack vue,postgres`.
+The evidence for an explicit choice is `declared:<id>`. When the stack is open, preview the local `@core` pack.
 
 Then, as needed: `skillman browse --stack postgres --json`, `skillman search "postgres migration" --json`,
 `skillman info <skill> --json` (add `--body` to read it). The agent proposes a short list with token costs, checks it
@@ -60,8 +62,14 @@ installation leaves the successful library import available and returns `retry_a
 |---|---|
 | `remove`, `update`, `adopt`, `pin`, `verify`, `library pin` | `{"ok": bool, "results": [{"name", "ok", "message"}]}` |
 | `add` | Same result fields plus `summary` with `installed`, `already_present`, `skipped`, `failed`. Exit 1 when every requested member is unavailable. |
-| `add --dry-run` | `{"project", "skills": [{"name", "pack", "state", "in_library", "tokens"}], "added_tokens", "budget_after", "budget"}` |
+| `add --dry-run` | `{"project", "ok", "skills": [{"name", "pack", "state", "in_library", "tokens", "action", "reason"}], "added_tokens", "budget_after", "budget"}` |
 | `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?}]` |
+| `status --agents` | `{"project", "include_global", "agents": [{"id", "roots", "skills", "duplicates"}]}`. Skill rows include `name`, `path`, `scope`, `tracked`, `state` and optional `aliases`. |
+
+For agent status, `available` describes a skill on disk. The scanner checks direct skill folders under the
+documented project roots. `--include-global` enables the corresponding standard personal roots. Symlinks
+outside those roots appear as `external_link`. Shared locations and matching managed Claude mirrors appear
+once per client with alternate paths in `aliases`. Separate copies with the same skill name appear in `duplicates`.
 | `doctor` | `{"project", "ok", "checks": [{"level": "ok\|warn\|error", "message"}]}` |
 | `search` | `{"query", "count", "skills": [{"name", "description", "source", "domain", "stacks", "packs", "state"?}]}` |
 | `info` | `{"name", "description", "source", "commit", "domain", "stacks", "tags", "packs", "tokens", "lines", "errors", "warnings", "state", "body"?}` |

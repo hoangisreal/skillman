@@ -28,6 +28,11 @@ manifest), and updates them only after checking what changed upstream. It is one
 
 ## Getting started
 
+For an empty project, declare your stack with `skillman recommend -C . --stack vue --stack postgres`.
+If the stack is open, preview `skillman add -C . @core --dry-run`. A new library starts with
+`skillman init` and `skillman bootstrap --pack core --dry-run` to review pinned sources before importing.
+Run `skillman add -C . <selected skills> --dry-run` before installing your selection.
+
 ```sh
 skillman upstream verify && skillman upstream tick --pack core web-vue && skillman upstream import  # fill the library
 cd ~/code/my-app
@@ -145,8 +150,8 @@ skill-add @postgres vitest --dry-run  # what would be copied and what it costs p
 skill-add @postgres vitest            # copy, link and record
 ```
 
-Each skill lands in `.agents/skills/<name>/` (a real, committed copy for Codex and OpenCode), gets a link in
-`.claude/skills/` for Claude Code, and is recorded with its upstream commit and content hash in
+Each skill lands in `.agents/skills/<name>/` (a real, committed copy for Codex and OpenCode), gets a link or
+managed copy in `.claude/skills/` for Claude Code, and is recorded with its upstream commit and content hash in
 `.agents/skill-manifest.json`. Commit all three.
 
 ### Group skills into packs
@@ -165,6 +170,8 @@ Tab 4 (or `skillman status`) shows each skill as `ok`, `outdated`, `modified`, `
 `orphan`. Run `skillman update --dry-run` to see which copies would refresh before running `skillman update`.
 Use `diff` to review changes, `pin` to keep a deliberate local edit and `remove` to move a copy to the trash.
 `doctor` checks links, shadowing and the description token budget.
+Run `skillman status --agents` for on-disk locations and duplicates per client. Add `--include-global` to
+include the standard personal skill directories.
 
 ### Update the library from upstream
 
