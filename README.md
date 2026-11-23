@@ -1,328 +1,170 @@
-<div align="center">
+# Skillman
 
-# skillman
+**Give each project the agent skills it needs.**
 
-A fast terminal UI and CLI for curating agent skills, and giving each project only the ones it needs.
+Skillman is a CLI and terminal UI for finding, installing, and updating agent skills. A skill is a folder with a `SKILL.md` file that teaches a coding agent a task or workflow. Skillman keeps your collection in a local library and copies selected skills into each project so your team can review, commit, and verify the same instructions.
 
-[![ci](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml/badge.svg)](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml)
-[![go](https://img.shields.io/badge/go-1.26%2B-00add8)](go.mod)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![CI](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml)
+[![Portable packages](https://github.com/hoangisreal/skillman/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/hoangisreal/skillman/actions/workflows/packages.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[Getting started](#getting-started) •
-[Installation](#installation) •
-[Usage](#usage) •
-[Agents](#use-it-from-coding-agents) •
-[Configuration](#configuration) •
-[Docs](#documentation)
+[Install](#install) · [Quickstart](#quickstart) · [Use with coding agents](#use-with-coding-agents) · [Daily commands](#daily-commands) · [Documentation](#documentation)
 
-<img src="docs/screenshots/1-library.svg" alt="skillman: Library tab with ranked search and Markdown preview" width="100%">
+## Install
 
-</div>
-
-Skills (`SKILL.md` folders) for **Claude Code**, **Codex CLI** and **OpenCode** pile up fast. Install hundreds
-globally and every session pays for their descriptions; copy them into projects and they drift from upstream.
-
-skillman keeps them in a **cold library** that no agent reads, copies the few each project needs into it (tracked by a
-manifest), and updates them only after checking what changed upstream. It is one Go binary: a TUI that stays fast on
-700+ skills, and a CLI with `--json` output that your coding agents can drive.
-
-## Getting started
-
-For an empty project, declare your stack with `skillman recommend -C . --stack vue --stack postgres`.
-If the stack is open, preview `skillman add -C . @core --dry-run`. A new library starts with
-`skillman init` and `skillman bootstrap --pack core --dry-run` to review pinned sources before importing.
-Run `skillman add -C . <selected skills> --dry-run` before installing your selection.
+The commands below work on Linux, macOS, and Windows PowerShell. Install **Go 1.26 or newer** and **Git** first. Add your Go binary directory to `PATH` (`GOBIN` if set, otherwise the `bin` directory under `go env GOPATH`).
 
 ```sh
-skillman upstream verify && skillman upstream tick --pack core web-vue && skillman upstream import  # fill the library
-cd ~/code/my-app
-skillman recommend .        # what this project's stack needs, with token cost
-skill-add @core @web-vue    # copy the skills in, link them for Claude Code, record them
-skillman                    # browse, install, update and remove in the TUI
+go install github.com/hoangisreal/skillman/cmd/skillman@main
+skillman --version
+skillman init
 ```
 
-## Installation
-
-### Download a binary
-
-Download the archive for your CPU (`amd64` or `arm64`) and `SHA256SUMS` from the same tagged [GitHub release](https://github.com/hoangisreal/skillman/releases). Compare the SHA-256 digest of the downloaded archive with its entry in that file.
-
-| System | Verify the download | Extract and start |
-|---|---|---|
-| Windows (PowerShell) | `Get-FileHash .\skillman-*.zip -Algorithm SHA256` | `Expand-Archive .\skillman-*.zip -DestinationPath .\tools` then `.\tools\skillman.exe init` |
-| macOS | `shasum -a 256 skillman-*.tar.gz` | `tar -xzf skillman-*-darwin-*.tar.gz` then `./skillman init` |
-| Linux | `sha256sum skillman-*.tar.gz` | `tar -xzf skillman-*-linux-*.tar.gz` then `./skillman init` |
-
-Place the extracted executable on your PATH. Run `skillman agent-setup` to make the bundled instructions available to local agents. Run `skillman recommend -C . --brief --json` in a project or launch `skillman` for the TUI. Git is needed for GitHub imports, upstream updates and library history.
-
-### Build from source
-
-1. **Install the binary**
-
-   Requires Go 1.26+ and git.
-
-   ```sh
-   git clone https://github.com/hoangisreal/skillman
-   cd skillman && ./install.sh
-   ```
-
-   This builds `~/.local/bin/skillman` (with `skill-add` and `skill-search` links), creates the library in
-   `~/skill-library` and links the `skillman` skill for your agents. It is idempotent and backs up any real file it
-   would replace. Pass `--no-global-skill` to skip the agent link.
-
-   <details>
-   <summary>With <code>go install</code></summary>
-
-   ```sh
-   go install github.com/hoangisreal/skillman/cmd/skillman@latest
-   skillman init           # create the library
-   skillman agent-setup    # optional: let agents use skillman everywhere
-   ```
-
-   `skill-add` and `skill-search` are optional: `ln -s skillman "$(go env GOPATH)/bin/skill-add"` (same for
-   `skill-search`).
-   </details>
-
-2. **Fill the library**
-
-   `staging/repos.txt` lists 103 curated upstream repos. Verify them, tick what you want and import:
-
-   ```sh
-   # For a first project, preview and import just one starter pack:
-   skillman bootstrap --pack web-vue --dry-run
-   skillman bootstrap --pack web-vue
-
-   # To explore the broader collection:
-   skillman upstream verify -j 8                    # sparse clones, lists ~3000 candidates
-   skillman upstream tick --pack core web-vue postgres
-   skillman upstream tick --tier official --max-per-repo 40   # or in bulk
-   skillman upstream import                         # license required, plugin wiring stripped
-   ```
-
-   You can also tick candidates in the TUI (tab 6, `space`, then `I`).
-
-3. **Hook up your agents** (optional)
-
-   Done by `install.sh`. Otherwise run `skillman agent-setup`, or add the skill to a single project with
-   `skill-add skillman`. See [Use it from coding agents](#use-it-from-coding-agents).
+`init` creates `~/skill-library` with starter pack definitions, a list of upstream repositories, and the bundled Skillman instructions. The next step imports the actual skills.
 
 <details>
-<summary>Upgrading from skillman 0.1 (Python)</summary>
+<summary>Install from a local clone on Linux or macOS</summary>
 
-Run `./install.sh` again. The library, packs, `SOURCE.json`, project manifests, trash and registry are read as they
-are: the Go version reproduces their formats byte for byte. `python3 ~/skill-library/scripts/skillcore.py <cmd>`
-becomes `skillman <cmd>` (old command names still work as aliases), and `skill-add` / `skill-search` keep their
-syntax.
+```sh
+git clone https://github.com/hoangisreal/skillman
+cd skillman
+./install.sh --no-global-skill
+```
+
+The installer builds into `~/.local/bin`, adds the `skill-add` and `skill-search` shortcuts, and initializes the library. Add `~/.local/bin` to `PATH`. Run `skillman agent-setup` when you want agents to discover the bundled instructions.
+
 </details>
 
-## Usage
+The [package workflow](https://github.com/hoangisreal/skillman/actions/workflows/packages.yml) builds archives for Linux, macOS and Windows. When downloading an archive from a [tagged release](https://github.com/hoangisreal/skillman/releases), compare its SHA-256 digest with the release's `SHA256SUMS`, extract the executable, add it to `PATH`, and run `skillman init`.
 
-### Search the library
+## Quickstart
 
-`skillman` opens the TUI on the current project. Press `/` and type: results are ranked by name, then description,
-and filters combine freely.
+### 1. Load a few skills into your library
 
-```
-postgres migration      words must all match
--react                  exclude a word
-stack:vue  domain:backend  pack:core  src:redis  tag:web
-installed  notinstalled  nopack
-```
-
-`space` selects, `i` installs the selection, `p` adds it to a pack, `enter` opens the full SKILL.md. The same search
-runs from the shell: `skillman search "postgres migration" --json`.
-
-### Browse by domain and stack
-
-<img src="docs/screenshots/2-browse.svg" alt="Browse tab: domains, stacks, and the project's stacks marked with a star" width="100%">
-
-Tab 2 sorts every skill into 16 domains and ~70 stacks (Web frontend › Vue, Databases › PostgreSQL, Cloud & DevOps ›
-Docker, LLM apps › MCP, …). Stacks your project uses are marked ★ and grouped under **This project**. `I` installs a
-stack's curated pack, `n` saves your selection as a new pack. From the shell: `skillman browse --stack postgres`.
-
-Re-file a skill or add your own domains in `~/skill-library/taxonomy.yaml` ([guide](docs/taxonomy.md)).
-
-### Add skills to a project
+A pack is a named list of related skills. Start with `core`, which covers testing, debugging, verification, and code review. The preview shows the exact sources and commits the import will use.
 
 ```sh
-skillman recommend . --task "vue test" --brief --json # ranked local choices, evidence, state and added tokens
-skill-add @postgres vitest --dry-run  # what would be copied and what it costs per session
-skill-add @postgres vitest            # copy, link and record
+skillman bootstrap --pack core --dry-run
+skillman bootstrap --pack core
 ```
 
-Each skill lands in `.agents/skills/<name>/` (a real, committed copy for Codex and OpenCode), gets a link or
-managed copy in `.claude/skills/` for Claude Code, and is recorded with its upstream commit and content hash in
-`.agents/skill-manifest.json`. Commit all three.
+### 2. Choose skills for a project
 
-### Group skills into packs
-
-<img src="docs/screenshots/3-packs.svg" alt="Packs tab: members, extends and token cost" width="100%">
-
-A pack is a named list of skills; `extends` builds composites (`@fullstack-vue` = web-vue + node-backend + postgres +
-docker). 34 starter packs ship with skillman. Edit them in tab 3 or with
-`skillman pack create|add|rm|describe|extends|rename|delete`. See [packs](docs/packs.md).
-
-### Keep project skills current
-
-<img src="docs/screenshots/4-project.svg" alt="Project tab: per-skill drift state and token budget" width="100%">
-
-Tab 4 (or `skillman status`) shows each skill as `ok`, `outdated`, `modified`, `conflict`, `untracked`, `missing` or
-`orphan`. Run `skillman update --dry-run` to see which copies would refresh before running `skillman update`.
-Use `diff` to review changes, `pin` to keep a deliberate local edit and `remove` to move a copy to the trash.
-`doctor` checks links, shadowing and the description token budget.
-Run `skillman status --agents` for on-disk locations and duplicates per client. Add `--include-global` to
-include the standard personal skill directories.
-
-### Update the library from upstream
+The example creates a new directory. Open your project directory to use an existing project.
 
 ```sh
-skillman library check        # read-only: one git ls-remote per repo, tree OIDs per skill subpath
-skillman library auto-safe    # apply safe updates and commit; queue the risky ones
-skillman library rollback <skill>
+mkdir my-app
+cd my-app
+skillman recommend -C . --brief
+skillman add -C . tdd --dry-run
+skillman add -C . tdd
+skillman verify -C .
 ```
 
-An update is **risky**, and never applied automatically, if it adds hooks, a download piped to a shell, credential
-reads, broader `allowed-tools` or new executables, loses its license, or would drop a local change. Review risky
-ones in tab 5: `enter` shows the upstream changelog, the verdict and the full diff. See [updates](docs/updates.md).
+`recommend` searches your local library and uses the project's stack when it can detect it. An empty directory starts with recommendations from the local `core` pack. The install preview shows the action for each skill and the estimated cost in description tokens. A successful check prints `✓ tdd: ok`.
 
-### Check skills in CI
-
-```yaml
-- uses: actions/setup-go@v5
-  with: { go-version: "1.26" }
-- run: go run github.com/hoangisreal/skillman/cmd/skillman@<sha> verify .                  # committed skills match the manifest
-- run: go run github.com/hoangisreal/skillman/cmd/skillman@<sha> audit . --fail-on review  # no hooks, pipe-to-shell, …
-```
-
-Neither command needs your library. See [CI](docs/ci.md) for a full workflow and a pre-commit hook.
-
-## Use it from coding agents
-
-`install.sh` links the [`skillman` skill](skills/skillman/SKILL.md) into `~/.claude/skills` (Claude Code, OpenCode)
-and `~/.agents/skills` (Codex). Ask your agent to *"pick the skills this repo needs"* and it runs:
+Once you know the stack, declare it even before you create files like `package.json`. For example, [import a Vue testing skill](#import-a-skill-from-github) into your library by omitting `-C .` from the preview. Apply the import, then run:
 
 ```sh
-skillman recommend . --json
-skillman search "<words>" --json
-skillman info <skill> --json
-skillman add @pack skill … --dry-run --json
-skillman add @pack skill …                      # after you agree
-skillman status --json
+skillman recommend -C . --stack vue --task "testing" --brief
 ```
 
-Every TUI action is a non-interactive command, read commands print stable JSON, and exit codes are `0` ok, `1`
-failed, `2` usage. The skill tells agents to ask before adding many skills, editing packs or the library, and
-committing. See [agents](docs/agents.md) for the JSON shapes.
+Use `skillman taxonomy` to find stack IDs. Repeat `--stack` for projects with several stacks. To preview a whole pack, run `skillman add -C . '@core' --dry-run`.
 
-## Keybindings
+### 3. Share the project setup
 
-| Key | Action |
-|---|---|
-| `1`–`8` · `[` `]` | Switch tab: Library, Browse, Packs, Project, Updates, Upstream, Validation, Trash |
-| `/` | Search or filter |
-| `space` · `ctrl+a` · `esc` | Select · select all shown · clear |
-| `enter` | Open / primary action |
-| `tab` · `shift+tab` | Next / previous pane |
-| `ctrl+p` | Command palette with every action |
-| `?` | Help for the current tab |
-| `q` | Quit |
+Skillman copies the selected skills into `.agents/skills/`, creates a link or managed copy in `.claude/skills/`, and records the source and content hash in `.agents/skill-manifest.json`. Commit those paths, including any generated `.gitattributes` files, so teammates get the same skill files from Git. See the [Windows notes](#windows-and-mixed-platform-teams) for repositories shared across operating systems.
 
-The mouse works everywhere: click tabs, rows, the ● column and footer keys, double-click to open, scroll the pane
-under the pointer, drag the preview divider. Per-tab keys are in the footer and in [commands](docs/commands.md#tui-keys).
+## Use with coding agents
+
+Skills live in the project. Skillman can inspect their on-disk locations for Claude Code, Codex CLI, Cursor, GitHub Copilot CLI, and OpenCode.
+
+```sh
+skillman status -C . --agents
+```
+
+Add `--include-global` to check standard personal directories for other copies. To teach your agent how to use Skillman itself, run `skillman agent-setup` once. Then try this prompt from your project:
+
+> Find skills in my local Skillman library for testing Vue components. Show me the shortlist and its token cost before installing anything.
+
+The CLI provides JSON for recommendations, previews, and status. See [agent setup and JSON output](docs/agents.md).
+
+## Browse in the terminal
+
+Run `skillman` from your project to open the terminal UI. Press `/` to search, `Space` to select, and `i` to preview installation. Use `2` to browse by stack, `4` to inspect the project, or `?` for the current tab's shortcuts.
+
+![Skillman terminal UI showing ranked search and a skill preview](docs/screenshots/1-library.svg)
+
+## Daily commands
+
+| I want to… | Run |
+| --- | --- |
+| Find PostgreSQL migration skills | `skillman search "postgres migration"` |
+| Inspect a skill before installing it | `skillman info tdd --body` |
+| See what a pack contains | `skillman pack show core` |
+| Check installed skills, broken links, or token budget | `skillman status` and `skillman doctor` |
+| Review and apply updates to project copies | `skillman update --dry-run`, then `skillman update` |
+| Check upstream changes in the library | `skillman library check` |
+| Remove a project skill and find it in the trash | `skillman remove tdd`, then `skillman trash list` |
+
+### Import a skill from GitHub
+
+List the skills in a repository, then preview the one you want. With `-C .`, the preview also checks the project install. Omit it to import into the library only.
+
+```sh
+skillman import vuejs-ai/skills --list
+skillman import vuejs-ai/skills --skill vue-testing-best-practices -C . --dry-run --json
+```
+
+Use the returned `apply_args` as arguments to `skillman` to apply the reviewed commit. Imports require an upstream license and audit the staged files. For bulk discovery, see the [upstream import commands](docs/commands.md#import-pipeline).
+
+### Check a project in CI
+
+```sh
+skillman verify .
+skillman audit . --fail-on review
+```
+
+`verify` checks the tracked files and Claude links or copies against the project manifest. `audit` checks for validation errors and patterns that warrant review. Both commands run without the library or network once the binary is installed. See the [CI workflow example](docs/ci.md).
+
+## Windows and mixed-platform teams
+
+New Windows projects use managed Claude copies, which work without Developer Mode. For a project already using symlinks, a teammate on a checkout with working links can preview and convert them before committing the result:
+
+```sh
+skillman repair-links -C . --mode copy --dry-run
+skillman repair-links -C . --mode copy
+skillman verify -C .
+```
+
+Commit the generated `.gitattributes` files to preserve skill bytes across Git checkouts. If you maintain your own Git attributes, set `-text` for `.agents/skills/**` and `.claude/skills/**`. Ignore the local `.agents/.skillman.lock` file in the project's `.gitignore`. The Windows compatibility suite runs in [GitHub Actions](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml).
 
 ## Configuration
 
-| Variable | Default | |
-|---|---|---|
-| `SKILL_LIBRARY` | `~/skill-library` | The library (its own git repository) |
+| Environment variable | Default | Controls |
+| --- | --- | --- |
+| `SKILL_LIBRARY` | `~/skill-library` | Local skills, packs, and upstream sources |
 | `SKILLMAN_STATE` | `~/.local/state/skillman` | Project registry and trash |
-| `SKILL_TOKEN_BUDGET` | `2000` | Description tokens per session before `doctor` warns |
-| `SKILLCORE_GIT_BASE` | `https://github.com/` | Where `owner/repo` upstreams are fetched from |
-| `SKILLMAN_TRACE` | | File to log the duration of every TUI update and frame |
-
-| File | |
-|---|---|
-| `~/skill-library/packs/*.yaml` | Your packs |
-| `~/skill-library/taxonomy.yaml` | Domain and stack overrides ([guide](docs/taxonomy.md)) |
-| `~/skill-library/staging/repos.txt` | Upstream repos to import from |
-| `contrib/systemd/` | Optional weekly `library auto-safe` timer |
-
-## Performance
-
-Measured on a 718-skill library, median per key:
-
-| | 0.1 (Python, Textual) | 0.2 (Go, Bubble Tea) |
-|---|---|---|
-| Start-up | 1.3 s | 24 ms |
-| Keystroke in search | 80 ms | 1.1 ms |
-| Cursor move with preview | 413 ms | 1.5 ms |
-
-How: [architecture › performance design](docs/architecture.md#performance-design).
+| `SKILL_TOKEN_BUDGET` | `2000` | Description token budget reported by `doctor` |
 
 ## Documentation
 
-- [Commands and keys](docs/commands.md)
-- [Domains, stacks and taxonomy.yaml](docs/taxonomy.md)
-- [Using skillman from agents](docs/agents.md)
-- [Packs](docs/packs.md)
-- [Upstream updates and safety gates](docs/updates.md)
-- [CI](docs/ci.md)
-- [Architecture](docs/architecture.md)
-
-## FAQ
-
-<details>
-<summary>Why copy skills into projects instead of linking the library?</summary>
-
-A project must behave the same for a teammate and in CI, so its skills are committed with it. The manifest hash is
-what keeps those copies manageable: drift is visible, updates are deliberate, local edits can be pinned.
-</details>
+- [Commands and keyboard shortcuts](docs/commands.md)
+- [Agent setup and automation](docs/agents.md)
+- [Create and combine skill packs](docs/packs.md)
+- [Customize domains and stacks](docs/taxonomy.md)
+- [Review upstream updates and roll back](docs/updates.md)
+- [Verify and audit skills in CI](docs/ci.md)
+- [Architecture and on-disk formats](docs/architecture.md)
+- [Recommendation evaluation and benchmarks](docs/selection-evaluation.md)
 
 <details>
-<summary>Does it modify upstream skills?</summary>
+<summary>Upgrade from Skillman 0.1 (Python)</summary>
 
-Only mechanically, and each change is recorded in `local_modifications`: the frontmatter `name` is set to the folder
-name (only that line), a leading license comment moves below the frontmatter, in-repo symlinks are inlined and plugin
-wiring (hooks, commands, MCP configs) is stripped. The upstream license is kept next to each skill.
+Run `./install.sh` again. The Go version reads your existing library, packs, manifests, trash and registry. Replace `python3 ~/skill-library/scripts/skillcore.py <command>` with `skillman <command>`. The legacy `skill-add` and `skill-search` shortcuts keep their syntax.
+
 </details>
 
-<details>
-<summary>Will it delete my files?</summary>
+## Contributing and license
 
-No. Removing a skill, replacing a modified copy or deleting a pack moves it to a trash you can restore from
-(`skillman trash list`, tab 8). Library changes are git commits. Only `skillman trash empty --yes` deletes.
-</details>
-
-<details>
-<summary>Does it run on Windows?</summary>
-
-New Windows projects keep a managed Claude copy alongside the canonical `.agents/skills` tree. Both directories and `.agents/skill-manifest.json` belong in version control. Windows does not need Developer Mode for this layout. On another OS, Skillman follows the layout saved in the manifest. For an older project, preview `skillman repair-links -C . --mode copy --dry-run` and rerun without `--dry-run` to convert tracked links.
-
-Commit the generated `.gitattributes` in each managed skills directory to preserve file bytes across Git checkouts. Skillman preserves existing attributes files. For a repository with custom attributes, ensure these rules apply and ignore `.agents/.skillman.lock` in `.gitignore`.
-
-```gitattributes
-.agents/skills/** -text
-.claude/skills/** -text
-```
-</details>
-
-## Alternatives
-
-- [vercel-labs/skills](https://github.com/vercel-labs/skills): installer for 75+ agents, with a lockfile and the
-  [skills.sh](https://skills.sh) directory.
-- [`gh skill`](https://github.blog/changelog/2026-04-16-manage-agent-skills-with-github-cli/): skills from the GitHub CLI.
-- [Skills Manager](https://github.com/xingkongliang/skills-manager): desktop app with a central repo and presets.
-- [Caliber](https://github.com/caliber-ai-org/ai-setup): generates and checks coding-agent context and syncs skills,
-  rules, plugins and MCP configuration across agents.
-
-Pick skillman if you keep a large private collection and want to control, and review, what reaches each project.
-
-## Contributing
-
-Issues and pull requests are welcome. `go vet ./... && go test -race ./...` runs the whole offline suite; see
-[CONTRIBUTING](CONTRIBUTING.md).
-
-## License
-
-The tooling is [MIT](LICENSE). Skills are not distributed here: each import keeps its upstream license and
-provenance, and unlicensed skills are refused.
+See the [contributing guide](CONTRIBUTING.md) for local setup and tests. Skillman is [MIT licensed](LICENSE). Imported skills retain their upstream licenses and provenance.
