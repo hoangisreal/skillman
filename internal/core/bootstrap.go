@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,10 +39,25 @@ type BootstrapItem struct {
 	Detail string         `json:"detail,omitempty"`
 }
 
-func Bootstrap(pack string, dry, allowRisky bool) ([]BootstrapItem, error) {
+func starterPack(pack string) bool {
 	switch pack {
 	case "core", "web-vue", "postgres":
+		return true
 	default:
+		return false
+	}
+}
+
+// PackImportHint tells users how to populate the library for a pack.
+func PackImportHint(pack string) string {
+	if starterPack(pack) {
+		return "preview sources with skillman bootstrap --pack " + pack + " --dry-run"
+	}
+	return fmt.Sprintf("run skillman upstream verify, then skillman upstream tick --pack %s and skillman upstream import", pack)
+}
+
+func Bootstrap(pack string, dry, allowRisky bool) ([]BootstrapItem, error) {
+	if !starterPack(pack) {
 		return nil, errf("supported starter packs: core, web-vue, postgres")
 	}
 	names, err := ExpandPack(pack)

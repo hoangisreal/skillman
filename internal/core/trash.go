@@ -24,6 +24,15 @@ func stateWritable() bool {
 
 var slotSeq atomic.Int64
 
+func projectTrash(project string) (string, error) {
+	agents := filepath.Join(project, ".agents")
+	dir := filepath.Join(agents, ".skill-trash")
+	if IsSymlink(agents) || IsSymlink(dir) {
+		return "", errf("project trash path contains a symlink: %s", dir)
+	}
+	return dir, nil
+}
+
 // trashSlot creates a fresh trash directory. project != "" allows the in-project fallback.
 func trashSlot(kind, label, project string) (string, error) {
 	stamp := fmt.Sprintf("%s-%d-%d", time.Now().Format("20060102-150405"), os.Getpid(),
@@ -33,7 +42,11 @@ func trashSlot(kind, label, project string) (string, error) {
 	case stateWritable():
 		base = filepath.Join(STATE, "trash")
 	case project != "":
-		base = filepath.Join(project, ".agents", ".skill-trash")
+		var err error
+		base, err = projectTrash(project)
+		if err != nil {
+			return "", err
+		}
 		if err := os.MkdirAll(base, 0o755); err != nil {
 			return "", err
 		}
@@ -66,15 +79,24 @@ func (e TrashEntry) S(k string) string { return getStr(e, k) }
 func ListTrash(project string) []TrashEntry {
 	bases := []string{filepath.Join(STATE, "trash"), filepath.Join(CACHE, "trash")}
 	if project != "" {
-		bases = append(bases, filepath.Join(project, ".agents", ".skill-trash"))
+		if dir, err := projectTrash(project); err == nil {
+			bases = append(bases, dir)
+		}
 	}
 	var out []TrashEntry
 	for _, b := range bases {
 		ents := SortedDir(b)
 		sort.Slice(ents, func(i, j int) bool { return ents[i].Name() > ents[j].Name() })
 		for _, e := range ents {
+			if !e.IsDir() {
+				continue
+			}
 			slot := filepath.Join(b, e.Name())
-			m := LoadMap(filepath.Join(slot, "TRASH.json"))
+			meta := filepath.Join(slot, "TRASH.json")
+			if IsSymlink(meta) {
+				continue
+			}
+			m := LoadMap(meta)
 			if len(m) == 0 {
 				continue
 			}
@@ -105,8 +127,20 @@ func RestoreTrash(slot string) (string, error) {
 	}
 	kind, name := getStr(m, "kind"), getStr(m, "name")
 	proj := getStr(m, "project")
+	if base := filepath.Dir(slot); filepath.Base(base) == ".skill-trash" {
+		project := filepath.Dir(filepath.Dir(base))
+		if kind != "skill" || filepath.Clean(proj) != project {
+			return "", errf("trash entry does not belong to this project")
+		}
+	}
 	var man *ManifestData
-	if kind == "skill" {
+	switch kind {
+	case "pack":
+		expected, err := PackPath(name)
+		if err != nil || filepath.Clean(origin) != expected {
+			return "", errf("invalid pack destination")
+		}
+	case "skill":
 		if err := CheckName(name); err != nil {
 			return "", err
 		}
@@ -125,6 +159,8 @@ func RestoreTrash(slot string) (string, error) {
 		if Lexists(origin) || Lexists(LinkP(proj, name)) {
 			return "", errf("restore destination occupied")
 		}
+	default:
+		return "", errf("unknown trash entry type: %s", kind)
 	}
 	if err := os.MkdirAll(filepath.Dir(origin), 0755); err != nil {
 		return "", err
@@ -153,21 +189,25 @@ func RestoreTrash(slot string) (string, error) {
 	return fmt.Sprintf("restored %s %s → %s", kind, name, origin), nil
 }
 
-// EmptyTrash deletes the given slots (nil = all). Returns how many were removed.
-func EmptyTrash(slots []string) int {
+// EmptyTrash deletes the given slots (nil = all). It reports how many were removed and any failures.
+func EmptyTrash(slots []string) (int, error) {
 	if slots == nil {
 		for _, e := range ListTrash("") {
 			slots = append(slots, e.S("slot"))
 		}
 	}
 	n := 0
+	var problems []error
 	for _, s := range slots {
 		if Exists(filepath.Join(s, "TRASH.json")) {
-			os.RemoveAll(s)
-			n++
+			if err := os.RemoveAll(s); err != nil {
+				problems = append(problems, err)
+			} else {
+				n++
+			}
 		}
 	}
-	return n
+	return n, errors.Join(problems...)
 }
 
 // ── project registry ──

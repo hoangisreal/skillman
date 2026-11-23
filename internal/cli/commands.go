@@ -61,7 +61,7 @@ func init() {
 	reg("pin", "<skills…> [-C dir]", "Keep a project copy as it is (skipped by update, accepted by verify).",
 		[]string{"C"}, func(a *Args) int { return cmdPin(a, true) })
 	reg("unpin", "<skills…> [-C dir]", "Undo pin.", []string{"C"}, func(a *Args) int { return cmdPin(a, false) })
-	reg("repair-links", "[dir] [--mode copy] [--dry-run]", "Recreate missing or broken .claude/skills links.", []string{"C", "mode"}, cmdRepairLinks)
+	reg("repair-links", "[dir] [--mode copy] [--dry-run]", "Repair Claude skill links or managed copies.", []string{"C", "mode"}, cmdRepairLinks)
 	reg("projects", "[--json]", "Projects registered by skillman (where skills were installed).", nil, cmdProjects)
 
 	// packs
@@ -94,9 +94,9 @@ func init() {
 			"  upstream verify [repos.txt] [-j 8]       sparse-clone upstream repos, list candidate skills\n"+
 			"  upstream candidates [words] [--ticked] [--new] [--json]\n"+
 			"  upstream tick [--tier T] [--max-per-repo N] [--repo R]… [--pack P]… [--reset] [--line N]… [--untick]\n"+
-			"  upstream import [--dry-run] [--update] [--rename-collisions]",
+			"  upstream import [--dry-run] [--update] [--rename-collisions] [--allow-risky]",
 		[]string{"j", "tier", "max-per-repo", "repo", "pack", "line"}, cmdUpstream)
-	reg("trash", "list|restore <id>|empty --yes [ids…] [--json]", "Removed project copies and deleted packs.", nil, cmdTrash)
+	reg("trash", "list|restore <id>|empty --yes [ids…] [-C dir] [--json]", "Removed project copies and deleted packs. Use -C to include the project's fallback trash.", []string{"C"}, cmdTrash)
 
 	// setup
 	reg("init", "", "Create or refresh the library at $SKILL_LIBRARY: starter packs, repos.txt, the skillman skill, git.",
@@ -569,8 +569,11 @@ func cmdAdd(a *Args) int {
 				outf("- %s: %s\n", r.Name, r.Message)
 				continue
 			}
-			rel, _ := filepath.Rel(mustWd(), core.Dest(d, r.Name))
-			outf("✓ %s: %s → %s (+ .claude/skills link)\n", r.Name, r.Message, rel)
+			dest := core.Dest(d, r.Name)
+			if rel, err := filepath.Rel(mustWd(), dest); err == nil {
+				dest = rel
+			}
+			outf("✓ %s: %s → %s (+ .claude/skills)\n", r.Name, r.Message, dest)
 		} else {
 			fmt.Fprintf(stderr, "✗ %s: %s\n", r.Name, r.Message)
 			rc = 1
@@ -854,17 +857,26 @@ func cmdRepairLinks(a *Args) int {
 	default:
 		msgs, err = core.RepairLinks(d)
 	}
-	if err != nil {
-		return fail(err)
-	}
 	if a.Has("json") {
-		printJSON(map[string]any{"messages": nzs(msgs)})
-		return 0
+		report := map[string]any{"messages": nzs(msgs)}
+		rc := 0
+		if err != nil {
+			report["error"] = err.Error()
+			rc = 1
+		}
+		printJSON(report)
+		return rc
+	}
+	for _, msg := range msgs {
+		outf("%s\n", msg)
+	}
+	if err != nil {
+		errfln("skillman: %v", err)
+		return 1
 	}
 	if len(msgs) == 0 {
-		msgs = []string{"nothing to repair"}
+		outf("nothing to repair\n")
 	}
-	outf("%s\n", strings.Join(msgs, "\n"))
 	return 0
 }
 

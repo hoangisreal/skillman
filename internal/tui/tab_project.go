@@ -209,14 +209,17 @@ func (t *projectTab) actions(m *Model) []action {
 			})
 		}},
 		{key: "l", label: "fix links", run: func(m *Model) tea.Cmd {
-			msgs, err := core.RepairLinks(p)
-			if err != nil {
-				return m.notify(err.Error(), true)
-			}
-			if len(msgs) == 0 {
-				msgs = []string{"links ok"}
-			}
-			return tea.Batch(m.notify(strings.Join(msgs, " · "), false), m.reload(false))
+			return m.async("repairing Claude links and copies …", func(func(string)) tea.Msg {
+				msgs, err := core.RepairLinks(p)
+				if err != nil {
+					msgs = append(msgs, err.Error())
+					return doneMsg{title: "Claude paths needing review", text: strings.Join(msgs, "\n"), reload: true}
+				}
+				if len(msgs) == 0 {
+					msgs = []string{"nothing to repair"}
+				}
+				return doneMsg{note: strings.Join(msgs, " · "), reload: true}
+			})
 		}},
 		{key: "c", label: "change project", run: func(m *Model) tea.Cmd {
 			var opts []option

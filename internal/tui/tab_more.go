@@ -135,7 +135,8 @@ func (t *updatesTab) handle(m *Model, msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case checkedMsg:
 		for _, it := range msg.rep.Items {
-			if _, ok := t.staged[it.Name]; ok && it.Status != "changed" {
+			if staged, ok := t.staged[it.Name]; ok &&
+				(it.Status != "changed" || staged.Commit != it.Commit || staged.NewCommit != it.NewCommit || !core.IsDir(staged.Staged)) {
 				delete(t.staged, it.Name)
 			}
 			t.items[it.Name] = it
@@ -216,6 +217,15 @@ func (t *updatesTab) apply(m *Model, staged []core.Staged, safeOnly bool) tea.Cm
 		}
 		return m.async("applying "+itoa(len(todo))+" update(s) …", func(func(string)) tea.Msg {
 			rs := core.ApplyUpdates(todo, allow, true)
+			var pend []core.Staged
+			for _, s := range staged {
+				if len(s.Risk) > 0 {
+					pend = append(pend, s)
+				}
+			}
+			if err := core.QueuePending(pend); err != nil {
+				rs = append(rs, core.Result{Name: "pending updates", Message: err.Error()})
+			}
 			return doneMsg{reindex: true, title: "apply updates", text: fmtResults(rs), then: func(m *Model) tea.Cmd {
 				for _, r := range rs {
 					if r.OK {
@@ -226,13 +236,6 @@ func (t *updatesTab) apply(m *Model, staged []core.Staged, safeOnly bool) tea.Cm
 						}
 					}
 				}
-				var pend []core.Staged
-				for _, s := range t.staged {
-					if len(s.Risk) > 0 {
-						pend = append(pend, s)
-					}
-				}
-				core.SavePending(pend)
 				t.fill()
 				return nil
 			}}
@@ -354,7 +357,11 @@ func (t *updatesTab) actions(m *Model) []action {
 					return m.async("updating projects …", func(func(string)) tea.Msg {
 						var all []core.Result
 						for _, a := range aff {
-							rs, _ := core.UpdateProject(a.Project, a.Skills, false)
+							rs, err := core.UpdateProject(a.Project, a.Skills, false)
+							if err != nil {
+								all = append(all, core.Result{Name: a.Project, Message: err.Error()})
+								continue
+							}
 							for _, r := range rs {
 								r.Name = filepath.Base(a.Project) + "/" + r.Name
 								all = append(all, r)
@@ -516,9 +523,9 @@ func (t *upstreamTab) actions(m *Model) []action {
 	}
 }
 
-func (t *upstreamTab) importRun(m *Model, dry bool) tea.Cmd {
+func (t *upstreamTab) importRun(m *Model, dry bool, reviewed ...core.ImportLine) tea.Cmd {
 	return m.async(map[bool]string{true: "import dry-run …", false: "importing …"}[dry], func(progress func(string)) tea.Msg {
-		log, err := core.ImportTicked(dry, false, false, func(l core.ImportLine) { progress(l.Result + " " + l.Name) })
+		log, err := core.ImportTicked(core.QueueImportOptions{DryRun: dry, Reviewed: reviewed}, func(l core.ImportLine) { progress(l.Result + " " + l.Name) })
 		if err != nil {
 			return doneMsg{note: err.Error(), isErr: true}
 		}
@@ -528,21 +535,28 @@ func (t *upstreamTab) importRun(m *Model, dry bool) tea.Cmd {
 		var b strings.Builder
 		n := 0
 		for _, l := range log {
-			fmt.Fprintf(&b, "%-9s %s:%s  %s\n", l.Result, l.Repo, l.Name, l.Detail)
+			fmt.Fprintf(&b, "%-9s %s:%s @ %s  %s\n", l.Result, l.Repo, l.Name, core.Short(l.Commit, 12), l.Detail)
 			if l.Result == "DRY-RUN" {
 				n++
 			}
 		}
 		if !dry {
-			rows, e, w, _ := core.RebuildIndex(true)
+			rows, e, w, err := core.RebuildIndex(true)
+			if err != nil {
+				return doneMsg{note: err.Error(), isErr: true, title: "import result", text: b.String(), reindex: true}
+			}
 			fmt.Fprintf(&b, "\nvalidate: skills=%d errors=%d warnings=%d\nreview, then commit: git -C %s add -A && git -C %s commit\n", len(rows), len(e), len(w), core.LIB, core.LIB)
 			return doneMsg{title: "import result", text: b.String(), reindex: true}
 		}
-		return doneMsg{title: "import dry-run", text: b.String(), then: func(m *Model) tea.Cmd {
-			if n == 0 {
-				return nil
+		return doneMsg{then: func(m *Model) tea.Cmd {
+			pre := newTextModal("import preview", b.String())
+			if n > 0 {
+				pre.accept = func(m *Model) tea.Cmd {
+					m.push(confirm(fmt.Sprintf("Import %d skill(s) for real?", n), false, func(m *Model) tea.Cmd { return t.importRun(m, false, log...) }))
+					return nil
+				}
 			}
-			m.push(confirm(fmt.Sprintf("Import %d skill(s) for real?", n), false, func(m *Model) tea.Cmd { return t.importRun(m, false) }))
+			m.push(pre)
 			return nil
 		}}
 	})
@@ -864,9 +878,7 @@ func (t *trashTab) actions(m *Model) []action {
 				return nil
 			}
 			m.push(confirm("Permanently delete trash entry "+e.S("name")+"?", true, func(m *Model) tea.Cmd {
-				core.EmptyTrash([]string{e.S("slot")})
-				t.refresh(m)
-				return nil
+				return t.empty(m, []string{e.S("slot")})
 			}))
 			return nil
 		}},
@@ -879,13 +891,22 @@ func (t *trashTab) actions(m *Model) []action {
 				slots = append(slots, e.S("slot"))
 			}
 			m.push(confirm(fmt.Sprintf("Permanently delete ALL %d trash entries?", len(slots)), true, func(m *Model) tea.Cmd {
-				n := core.EmptyTrash(slots)
-				t.refresh(m)
-				return m.notify(fmt.Sprintf("deleted %d entries", n), false)
+				return t.empty(m, slots)
 			}))
 			return nil
 		}},
 	}
+}
+
+func (t *trashTab) empty(m *Model, slots []string) tea.Cmd {
+	return m.async("deleting trash entries …", func(func(string)) tea.Msg {
+		n, err := core.EmptyTrash(slots)
+		note := fmt.Sprintf("deleted %d entries", n)
+		if err != nil {
+			return doneMsg{title: note, text: err.Error(), reload: true}
+		}
+		return doneMsg{note: note, reload: true}
+	})
 }
 
 func (t *trashTab) key(m *Model, msg tea.KeyPressMsg) (tea.Cmd, bool) {

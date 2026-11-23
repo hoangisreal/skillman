@@ -11,6 +11,26 @@ func managedMirror(p string, e *Entry) bool {
 	return e != nil && regularSkill(p) && TreeHash(p) == e.TreeHash
 }
 
+// A tracked copy can be replaced if it matches either the recorded version
+// or the current project directory, whose contents are preserved separately.
+func replaceableMirror(project, name string, entry *Entry) bool {
+	return entry != nil && (managedMirror(LinkP(project, name), entry) || linkOK(project, name, true, inspectionHashes()))
+}
+
+func mirrorProblem(project, name string, entry *Entry, hash func(string) string) string {
+	mirror := LinkP(project, name)
+	switch {
+	case !Lexists(mirror):
+		return "missing Claude copy (run: skillman repair-links)"
+	case !regularSkill(mirror):
+		return sprintf("Claude copy path is occupied: %s", mirror)
+	case hash(mirror) == entry.TreeHash:
+		return "Claude copy differs from the project (run: skillman repair-links)"
+	default:
+		return sprintf("Claude copy has local changes at %s; compare with %s and move the Claude copy aside before running skillman repair-links", mirror, Dest(project, name))
+	}
+}
+
 func checkInstallTargets(project, name string, prev *Entry, copies bool) error {
 	dest, path := Dest(project, name), LinkP(project, name)
 	for _, dir := range []string{filepath.Dir(dest), filepath.Dir(filepath.Dir(path)), filepath.Dir(path)} {
@@ -28,7 +48,7 @@ func checkInstallTargets(project, name string, prev *Entry, copies bool) error {
 	if !Lexists(path) {
 		return nil
 	}
-	if copies && !managedMirror(path, prev) {
+	if copies && !replaceableMirror(project, name, prev) {
 		return errf("modified or unmanaged Claude copy: %s", path)
 	}
 	if !copies && !IsSymlink(path) {
@@ -106,7 +126,7 @@ func ConvertCopies(d string, dry bool) ([]string, error) {
 		if IsSymlink(src) || !IsFile(filepath.Join(src, "SKILL.md")) {
 			return msgs, rollback(errf("invalid source: %s", src))
 		}
-		if copies && managedMirror(lp, m.Skills[n]) {
+		if copies && linkOK(d, n, true, TreeHash) {
 			continue
 		}
 		if TreeHash(src) != m.Skills[n].TreeHash {

@@ -49,4 +49,4 @@ jobs:
       - name: Test portable lifecycle and locking
         run: go test ./internal/core -run '^TestPortable' -count=1
       - name: Test imports and project workflows
-        run: go test ./internal/cli -run '^(TestImportWorkflow|TestUpdateDryRun|TestEmptyProjectStackWorkflow|TestProjectInstallPreviewAndManifest|TestProjectAgentStatus|TestProjectVerifyClaudeLinkTarget)$' -count=1
+        run: go test ./internal/cli -run '^(TestImportWorkflow|TestUpstreamQueue|TestUpdateDryRun|TestEmptyProjectStackWorkflow|TestProjectInstallPreviewAndManifest|TestProjectRecovery|TestProjectAgentStatus|TestProjectVerifyClaudeLinkTarget)$' -count=1

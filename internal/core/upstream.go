@@ -713,25 +713,60 @@ func Changelog(it UpdateItem, limit int) string {
 	return "(changelog unavailable)"
 }
 
-func libDirty(paths []string) []string {
-	r := Git(append([]string{"status", "--porcelain", "--"}, paths...), LIB, 60)
-	if r.Code != 0 {
+func requireCleanLibrary(paths ...string) error {
+	if !Exists(filepath.Join(LIB, ".git")) {
 		return nil
 	}
-	var out []string
-	for _, l := range strings.Split(r.Stdout, "\n") {
-		if len(l) > 3 {
-			out = append(out, l[3:])
-		}
+	r := Git(append([]string{"status", "--porcelain", "--"}, paths...), LIB, 60)
+	if r.Code != 0 {
+		return errf("cannot inspect library changes: %s", tail(r.Stderr, 200))
 	}
-	return out
+	if strings.TrimSpace(r.Stdout) != "" {
+		return errf("uncommitted changes in library copy; commit or discard first")
+	}
+	return nil
+}
+
+func matchesUpdateBase(it UpdateItem) bool {
+	src := LoadMap(filepath.Join(SKILLS, it.Name, "SOURCE.json"))
+	pinned, _ := src["pinned"].(bool)
+	return !pinned && getStr(src, "repo") == it.Repo && getStr(src, "subpath") == it.Subpath && getStr(src, "commit") == it.Commit
+}
+
+// Commit only the files written by this operation, keeping other staged edits in the index.
+func commitLibrary(message string, paths []string) error {
+	add := Git(append([]string{"add", "-A", "--"}, paths...), LIB, 120)
+	if add.Code != 0 {
+		return errf("git add failed: %s", tail(add.Stderr, 200))
+	}
+	r := Git(append([]string{"commit", "--only", "-q", "-m", message, "--"}, paths...), LIB, 120)
+	if r.Code != 0 {
+		detail := r.Stderr
+		if strings.TrimSpace(detail) == "" {
+			detail = r.Stdout
+		}
+		return errf("git commit failed: %s", tail(detail, 200))
+	}
+	return nil
 }
 
 // ApplyUpdates swaps staged updates into the library (risky ones only with allowRisky) and commits.
 func ApplyUpdates(items []Staged, allowRisky, commit bool) []Result {
+	if len(items) == 0 {
+		return nil
+	}
+	unlock, err := DirLock(SKILLS)
+	if err != nil {
+		return []Result{res("library", false, "%v", err)}
+	}
+	defer unlock()
 	var out []Result
 	var done []Staged
 	for _, it := range items {
+		if err := CheckName(it.Name); err != nil {
+			out = append(out, res(it.Name, false, "%v", err))
+			continue
+		}
 		if len(it.Risk) > 0 && !allowRisky {
 			out = append(out, res(it.Name, false, "risky: %s", strings.Join(it.Risk, "; ")))
 			continue
@@ -740,8 +775,12 @@ func ApplyUpdates(items []Staged, allowRisky, commit bool) []Result {
 			out = append(out, res(it.Name, false, "staged copy missing; re-run check"))
 			continue
 		}
-		if len(libDirty([]string{"skills/" + it.Name})) > 0 {
-			out = append(out, res(it.Name, false, "uncommitted changes in library copy; commit or discard first"))
+		if !matchesUpdateBase(it.UpdateItem) {
+			out = append(out, res(it.Name, false, "library source changed or was pinned; run a new check"))
+			continue
+		}
+		if err := requireCleanLibrary("skills/" + it.Name); err != nil {
+			out = append(out, res(it.Name, false, "%v", err))
 			continue
 		}
 		if _, err := InstallIntoLibrary(it.Staged, it.Name); err != nil {
@@ -752,31 +791,30 @@ func ApplyUpdates(items []Staged, allowRisky, commit bool) []Result {
 		out = append(out, res(it.Name, true, "updated %s → %s", short(it.Commit, 8), short(it.NewCommit, 8)))
 	}
 	if len(done) > 0 {
-		RebuildIndex(true)
+		if _, _, _, err := RebuildIndex(true); err != nil {
+			return append(out, res("library index", false, "%v (updates applied to disk)", err))
+		}
 		probs := ValidatePacks()
-		appendUpdateLog(out, probs)
+		if err := appendUpdateLog(out, probs); err != nil {
+			return append(out, res("update log", false, "%v (updates applied to disk)", err))
+		}
 		if commit && Exists(filepath.Join(LIB, ".git")) {
-			args := []string{"add", "--"}
+			paths := []string{"INDEX.md", "INDEX.json", "VALIDATION.md", "UPDATE_LOG.md"}
 			var body []string
 			for _, i := range done {
-				args = append(args, "skills/"+i.Name)
+				paths = append(paths, "skills/"+i.Name)
 				body = append(body, fmt.Sprintf("- %s: %s %s -> %s", i.Name, i.Repo, short(i.Commit, 12), short(i.NewCommit, 12)))
 			}
-			Git(append(args, "INDEX.md", "INDEX.json", "VALIDATION.md", "UPDATE_LOG.md"), LIB, 120)
-			cr := Git([]string{"commit", "-q", "-m", fmt.Sprintf("Update %d skill(s) from upstream\n\n%s", len(done), strings.Join(body, "\n"))}, LIB, 120)
-			if cr.Code != 0 {
-				msg := cr.Stderr
-				if strings.TrimSpace(msg) == "" {
-					msg = cr.Stdout
-				}
-				out = append(out, res("git commit", false, "%s — changes are applied but uncommitted", tail(msg, 200)))
+			msg := fmt.Sprintf("Update %d skill(s) from upstream\n\n%s", len(done), strings.Join(body, "\n"))
+			if err := commitLibrary(msg, paths); err != nil {
+				out = append(out, res("git commit", false, "%v (updates applied to disk)", err))
 			}
 		}
 	}
 	return out
 }
 
-func appendUpdateLog(rs []Result, probs []PackProblem) {
+func appendUpdateLog(rs []Result, probs []PackProblem) error {
 	p := filepath.Join(LIB, "UPDATE_LOG.md")
 	var lines []string
 	if !Exists(p) {
@@ -797,20 +835,47 @@ func appendUpdateLog(rs []Result, probs []PackProblem) {
 		}
 	}
 	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err == nil {
-		f.WriteString(strings.Join(lines, "\n") + "\n")
-		f.Close()
+	if err != nil {
+		return err
 	}
+	_, err = f.WriteString(strings.Join(lines, "\n") + "\n")
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }
 
-func SavePending(items []Staged) error {
-	if items == nil {
-		items = []Staged{}
+// QueuePending adds newly reviewed items while keeping other pending updates.
+func QueuePending(items []Staged) error {
+	file := filepath.Join(UPDATES, "pending.json")
+	if len(items) == 0 && !Exists(file) {
+		return nil
 	}
+	unlock, err := DirLock(UPDATES)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	byName := map[string]Staged{}
+	for _, item := range append(LoadPending(), items...) {
+		if validPending(item) {
+			byName[item.Name] = item
+		}
+	}
+	pending := make([]Staged, 0, len(byName))
+	for _, item := range byName {
+		pending = append(pending, item)
+	}
+	sort.Slice(pending, func(i, j int) bool { return pending[i].Name < pending[j].Name })
 	o := NewOMap()
 	o.Set("saved_at", Now())
-	o.Set("items", items)
-	return WriteJSON(filepath.Join(UPDATES, "pending.json"), o)
+	o.Set("items", pending)
+	return WriteJSON(file, o)
+}
+
+func validPending(item Staged) bool {
+	return KEBAB.MatchString(item.Name) && item.Staged != "" && IsDir(item.Staged) && matchesUpdateBase(item.UpdateItem)
 }
 
 func LoadPending() []Staged {
@@ -820,7 +885,7 @@ func LoadPending() []Staged {
 	LoadJSON(filepath.Join(UPDATES, "pending.json"), &data)
 	var out []Staged
 	for _, i := range data.Items {
-		if i.Staged != "" && IsDir(i.Staged) {
+		if validPending(i) {
 			out = append(out, i)
 		}
 	}
@@ -853,8 +918,8 @@ func UpdateLibrary(names []string, mode string, allowRisky, commit bool, progres
 				os.RemoveAll(s.Staged)
 			}
 		}
-		if len(risky) > 0 {
-			SavePending(risky)
+		if err := QueuePending(risky); err != nil {
+			rep.Results = append(rep.Results, res("pending updates", false, "%v", err))
 		}
 		rep.Staged = append(rep.Staged, staged...)
 	}
@@ -865,6 +930,15 @@ func SetLibraryPin(name string, pinned bool) error {
 	if err := CheckName(name); err != nil {
 		return err
 	}
+	unlock, err := DirLock(SKILLS)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return setLibraryPin(name, pinned)
+}
+
+func setLibraryPin(name string, pinned bool) error {
 	p := filepath.Join(SKILLS, name, "SOURCE.json")
 	if !Exists(p) {
 		return errf("%s: no SOURCE.json (no upstream to pin against)", name)
@@ -883,6 +957,11 @@ func Rollback(name string, commit bool) (string, error) {
 	if err := CheckName(name); err != nil {
 		return "", err
 	}
+	unlock, err := DirLock(SKILLS)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	r := Git([]string{"log", "-n", "1", "--format=%H", "--", "skills/" + name}, LIB, 60)
 	last := strings.TrimSpace(r.Stdout)
 	if last == "" {
@@ -891,28 +970,30 @@ func Rollback(name string, commit bool) (string, error) {
 	if Git([]string{"cat-file", "-e", last + "^:skills/" + name + "/SKILL.md"}, LIB, 30).Code != 0 {
 		return "", errf("%s: did not exist before %s (nothing to roll back to)", name, short(last, 8))
 	}
-	if len(libDirty([]string{"skills/" + name})) > 0 {
-		return "", errf("%s: uncommitted changes; commit or discard first", name)
+	if err := requireCleanLibrary("skills/" + name); err != nil {
+		return "", errf("%s: %v", name, err)
 	}
-	Git([]string{"rm", "-rq", "--", "skills/" + name}, LIB, 60)
+	rm := Git([]string{"rm", "-rq", "--", "skills/" + name}, LIB, 60)
+	if rm.Code != 0 {
+		return "", errf("rollback failed: %s", tail(rm.Stderr, 200))
+	}
 	co := Git([]string{"checkout", last + "^", "--", "skills/" + name}, LIB, 60)
 	if co.Code != 0 {
 		Git([]string{"checkout", "HEAD", "--", "skills/" + name}, LIB, 60)
 		return "", errf("rollback failed: %s", strings.TrimSpace(co.Stderr))
 	}
 	if Exists(filepath.Join(SKILLS, name, "SOURCE.json")) {
-		SetLibraryPin(name, true)
+		if err := setLibraryPin(name, true); err != nil {
+			return "", errf("%s rolled back but the pin could not be saved: %v", name, err)
+		}
 	}
-	RebuildIndex(true)
+	if _, _, _, err := RebuildIndex(true); err != nil {
+		return "", errf("%s rolled back but the index could not be rebuilt: %v", name, err)
+	}
 	if commit {
-		Git([]string{"add", "-A", "--", "skills/" + name, "INDEX.md", "INDEX.json", "VALIDATION.md"}, LIB, 60)
-		cr := Git([]string{"commit", "-q", "-m", fmt.Sprintf("Roll back %s to %s^ (pinned)", name, short(last, 12))}, LIB, 60)
-		if cr.Code != 0 {
-			msg := cr.Stderr
-			if strings.TrimSpace(msg) == "" {
-				msg = cr.Stdout
-			}
-			return fmt.Sprintf("%s rolled back and pinned, but git commit failed: %s", name, tail(msg, 200)), nil
+		msg := fmt.Sprintf("Roll back %s to %s^ (pinned)", name, short(last, 12))
+		if err := commitLibrary(msg, []string{"skills/" + name, "INDEX.md", "INDEX.json", "VALIDATION.md"}); err != nil {
+			return "", errf("%s rolled back and pinned on disk: %v", name, err)
 		}
 	}
 	return fmt.Sprintf("%s rolled back to %s^ and pinned (unpin: skillman library unpin %s)", name, short(last, 12), name), nil

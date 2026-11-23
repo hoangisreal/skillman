@@ -144,9 +144,10 @@ func (t *packsTab) loadMembers(m *Model) {
 	for _, s := range pk.Skills {
 		t.own[s] = true
 	}
-	tok := 0
+	tok, available := 0, 0
 	for _, s := range all {
-		if core.IsDir(filepath.Join(core.SKILLS, s)) {
+		if core.IsFile(filepath.Join(core.SKILLS, s, "SKILL.md")) {
+			available++
 			tok += core.SkillTokens(filepath.Join(core.SKILLS, s))
 		}
 	}
@@ -155,8 +156,11 @@ func (t *packsTab) loadMembers(m *Model) {
 	for _, s := range stacks {
 		st = append(st, s.Title)
 	}
-	t.info = fmt.Sprintf("@%s: %s\nextends: %s · %d skills · ≈%d tokens · stacks: %s · install: skillman add @%s",
-		p, pk.Description, orDash(strings.Join(pk.Extends, ", ")), len(all), tok, orDash(strings.Join(st, ", ")), p)
+	t.info = fmt.Sprintf("@%s: %s\nextends: %s · %d/%d available · ≈%d tokens · stacks: %s",
+		p, pk.Description, orDash(strings.Join(pk.Extends, ", ")), available, len(all), tok, orDash(strings.Join(st, ", ")))
+	if available == 0 && len(all) > 0 {
+		t.info += "\n" + core.PackImportHint(p)
+	}
 	t.mem.n = len(all)
 	t.mem.clamp()
 }

@@ -41,7 +41,7 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | `update-projects [--dry-run]` | Refresh outdated skills in every registered project |
 | `adopt [names]` | Start tracking copies that were added before the manifest existed |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
-| `repair-links [dir]` | Recreate missing or broken `.claude/skills` links |
+| `repair-links [dir]` | Repair Claude links and copies. When only the project skill has changed, refresh the unchanged Claude copy. Reports separately edited copies and occupied paths for manual review. |
 | `verify [dir] [--json]` | **CI check.** Requires a valid manifest, matching copies and a valid Claude link or mirror. Pinned edits are accepted when the layout is intact. Needs no library. |
 | `audit [dir \| skill-dir] [--library] [--fail-on review\|error\|never] [-q] [--json]` | **Offline risk scan**: validation errors, hooks, pipe-to-shell, credential reads, broad `allowed-tools`, symlinks, executables |
 | `projects [--json]` | Projects where skillman installed skills |
@@ -59,7 +59,7 @@ counts eligible new or restored skills and `budget_after` also accounts for repl
 | `modified` | Edited in the project, the library did not change | keep and `pin`, or `update --force` |
 | `conflict` | Edited in the project **and** changed in the library | `diff`, then decide |
 | `untracked` | A folder in `.agents/skills` the manifest does not know | `adopt` |
-| `missing` | In the manifest, gone from disk | `update --force` or `remove` |
+| `missing` | In the manifest, gone from disk | `add <name>` or `update <name> --force` to restore from the library |
 | `orphan` | Tracked, but the skill is no longer in the library | keep or `remove` |
 | `invalid` | A symlink or file where a real directory should be | fix by hand |
 
@@ -89,7 +89,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `library new <skill> [-d DESC]` | Scaffold a local skill (no upstream; updates never touch it) |
 | `library rebuild-index` · `library validate [--strict] [-v]` | Re-validate every skill, rewrite `INDEX.md/json` and `VALIDATION.md` |
 | `library build-packs` | Regenerate `packs/vendor/*` (one pack per upstream owner with ≥ 3 skills) |
-| `trash list \| restore <id> \| empty --yes [ids]` | Removed project copies and deleted packs |
+| `trash list \| restore <id> \| empty --yes [ids] [-C dir]` | Removed project copies and deleted packs. Use `-C dir` to include entries saved in that project's fallback trash. |
 | `init` | Create or refresh the library: starter packs, `repos.txt`, the `skillman` skill, `.gitignore`, git |
 | `import <source> [--list] [--skill name] [-C dir] [--dry-run] [--commit SHA] [--allow-risky] [--json]` | Accepts a GitHub slug, repository URL or skill directory URL. Lists choices for multi-skill sources. Repeat `--skill` to select several. The default destination is the library. Add `-C` to install into a project. Dry-run fetches into the cache and returns commit-pinned `apply_args`. |
 | `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--allow-risky] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. After inspecting audit findings, `--allow-risky` accepts review-level findings. Validation errors and missing licenses still block import. |
@@ -99,12 +99,12 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 
 | Command | Description |
 |---|---|
-| `upstream verify [repos.txt] [-j 8]` | Sparse, blob-less clone of each repo in `staging/repos.txt`; writes `staging/CANDIDATES.md` |
+| `upstream verify [repos.txt] [-j 8]` | Sparse, blob-less clone of each repo in `staging/repos.txt`. Refreshes `staging/CANDIDATES.md` and keeps selections at the same commit and folder. |
 | `upstream candidates [words] [--ticked] [--new] [--json]` | List candidates with their line numbers |
 | `upstream tick --pack core web-vue` | Tick the candidates a pack needs (one per name, licensed repos first) |
 | `upstream tick --tier official --max-per-repo 40` · `--repo owner/name` · `--reset` | Tick in bulk |
 | `upstream tick --line N … [--untick]` | Tick or untick specific candidates |
-| `upstream import [--dry-run] [--update] [--rename-collisions]` | Import ticked candidates at a pinned commit through the safety pipeline, then rebuild the index |
+| `upstream import [--dry-run] [--update] [--rename-collisions] [--allow-risky]` | Import ticked candidates at the verified commit, audit their files and rebuild the index. Review-level findings require `--allow-risky`. A preview may use the cache. The library skills and import log are written on apply. |
 
 ## Compatibility aliases
 
@@ -128,6 +128,6 @@ the pane under the pointer; drag the `│` divider in Library to resize the prev
 | 3 Packs | `i` install · `u` remove from project · `n` new · `a`/`x` add/remove skill · `e` description · `E` extends · `r` rename · `d` delete · `v` vendor packs |
 | 4 Project | `u`/`U` update one/all · `D` diff · `x` remove · `P` remove pack · `a` adopt · `t` pin · `s` suggest · `o` doctor · `v` verify · `A` audit · `l` fix links · `c` change project |
 | 5 Updates | `c` check all · `k` check a pack · `L` check the Library selection · `enter` changelog + diff · `a` apply selected · `A` apply all safe · `r` rollback · `f` only changes · `p` update projects |
-| 6 Upstream | `space` tick · `I` import (dry run, then confirm) · `t` only ticked · `V` verify repos · `/` filter |
+| 6 Upstream | `space` tick · `I` preview import (Enter to continue to confirmation) · `t` only ticked · `V` verify repos · `/` filter |
 | 7 Validation | `/` filter · `enter` open in Library · `v` re-validate |
 | 8 Trash | `R` restore · `D` diff vs library · `x` delete forever · `E` empty |
