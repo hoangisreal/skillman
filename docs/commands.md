@@ -93,7 +93,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `init` | Create or refresh the library: starter packs, `repos.txt`, the `skillman` skill, `.gitignore`, git |
 | `import <source> [--list] [--skill name] [-C dir] [--dry-run] [--commit SHA] [--allow-risky] [--json]` | Accepts a GitHub slug, repository URL or skill directory URL. Lists choices for multi-skill sources. Repeat `--skill` to select several. The default destination is the library. Add `-C` to install into a project. Dry-run fetches into the cache and returns commit-pinned `apply_args`. |
 | `bootstrap --pack core\|web-vue\|postgres [--dry-run] [--allow-risky] [--json]` | Preview pinned sources offline or import missing starter members into the library. Existing skills and upstream candidate selections are preserved. After inspecting audit findings, `--allow-risky` accepts review-level findings. Validation errors and missing licenses still block import. |
-| `agent-setup [--dry-run] [--remove] [--no-claude] [--no-codex]` | Link the `skillman` skill into `~/.claude/skills` and `~/.agents/skills` |
+| `agent-setup [--dry-run] [--remove] [--no-claude] [--no-codex]` | Install the bundled `skillman` skill in `~/.claude/skills` and `~/.agents/skills` using links on Linux/macOS and managed copies by default on Windows |
 
 ## Import pipeline
 

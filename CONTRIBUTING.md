@@ -5,8 +5,9 @@ Issues and pull requests are welcome. Please keep changes small and focused.
 ## Setup
 
 ```bash
-git clone https://github.com/hoangisreal/skillman && cd skillman
-SKILL_LIBRARY=$PWD/.dev-lib ./install.sh   # a scratch library, so your real one is untouched
+git clone https://github.com/hoangisreal/skillman
+cd skillman
+SKILL_LIBRARY="$PWD/.dev-lib" BIN_DIR="$PWD/.dev-lib/bin" ./install.sh --no-global-skill
 ```
 
 Go 1.26 or newer and git are the only requirements.
@@ -33,10 +34,12 @@ Optional checks against a real library (not run in CI):
 
 ```bash
 SKILLMAN_BENCH_LIBRARY=~/skill-library go test ./internal/tui -run LatencyReport -v     # per-key latency
-SKILLMAN_SCREENSHOTS=docs/screenshots SKILLMAN_BENCH_LIBRARY=~/skill-library go test ./internal/tui -run Screenshots
+mkdir -p /tmp/skillman-model-screens
+SKILLMAN_SCREENSHOTS=/tmp/skillman-model-screens SKILLMAN_BENCH_LIBRARY="$PWD/.dev-lib" go test ./internal/tui -run Screenshots
 ```
 
-The screenshot test reads the library but never modifies it (the demo project lives in a temp dir).
+The screenshot test generates SVG model snapshots against the scratch library from Setup. For the README gallery,
+capture the running binary in a terminal using a demo project and save the frames as PNGs in `docs/screenshots`.
 
 ## Guidelines
 

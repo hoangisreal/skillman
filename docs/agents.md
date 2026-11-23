@@ -6,16 +6,17 @@ check or item, `2` usage error.
 
 ## Setup
 
-`install.sh` (or `skillman agent-setup`) links the [`skillman` skill](../skills/skillman/SKILL.md) into:
+`skillman agent-setup` makes the bundled [`skillman` skill](../skills/skillman/SKILL.md) available in the following personal directories. On Linux and macOS, `install.sh` also runs setup unless you pass `--no-global-skill`.
 
 | Directory | Read by |
 |---|---|
 | `~/.claude/skills/skillman` | Claude Code (and OpenCode, which also reads Claude's skill folders) |
 | `~/.agents/skills/skillman` | Codex CLI |
 
-It is a symlink to the copy in your library, so `skillman init` refreshes it. It costs one short description in
-each session. `skillman agent-setup --remove` undoes it; a real directory at those paths is never touched. To keep
-it per project only, skip agent-setup and run `skill-add skillman` in the project.
+On Linux and macOS these paths link to the library. Windows uses managed copies for new installations. After
+upgrading on Windows, run `skillman init` followed by `skillman agent-setup` to refresh them. Use
+`skillman agent-setup --remove` to undo personal setup. To install the instructions for one project, run
+`skillman add skillman` inside it.
 
 ### Cursor and GitHub Copilot CLI
 
@@ -65,11 +66,6 @@ installation leaves the successful library import available and returns `retry_a
 | `add --dry-run` | `{"project", "ok", "skills": [{"name", "pack", "state", "in_library", "tokens", "action", "reason"}], "added_tokens", "budget_after", "budget"}` |
 | `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?}]` |
 | `status --agents` | `{"project", "include_global", "agents": [{"id", "roots", "skills", "duplicates"}]}`. Skill rows include `name`, `path`, `scope`, `tracked`, `state` and optional `aliases`. |
-
-For agent status, `available` describes a skill on disk. The scanner checks direct skill folders under the
-documented project roots. `--include-global` enables the corresponding standard personal roots. Symlinks
-outside those roots appear as `external_link`. Shared locations and matching managed Claude mirrors appear
-once per client with alternate paths in `aliases`. Separate copies with the same skill name appear in `duplicates`.
 | `doctor` | `{"project", "ok", "checks": [{"level": "ok\|warn\|error", "message"}]}` |
 | `search` | `{"query", "count", "skills": [{"name", "description", "source", "domain", "stacks", "packs", "state"?}]}` |
 | `info` | `{"name", "description", "source", "commit", "domain", "stacks", "tags", "packs", "tokens", "lines", "errors", "warnings", "state", "body"?}` |
@@ -77,6 +73,11 @@ once per client with alternate paths in `aliases`. Separate copies with the same
 | `audit` | `[{"name", "path", "level": "ok\|info\|review\|error", "errors", "review", "executables"}]` |
 | `library check` | `{"items": [{"name", "repo", "status", "commit", "new_commit", …}], "no_upstream", "errors", "staged", "results"}` |
 | `pack list` / `pack show` | `{"packs": [{"name", "description", "extends", "skills", "count"}]}` / `{"pack", "skills", "tokens", "install"}` |
+
+For agent status, `available` describes a skill on disk. The scanner checks direct skill folders under the
+documented project roots. `--include-global` enables the corresponding standard personal roots. Symlinks
+outside those roots appear as `external_link`. Shared locations and matching managed Claude mirrors appear
+once per client with alternate paths in `aliases`. Separate copies with the same skill name appear in `duplicates`.
 
 ## Guardrails
 

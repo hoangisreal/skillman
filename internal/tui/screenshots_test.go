@@ -1,7 +1,7 @@
 package tui
 
-// Renders docs/screenshots/*.svg from real frames of the TUI model. Run against a real library:
-//   SKILLMAN_SCREENSHOTS=docs/screenshots SKILLMAN_BENCH_LIBRARY=~/skill-library go test ./internal/tui -run Screenshots
+// TestScreenshots renders SVG snapshots of the TUI model. See CONTRIBUTING.md
+// for sample commands and instructions for capturing the running binary.
 
 import (
 	"fmt"
