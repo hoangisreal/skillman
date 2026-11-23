@@ -4,10 +4,6 @@
 
 Skillman provides a CLI and terminal UI to find, install, and update agent skills from a local library. Each skill is a folder with instructions in `SKILL.md`. Teams can commit the skills they choose, review changes in Git, and verify the same files in CI.
 
-[![CI](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hoangisreal/skillman/actions/workflows/ci.yml)
-[![Portable packages](https://github.com/hoangisreal/skillman/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/hoangisreal/skillman/actions/workflows/packages.yml)
-[![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
 [Install](#install) · [Quickstart](#quickstart) · [Terminal UI](#terminal-ui) · [Use with coding agents](#use-with-coding-agents) · [Documentation](#documentation)
 
 ![Skillman Library filtered to Vue skills, with an installed skill and its Markdown preview](docs/screenshots/1-library.png)
