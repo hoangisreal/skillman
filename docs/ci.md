@@ -8,9 +8,24 @@ built for CI: neither needs your library or the network, only the `skillman` bin
 | `skillman verify .` | A committed skill differs from the hash in `.agents/skill-manifest.json`, a folder is not in the manifest, a manifest entry is missing on disk, or a `.claude/skills` link is broken. Pinned skills may differ |
 | `skillman audit . --fail-on review` | A skill has validation errors or a risk signal: hooks, a download piped to a shell, credential reads, broad `allowed-tools`, symlinks. `--fail-on error` only fails on validation errors |
 
-`verify` works like a frozen lockfile: a pull request cannot quietly change what the agent is told to do. To change
-a skill on purpose, update it from the library (`update`) or keep the edit and `pin` it, then commit the manifest
-alongside it.
+`verify` checks that the committed skill files and the committed manifest agree. It does not check where either
+came from, so it catches an edit to a skill folder that forgot the manifest, not a deliberate change to both:
+
+- A pull request that edits `SKILL.md` and also updates its `tree_hash` passes.
+- A skill marked `"pinned": true` passes with any content.
+
+To change a skill on purpose, update it from the library (`update`) or keep the edit and `pin` it, then commit the
+manifest alongside it. Review those changes like code: require an owner review for `.agents/` and `.claude/skills/`,
+for example with a CODEOWNERS entry:
+
+```text
+# .github/CODEOWNERS
+/.agents/         @your-org/skill-owners
+/.claude/skills/  @your-org/skill-owners
+```
+
+A diff that touches `.agents/skill-manifest.json` (a changed `tree_hash`, `upstream_commit` or `pinned`) is a change
+to what the agent is told to do, even when `verify` passes.
 
 ## GitHub Actions
 
