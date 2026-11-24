@@ -23,10 +23,18 @@ def cli(*args):
     subprocess.run([binary, *args], env=env, cwd=project, check=True)
 
 
-if phase == "create":
+if phase in ("create", "create-symlink"):
     project.mkdir()
     git("init", "-b", "main")
     (project / ".gitignore").write_text(".agents/.skillman.lock\n")
+elif phase == "convert":
+    # Git for Windows defaults: CRLF text and symlinks checked out as plain files.
+    subprocess.run(["git", "-c", "core.autocrlf=true", "-c", "core.symlinks=false", "clone", bundle, project], check=True)
+    git("config", "core.autocrlf", "true")
+    git("config", "core.symlinks", "false")
+    cli("repair-links", "-C", project, "--mode", "copy")
+    cli("verify", "-C", project)
+    sys.exit(0)
 else:
     subprocess.run(["git", "-c", "core.autocrlf=true", "clone", bundle, project], check=True)
     cli("verify", "-C", project)
@@ -36,8 +44,15 @@ if phase != "verify":
     skill = lib / "skills" / "portable-example"
     skill.mkdir()
     (skill / "SKILL.md").write_bytes(f"---\nname: portable-example\ndescription: Example {phase}\n---\n".encode())
-    cli("add" if phase == "create" else "update", "-C", project, "portable-example")
+    (skill / "notes.md").write_bytes(b"line one\nline two\n")
+    if phase == "create-symlink":
+        cli("repair-links", "-C", project, "--mode", "symlink")
+    cli("add" if phase.startswith("create") else "update", "-C", project, "portable-example")
     cli("verify", "-C", project)
+    if phase == "create-symlink":
+        # Projects created before Skillman wrote .gitattributes: Windows converts them to CRLF.
+        for attributes in (".agents/skills/.gitattributes", ".claude/skills/.gitattributes"):
+            (project / attributes).unlink()
     git("add", ".")
     git("commit", "-m", phase)
     git("bundle", "create", str(bundle), "--all")

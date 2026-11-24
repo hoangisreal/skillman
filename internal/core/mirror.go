@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func managedMirror(p string, e *Entry) bool {
@@ -149,7 +148,19 @@ func ConvertClaudeMode(d, mode string, dry bool) ([]string, error) {
 			continue
 		}
 		if TreeHash(src) != m.Skills[n].TreeHash {
-			return msgs, rollback(errf("review changed project copy before conversion: %s", src))
+			files, converted := checkoutConverted(d, src, m.Skills[n].TreeHash)
+			if !converted {
+				return msgs, rollback(errf("review changed project copy before conversion: %s", src))
+			}
+			// Git reports the checkout as clean: restore the committed bytes.
+			if !dry {
+				if err := restoreCommitted(src, files); err != nil {
+					return msgs, rollback(errf("cannot restore committed bytes in %s: %v", src, err))
+				}
+				if TreeHash(src) != m.Skills[n].TreeHash {
+					return msgs, rollback(errf("restored %s but it still differs from the manifest", src))
+				}
+			}
 		}
 		target := "../../.agents/skills/" + n
 		if Lexists(lp) {
@@ -159,14 +170,8 @@ func ConvertClaudeMode(d, mode string, dry bool) ([]string, error) {
 				valid = filepath.ToSlash(v) == target
 			} else if copies && !wantCopies {
 				valid = replaceableMirror(d, n, m.Skills[n])
-			} else if st, e := os.Lstat(lp); e == nil && st.Mode().IsRegular() && st.Size() == int64(len(target)) {
-				rel, _ := filepath.Rel(d, lp)
-				g := Git([]string{"ls-files", "--stage", "--", filepath.ToSlash(rel)}, d, 10)
-				b, _ := os.ReadFile(lp)
-				if g.Code == 0 && strings.HasPrefix(g.Stdout, "120000 ") && string(b) == target {
-					blob := Git([]string{"show", ":" + filepath.ToSlash(rel)}, d, 10)
-					valid = blob.Code == 0 && blob.Stdout == target
-				}
+			} else {
+				valid = gitLinkPlaceholder(d, lp, target)
 			}
 			if !valid {
 				return msgs, rollback(errf("unmanaged or modified Claude path: %s", lp))

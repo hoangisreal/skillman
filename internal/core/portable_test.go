@@ -248,3 +248,122 @@ func TestPortableRefusesSkillSymlinks(t *testing.T) {
 		t.Fatalf("update: %v %+v", err, rs)
 	}
 }
+
+// An older Linux project (symlink mode, no .gitattributes) checked out by Git
+// for Windows defaults: CRLF text and plain-file link placeholders.
+func windowsCheckoutOfOldLinuxProject(t *testing.T) (root, clone string) {
+	root = t.TempDir()
+	t.Setenv("SKILL_LIBRARY", filepath.Join(root, "lib"))
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	Configure()
+	mkskill(t, SKILLS, "example", "A test skill", "line one\nline two\n", map[string]string{"refs/a.md": "a\nb\n"})
+	p := filepath.Join(root, "app")
+	must(t, os.MkdirAll(p, 0o755))
+	sh(t, p, "git", "init", "-q")
+	if _, err := ConvertClaudeMode(p, "symlink", false); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	if rs, err := Install(p, []Item{{Name: "example"}}, false); err != nil || !allOK(rs) {
+		t.Fatal(rs, err)
+	}
+	for _, dir := range []string{".agents/skills", ".claude/skills"} {
+		must(t, os.Remove(filepath.Join(p, dir, ".gitattributes")))
+	}
+	sh(t, p, "git", "add", "-A")
+	sh(t, p, "git", "commit", "-qm", "skills")
+	clone = filepath.Join(root, "clone")
+	sh(t, root, "git", "-c", "core.autocrlf=true", "-c", "core.symlinks=false", "clone", "-q", p, clone)
+	sh(t, clone, "git", "config", "core.autocrlf", "true")
+	sh(t, clone, "git", "config", "core.symlinks", "false")
+	return root, clone
+}
+
+func TestPortableConvertsWindowsCheckoutOfLinuxProject(t *testing.T) {
+	_, clone := windowsCheckoutOfOldLinuxProject(t)
+	b, _ := os.ReadFile(filepath.Join(Dest(clone, "example"), "SKILL.md"))
+	if !strings.Contains(string(b), "\r\n") {
+		t.Skip("this Git did not convert line endings")
+	}
+	if rs := Verify(clone); allOK(rs) || !strings.Contains(rs[0].Message, "--mode copy") {
+		t.Fatalf("verify should explain the checkout conversion: %+v", rs)
+	}
+	if _, err := ConvertClaudeMode(clone, "copy", false); err != nil {
+		t.Fatal("conversion of a clean checkout:", err)
+	}
+	if rs := Verify(clone); !allOK(rs) {
+		t.Fatalf("verify after conversion: %+v", rs)
+	}
+	if !Exists(filepath.Join(clone, ".agents/skills/.gitattributes")) {
+		t.Fatal("conversion did not add .gitattributes")
+	}
+}
+
+func TestPortableKeepsRealEditsInWindowsCheckout(t *testing.T) {
+	_, clone := windowsCheckoutOfOldLinuxProject(t)
+	edited := filepath.Join(Dest(clone, "example"), "refs", "a.md")
+	must(t, os.WriteFile(edited, []byte("local change\r\n"), 0o644))
+	if _, err := ConvertClaudeMode(clone, "copy", false); err == nil {
+		t.Fatal("converted over a real edit")
+	}
+	if b, _ := os.ReadFile(edited); string(b) != "local change\r\n" {
+		t.Fatalf("edit lost: %q", b)
+	}
+}
+
+func TestPortableRefusesSkillTextAttributes(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SKILL_LIBRARY", filepath.Join(root, "lib"))
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	Configure()
+	mkskill(t, SKILLS, "converts", "", "", map[string]string{".gitattributes": "* text=auto\n"})
+	mkskill(t, SKILLS, "binary-only", "", "", map[string]string{"assets/.gitattributes": "*.png binary\n* -text\n"})
+	p := filepath.Join(root, "app")
+	must(t, os.MkdirAll(p, 0o755))
+	rs, err := Install(p, []Item{{Name: "converts"}, {Name: "binary-only"}}, false)
+	must(t, err)
+	if rs[0].OK || !strings.Contains(rs[0].Message, ".gitattributes") || Lexists(Dest(p, "converts")) {
+		t.Fatalf("text=auto skill: %+v", rs[0])
+	}
+	if !rs[1].OK {
+		t.Fatalf("-text and binary rules are safe: %+v", rs[1])
+	}
+}
+
+func TestPortableKeepsHiddenEditsInWindowsCheckout(t *testing.T) {
+	for _, flag := range []string{"--assume-unchanged", "--skip-worktree"} {
+		_, clone := windowsCheckoutOfOldLinuxProject(t)
+		edited := filepath.Join(Dest(clone, "example"), "refs", "a.md")
+		sh(t, clone, "git", "update-index", flag, ".agents/skills/example/refs/a.md")
+		must(t, os.WriteFile(edited, []byte("local change\r\n"), 0o644))
+		if _, err := ConvertClaudeMode(clone, "copy", false); err == nil {
+			t.Fatalf("%s: converted over a hidden edit", flag)
+		}
+		if b, _ := os.ReadFile(edited); string(b) != "local change\r\n" {
+			t.Fatalf("%s: edit lost: %q", flag, b)
+		}
+	}
+}
+
+func TestPortableIgnoredFileIsNotACheckoutConversion(t *testing.T) {
+	_, clone := windowsCheckoutOfOldLinuxProject(t)
+	must(t, os.WriteFile(filepath.Join(clone, ".gitignore"), []byte("*.log\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(Dest(clone, "example"), "run.log"), []byte("x"), 0o644))
+	if _, ok := checkoutConverted(clone, Dest(clone, "example"), ReadManifest(clone).Skills["example"].TreeHash); ok {
+		t.Fatal("an ignored extra file was reported as a checkout conversion")
+	}
+}
+
+func TestPortableTextAttributeRules(t *testing.T) {
+	for attrs, unsafe := range map[string]bool{
+		"* text=auto\n":   true,
+		"* !text\n":       true,
+		"*.md eol=crlf\n": true,
+		"* -text\n":       false,
+		"*.png binary\n":  false,
+		"# keep text files byte-exact\n* -text\n": false,
+	} {
+		if got := unsafeTextAttributes([]byte(attrs)); got != unsafe {
+			t.Errorf("%q: unsafe=%v, want %v", attrs, got, unsafe)
+		}
+	}
+}

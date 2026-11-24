@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -128,20 +129,32 @@ func linkOK(d, name string, copies bool, hash func(string) string) bool {
 	return err == nil && rel == "."
 }
 
-// checkSkillLinks refuses skills that contain symlinks. Git for Windows checks
-// them out as plain files by default, so a committed copy would not verify there.
-func checkSkillLinks(name, dir string) error {
-	var links []string
+// checkPortableSkill refuses skills whose committed bytes would change on another
+// checkout: symlinks (Git for Windows checks them out as plain files by default)
+// and .gitattributes rules that override the project's "* -text".
+func checkPortableSkill(name, dir string) error {
+	var links, attrs []string
 	for _, e := range Rglob(dir) {
-		if e.IsSymlink() && !hasIgnoredPart(e.Rel, HashIgnore) {
+		if hasIgnoredPart(e.Rel, HashIgnore) {
+			continue
+		}
+		if e.IsSymlink() {
 			links = append(links, e.Rel)
+		} else if path.Base(e.Rel) == ".gitattributes" {
+			if b, err := os.ReadFile(e.Path); err == nil && unsafeTextAttributes(b) {
+				attrs = append(attrs, e.Rel)
+			}
 		}
 	}
-	if len(links) == 0 {
-		return nil
+	switch {
+	case len(links) > 0:
+		return errf("%s contains symlinks (%s); replace them with regular files in %s so every checkout gets the same bytes",
+			name, strings.Join(links, ", "), dir)
+	case len(attrs) > 0:
+		return errf("%s sets line-ending attributes in %s; remove the text/eol rules in %s so every checkout gets the same bytes",
+			name, strings.Join(attrs, ", "), dir)
 	}
-	return errf("%s contains symlinks (%s); replace them with regular files in %s so every checkout gets the same bytes",
-		name, strings.Join(links, ", "), dir)
+	return nil
 }
 
 func regularSkill(dir string) bool {
@@ -341,7 +354,7 @@ func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry,
 		if err = os.MkdirAll(parent, 0755); err != nil {
 			return c, err
 		}
-		if err := checkSkillLinks(name, src); err != nil {
+		if err := checkPortableSkill(name, src); err != nil {
 			return c, err
 		}
 		tmp, err := os.MkdirTemp(parent, ".install-")
@@ -806,7 +819,7 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 			case IsSymlink(filepath.Join(src, "SKILL.md")):
 				out = append(out, res(name, false, "%s: expected a regular SKILL.md", name))
 			default:
-				err := checkSkillLinks(name, src)
+				err := checkPortableSkill(name, src)
 				if err == nil {
 					err = checkInstallTargets(d, name, prev, copies)
 				}
@@ -897,7 +910,7 @@ func Adopt(d string, names []string) ([]Result, error) {
 			out = append(out, res(name, false, "not in library (project-local skill; left as is)"))
 			continue
 		}
-		if err := checkSkillLinks(name, Dest(d, name)); err != nil {
+		if err := checkPortableSkill(name, Dest(d, name)); err != nil {
 			out = append(out, res(name, false, "%v", err))
 			continue
 		}
@@ -1152,11 +1165,15 @@ func Verify(d string) []Result {
 			msg := "broken .claude/skills link (run: skillman repair-links)"
 			if copies {
 				msg = mirrorProblem(d, name, e, hash)
+			} else if gitLinkPlaceholder(d, LinkP(d, name), "../../.agents/skills/"+name) {
+				msg = "Git checked out the .claude/skills link as a plain file (symlinks disabled); run: skillman repair-links -C <dir> --mode copy"
 			}
 			out = append(out, res(name, false, "%s", msg))
 		case hash(dest) != e.TreeHash:
 			if e.Pinned {
 				out = append(out, res(name, true, "pinned, edited locally"))
+			} else if _, converted := checkoutConverted(d, dest, e.TreeHash); converted {
+				out = append(out, res(name, false, "Git converted line endings on checkout; run: skillman repair-links -C <dir> --mode copy to restore the committed bytes"))
 			} else {
 				out = append(out, res(name, false, "content differs from the manifest hash (edited? pin it, or run update)"))
 			}
