@@ -70,7 +70,7 @@ func decideInstall(project, src string, item Item, prev *Entry, force, copies bo
 		return refuse("%s: expected a regular SKILL.md", name)
 	}
 	if decision.copyNeeded {
-		if err := checkSkillLinks(name, src); err != nil {
+		if err := checkPortableSkill(name, src); err != nil {
 			decision.action = "blocked"
 			return refuse("%v", err)
 		}
