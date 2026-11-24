@@ -16,7 +16,7 @@ Exit codes: `0` success, `1` a check failed or an item could not be processed, `
 
 | Command | Description |
 |---|---|
-| `recommend [dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]` | Up to N local choices (default 5) with evidence, matching keywords, state and estimated added tokens. Repeated or comma-separated stack IDs select the recommendation scope and work in an empty project. Without stack evidence or a declaration, recommendations use the local `@core` pack. `--extra` controls the additional skills per detailed group. |
+| `recommend [dir] [--stack ID]… [--task words] [--limit N] [--extra N] [--brief] [--json]` | Up to N local choices (default 5) with evidence, matching keywords, state and estimated added tokens. Repeated or comma-separated stack IDs select the recommendation scope and work in an empty project. Without stack evidence or a declaration, recommendations use the local `@core` pack. With `--task`, skills outside the detected stacks (or outside `@core` when none is detected) are ranked too, with evidence `library`. A stack match wins over an equally good match elsewhere, `install_args` leaves off-stack choices out when a stack match is shortlisted, and declared stacks keep the scope closed. `--extra` controls the additional skills per detailed group. |
 | `suggest [dir] [--json]` | Packs for the project's stack and the file that triggered each |
 | `search <words…> [--domain D] [--stack S] [--limit N] [-C dir] [--json]` | Ranked search (exact name, name prefix, name, description, source) |
 | `info <skill> [--body] [-C dir] [--json]` | Description, source and commit, domain/stacks, packs, tokens, validation findings, state in the project |

@@ -145,12 +145,13 @@ type RecGroup struct {
 }
 
 type Recommendation struct {
-	HasStack     bool       `json:"-"`
-	Err          error      `json:"-"`
-	Project      string     `json:"project"`
-	Groups       []RecGroup `json:"groups"`
-	Budget       Budget     `json:"budget"`
-	ProjectState []string   `json:"installed"`
+	HasStack     bool              `json:"-"`
+	Err          error             `json:"-"`
+	Project      string            `json:"project"`
+	Groups       []RecGroup        `json:"groups"`
+	Budget       Budget            `json:"budget"`
+	ProjectState []string          `json:"installed"`
+	States       map[string]string `json:"-"` // project state by skill name
 }
 
 // RecommendationCatalog shares the same taxonomy and pack definitions between
@@ -255,9 +256,10 @@ func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int,
 	for i := range rows {
 		byName[rows[i].Name] = &rows[i]
 	}
-	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}}
+	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}, States: map[string]string{}}
 	for _, s := range status {
 		rec.ProjectState = append(rec.ProjectState, s.Name)
+		rec.States[s.Name] = s.State
 	}
 	for _, sg := range sugg {
 		rec.HasStack = rec.HasStack || sg.Reason != "baseline"

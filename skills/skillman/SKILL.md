@@ -18,7 +18,8 @@ for a stack the user has chosen, repeating it for multiple stacks. If the stack 
 `@core` pack as a starting point.
 
 Show the shortlisted names with their source, stack evidence file, matched keywords, project state
-and added description tokens. Lead with task fit and reuse an existing matching project copy when
+and added description tokens. Evidence `library` means the skill fits the task but lies outside the
+project's detected stacks; say so. Lead with task fit and reuse an existing matching project copy when
 available. Describe any budget warning alongside the relevant choice. Use `info <name> --json` or
 `info <name> --body --json` when a decision needs more detail. If the shortlist is empty, say which
 capability is missing locally.

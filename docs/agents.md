@@ -35,7 +35,9 @@ skillman recommend -C ./shop --task "postgres migration" --brief --json
 
 The response contains the resolved project, budget, shortlist and `install_args`. Each choice includes its
 source, stack evidence file, matched keywords, project state and additional description tokens. With no task,
-directly detected stacks each get a turn. Omit `--brief` to inspect the detailed groups.
+directly detected stacks each get a turn. With a task, skills outside the project's stacks are ranked too: their
+evidence is `library`, an equally good stack match comes first, and `install_args` leaves them out when a stack
+match is shortlisted. Omit `--brief` to inspect the detailed groups.
 Task fit and stack evidence take priority. Equally relevant skills favor a matching project copy, then a lower
 additional description cost. A budget warning leaves the top choice visible. Reuse an installed matching skill directly.
 For a new project with a chosen stack, pass `--stack vue --stack postgres` or `--stack vue,postgres`.

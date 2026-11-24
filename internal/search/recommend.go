@@ -16,6 +16,38 @@ type Choice struct {
 	score       int
 	group       int
 	stackMatch  int
+	offStack    bool
+}
+
+// rank halves the score of a skill outside the project's stacks, so a stack
+// match wins over an equally good match elsewhere.
+func (c Choice) rank() int {
+	if c.offStack {
+		return c.score / 2
+	}
+	return c.score
+}
+
+// stopWords never count as task matches.
+var stopWords = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "or": true, "for": true, "to": true, "of": true,
+	"in": true, "on": true, "at": true, "by": true, "with": true, "from": true, "into": true, "my": true,
+	"our": true, "your": true, "this": true, "that": true, "is": true, "are": true, "be": true, "how": true,
+	"i": true, "me": true, "we": true, "it": true,
+}
+
+func taskWords(task string) []string {
+	all := strings.Fields(strings.ToLower(task))
+	var words []string
+	for _, w := range all {
+		if !stopWords[w] {
+			words = append(words, w)
+		}
+	}
+	if len(words) == 0 {
+		return all
+	}
+	return words
 }
 
 type Recommendation struct {
@@ -58,8 +90,9 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		r.Message = r.Err.Error()
 		return r
 	}
-	words := strings.Fields(strings.ToLower(task))
+	words := taskWords(task)
 	var ranked []Choice
+	inGroups := map[string]bool{}
 	// Only resolve a name once, even when several groups contain it.
 	resolved := map[string]core.RecSkill{}
 	resolve := func(s core.RecSkill) core.RecSkill {
@@ -76,6 +109,7 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		visible := g.Skills[:0]
 		extras := 0
 		for _, s := range g.Skills {
+			inGroups[s.Name] = true
 			if !brief && (s.InPack || extra < 0 || extras < extra) {
 				visible = append(visible, resolve(s))
 				if !s.InPack {
@@ -111,10 +145,38 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		}
 		g.Skills = visible
 	}
+	// A task can name work outside the detected stacks: rank the rest of the library too.
+	// Declared stacks are an explicit scope and stay closed.
+	if len(words) > 0 && len(declared) == 0 {
+		for _, row := range rows {
+			if inGroups[row.Name] || !core.KEBAB.MatchString(row.Name) {
+				continue
+			}
+			inGroups[row.Name] = true
+			doc := Doc{name: row.Name, desc: strings.ToLower(row.Description), src: strings.ToLower(row.Source)}
+			score, matched := taskMatch(doc, words)
+			if score == 0 {
+				continue
+			}
+			s := core.RecSkill{Name: row.Name, Description: row.Description, Source: row.Source, InLibrary: true, State: r.States[row.Name]}
+			c := Choice{RecSkill: s, group: -1, offStack: true, Evidence: "library", score: score, Matched: matched}
+			c.Reason = strings.Join(matched, ", ")
+			if len(row.Stacks) > 0 {
+				c.Reason = strings.Join(row.Stacks, ", ") + " · " + c.Reason
+			}
+			if core.NeedsProjectCopy(s.State) {
+				c.AddedTokens = core.DescriptionTokens(s.Name, s.Description)
+			}
+			ranked = append(ranked, c)
+		}
+	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		a, b := ranked[i], ranked[j]
 		if len(a.Matched) != len(b.Matched) {
 			return len(a.Matched) > len(b.Matched)
+		}
+		if a.rank() != b.rank() {
+			return a.rank() > b.rank()
 		}
 		if a.score != b.score {
 			return a.score > b.score
@@ -183,8 +245,14 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	if len(r.Shortlist) > 0 && r.Budget.Total+r.Shortlist[0].AddedTokens > r.Budget.Budget {
 		r.Message = strings.TrimSpace(r.Message + " Top choice exceeds the description token budget.")
 	}
+	// Off-stack choices fill the shortlist for review; install them by default
+	// only when nothing in the project's stacks fits the task.
+	inStack := false
 	for _, c := range r.Shortlist {
-		if !core.NeedsProjectCopy(c.State) {
+		inStack = inStack || !c.offStack
+	}
+	for _, c := range r.Shortlist {
+		if !core.NeedsProjectCopy(c.State) || (inStack && c.offStack) {
 			continue
 		}
 		if len(r.InstallArgs) == 0 {
