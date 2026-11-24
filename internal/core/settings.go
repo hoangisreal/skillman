@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +16,18 @@ func SavePreference(key string, value any) error {
 	}
 	defer unlock()
 	path := SettingsPath()
-	prefs := LoadMap(path)
+	prefs := map[string]any{}
+	b, err := os.ReadFile(path)
+	switch {
+	case os.IsNotExist(err):
+	case err != nil:
+		return err
+	default:
+		// Keep a file the user can repair instead of replacing every saved choice.
+		if err := json.Unmarshal(b, &prefs); err != nil || prefs == nil {
+			return errf("%s is not a valid settings file; fix or remove it: %v", path, err)
+		}
+	}
 	prefs[key] = value
 	return WriteJSON(path, prefs)
 }
