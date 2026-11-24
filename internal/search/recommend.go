@@ -44,9 +44,7 @@ func taskWords(task string) []string {
 			words = append(words, w)
 		}
 	}
-	if len(words) == 0 {
-		return all
-	}
+	// Stop words alone are not a task: recommend for the project instead.
 	return words
 }
 
