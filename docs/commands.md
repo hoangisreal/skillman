@@ -34,7 +34,7 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 |---|---|
 | `add <name\|@pack>… [dir] [--force] [--dry-run] [--json]` | Copy skills and whole packs into a project, link them, record them in the manifest. A pack member that is not in the library yet is reported as skipped; an explicitly named one fails |
 | `remove <name\|@pack>…` | Remove skills or a pack to trash. Project manifest ownership determines which shared or manually added copies stay. For older manifests missing an association, re-add the pack you want to keep before removing the other one. |
-| `status [dir] [--agents [--include-global]] [--json]` | State of every project skill. `--agents` lists on-disk locations for Claude Code, Codex, Cursor, GitHub Copilot CLI and OpenCode. Add `--include-global` to compare with their standard personal skill directories. |
+| `status [dir] [--agents [--include-global]] [--json]` | State of every project skill. A note marks copies that match the committed manifest while this machine's library differs, and copies that match the library but not the manifest. `--agents` lists on-disk locations for Claude Code, Codex, Cursor, GitHub Copilot CLI and OpenCode. Add `--include-global` to compare with their standard personal skill directories. |
 | `doctor [dir] [--json]` | Links, drift, shadowing by global skills, description token budget, packs with missing skills |
 | `diff <name>` | Unified diff library → project copy |
 | `update [names] [--force] [--dry-run] [--json]` | Refresh `outdated` copies. Explicit names can include local edits or pins with `--force`. Use `--dry-run` to preview eligible and blocked updates without writing files. Exit 1 if any selected update is blocked. |
