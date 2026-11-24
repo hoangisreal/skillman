@@ -107,3 +107,13 @@ Cursor's CLI executable was unavailable on the Linux evaluation machine. GitHub 
 ## GitHub import
 
 A separate live smoke test listed eight skills in `vuejs-ai/skills`. The preview selected `skills/vue-testing-best-practices` at `198f0cd8f7f9c0a3d9b566ccc16de6677519ee78`. Running its `apply_args` imported the skill into a temporary library, installed the requested project copy and passed `skillman verify`. The CLI integration test uses a local Git remote for branch movement, collisions, license and audit checks, and project-install failure and retry.
+
+## Profiling, 2026-11-24
+
+Measured on an i5-12500H before choosing optimizations:
+
+- `go test -json ./...`: each package finishes in about 2 s; the slowest test is `TestLifecycle` at 0.8 s. Test time does not justify removing the `Configure()` globals to run tests in parallel.
+- `BenchmarkRank3000Task` (`internal/search/bench_test.go`): ranking 3,000 skills for a task takes 4.1 ms and 8.2k allocations; without a task, 1.7 ms. Scoring the whole library for a task adds about 2.4 ms.
+- In the CPU profile, about 80% of samples are `rebuildIndex` → `Taxonomy.Classify` regex matching (about 0.3 ms per skill). That cost is paid when the index or taxonomy changes and is cached in `.cache/classify.json`, which matches the cold and warm timings above.
+
+Nothing here needs optimizing yet. Re-run the benchmark before and after changes to ranking or classification.
