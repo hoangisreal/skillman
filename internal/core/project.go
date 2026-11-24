@@ -2,10 +2,12 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ResolveProject returns an absolute project dir (optionally the enclosing git root).
@@ -79,16 +81,26 @@ func setSkillLink(lp, target string) error {
 		return errf("%s exists and is not a symlink; refusing to overwrite", lp)
 	}
 	if IsSymlink(lp) {
-		tmp, err := os.MkdirTemp(dir, ".link-")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmp)
-		next := filepath.Join(tmp, "link")
+		// Create the new link beside the old one: Windows resolves a relative
+		// target from the link's folder to choose a directory or file link.
+		next := filepath.Join(dir, fmt.Sprintf(".%s.link-%d", filepath.Base(lp), time.Now().UnixNano()))
 		if err := os.Symlink(target, next); err != nil {
 			return err
 		}
-		return os.Rename(next, lp)
+		if err := os.Rename(next, lp); err == nil {
+			return nil
+		}
+		// Windows cannot rename over a directory link; swap it instead.
+		old, _ := os.Readlink(lp)
+		if err := os.Remove(lp); err != nil {
+			os.Remove(next)
+			return err
+		}
+		if err := os.Rename(next, lp); err != nil {
+			os.Remove(next)
+			return errors.Join(err, os.Symlink(old, lp))
+		}
+		return nil
 	}
 	return os.Symlink(target, lp)
 }

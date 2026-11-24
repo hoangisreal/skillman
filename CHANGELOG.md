@@ -7,6 +7,8 @@
   checkouts keep LF line endings, and every project gets the `-text` `.gitattributes` files, not only copy-mode
   projects. A manifest written on Windows for a skill that contains a symlink shows the skill as changed once; run
   `skillman update` or pin it again.
+- On Windows, replacing an existing `.claude/skills` symlink created a file link that clients could not open as a
+  folder. The new link is now created next to the old one.
 
 ## 0.2.0 — Go rewrite
 
