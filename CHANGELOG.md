@@ -5,6 +5,11 @@
 ### Added
 - Stack detection for Rust (`Cargo.toml`), PHP (`composer.json`), Ruby (`Gemfile`, `*.gemspec`) and Swift
   (`Package.swift`), next to Go. `recommend` suggests library skills classified under those stacks.
+- `status --json` reports `matches_manifest` (the copy against the committed manifest, which `verify` checks) and
+  `library` (`same`, `differs` or `absent` on this machine). The text output notes when the two disagree.
+- `recommend --json` reports `install_tokens` for the suggested install and warns when that total exceeds the
+  budget, not only when the top choice does.
+- A labelled recommendation test set and a ranking benchmark (`docs/selection-evaluation.md`).
 
 ### Fixed
 - Skill hashes are the same on Windows, Linux and macOS: symlink targets are hashed with forward slashes, import
@@ -13,6 +18,11 @@
   `skillman update` or pin it again.
 - On Windows, replacing an existing `.claude/skills` symlink created a file link that clients could not open as a
   folder. The new link is now created next to the old one.
+- A symlink-mode project checked out by Git for Windows defaults (CRLF, links as plain files) can be converted
+  with `skillman repair-links --mode copy`. When Git reports a skill as clean and its committed bytes match the
+  manifest, the conversion restores those bytes; real local edits are still refused. `verify` points to it.
+- Saving a preference no longer replaces an invalid `settings.json` with only that preference; it reports the
+  file instead.
 
 ### Changed
 - `recommend --task` also ranks library skills outside the detected stacks (evidence `library`). A stack match
@@ -20,7 +30,10 @@
   words such as "for" or "the" no longer count as matches.
 - `add`, `update` and `adopt` refuse a skill that contains symlinks and name the links. Git for Windows checks
   them out as plain files by default, so the committed copy would fail `verify` there. Replace the links with
-  regular files in the library skill. Imports already inline or drop upstream symlinks.
+  regular files in the library skill. Imports already inline or drop upstream symlinks. They also refuse a skill
+  whose own `.gitattributes` turns on line-ending or filter conversion, which would override the project's `-text`.
+- A task made only of filler words is treated as no task.
+- `docs/ci.md` states what `verify` checks: files against the committed manifest, not who changed both.
 
 ## 0.2.0 — Go rewrite
 
