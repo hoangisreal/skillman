@@ -190,3 +190,23 @@ func TestPortableMaterializeKeepsGitBytes(t *testing.T) {
 		t.Fatalf("checkout converted line endings: %q", b)
 	}
 }
+
+func TestPortableRelinkKeepsDirectoryLink(t *testing.T) {
+	p := t.TempDir()
+	mkskill(t, filepath.Join(p, ".agents", "skills"), "example", "", "", nil)
+	lp := LinkP(p, "example")
+	must(t, os.MkdirAll(filepath.Dir(lp), 0o755))
+	if err := os.Symlink("../../.agents/skills/elsewhere", lp); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	// Replacing a link must still give clients a folder they can read.
+	must(t, setSkillLink(lp, "../../.agents/skills/example"))
+	if !IsFile(filepath.Join(lp, "SKILL.md")) || !isDirLink(lp) {
+		t.Fatal("replaced link is not a folder link")
+	}
+	for _, e := range SortedDir(filepath.Dir(lp)) {
+		if e.Name() != "example" {
+			t.Fatalf("left behind %s", e.Name())
+		}
+	}
+}
