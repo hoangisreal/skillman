@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -164,5 +165,48 @@ func TestRecommendTaskSearchesWholeLibrary(t *testing.T) {
 		if c.Evidence == "library" {
 			t.Fatalf("unrelated skill without a task: %+v", c)
 		}
+	}
+}
+
+func TestRecommendBudgetCountsWholeInstall(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "vue-testing-best-practices", "Vue component testing with Vitest")
+	mkskill(t, lib, "vue-router-guide", "Vue Router testing and navigation guards")
+	if err := core.SavePack(&core.Pack{Name: "web-vue", Skills: []string{"vue-testing-best-practices", "vue-router-guide"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte(`{"dependencies":{"vue":"3"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows := core.LoadIndex()
+	rec := Recommend(proj, rows, "vue testing", 2, 0)
+	if len(rec.Shortlist) != 2 || len(rec.InstallArgs) != 5 {
+		t.Fatalf("setup: %+v %v", rec.Shortlist, rec.InstallArgs)
+	}
+	if want := rec.Shortlist[0].AddedTokens + rec.Shortlist[1].AddedTokens; rec.InstallTokens != want {
+		t.Fatalf("install tokens %d, want %d", rec.InstallTokens, want)
+	}
+	// Each skill fits on its own; the two together do not.
+	t.Setenv("SKILL_TOKEN_BUDGET", strconv.Itoa(rec.Shortlist[0].AddedTokens+1))
+	rec = Recommend(proj, rows, "vue testing", 2, 0)
+	if !strings.Contains(rec.Message, "suggested install exceeds") || strings.Contains(rec.Message, "Top choice") {
+		t.Fatalf("message: %q", rec.Message)
 	}
 }

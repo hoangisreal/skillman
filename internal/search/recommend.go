@@ -55,7 +55,9 @@ type Recommendation struct {
 	Shortlist   []Choice `json:"shortlist"`
 	InstallArgs []string `json:"install_args"` // arguments after the executable
 	InstallHint string   `json:"install_hint"`
-	Message     string   `json:"message,omitempty"`
+	// InstallTokens is the description cost that InstallArgs would add.
+	InstallTokens int    `json:"install_tokens"`
+	Message       string `json:"message,omitempty"`
 }
 
 // Match most of a task's keywords. A two-word query still needs both words,
@@ -259,6 +261,11 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			r.InstallArgs = []string{"add", "-C", project}
 		}
 		r.InstallArgs = append(r.InstallArgs, c.Name)
+		r.InstallTokens += c.AddedTokens
+	}
+	topFits := len(r.Shortlist) == 0 || r.Budget.Total+r.Shortlist[0].AddedTokens <= r.Budget.Budget
+	if topFits && r.Budget.Total+r.InstallTokens > r.Budget.Budget {
+		r.Message = strings.TrimSpace(r.Message + " The suggested install exceeds the description token budget; choose fewer skills.")
 	}
 	if len(r.InstallArgs) > 0 {
 		r.InstallHint = "skillman add -C '" + strings.ReplaceAll(project, "'", "'\"'\"'") + "' " + strings.Join(r.InstallArgs[3:], " ")
