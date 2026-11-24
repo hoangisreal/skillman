@@ -69,7 +69,7 @@ installation leaves the successful library import available and returns `retry_a
 | `remove`, `update`, `adopt`, `pin`, `verify`, `library pin` | `{"ok": bool, "results": [{"name", "ok", "message"}]}` |
 | `add` | Same result fields plus `summary` with `installed`, `already_present`, `skipped`, `failed`. Exit 1 when every requested member is unavailable. |
 | `add --dry-run` | `{"project", "ok", "skills": [{"name", "pack", "state", "in_library", "tokens", "action", "reason", "targets"?}], "added_tokens", "budget_after", "budget"}`. Targets give the project-relative path, role, mode and client IDs. |
-| `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?}]` |
+| `status` | `[{"name", "packs", "pinned", "manual", "tracked", "in_library", "link_ok", "state", "same_as_library"?, "matches_manifest"?, "library"?}]`. `state` compares with this machine's library; `matches_manifest` compares with the committed manifest (what `verify` checks) and `library` is `same`, `differs` or `absent`. |
 | `status --agents` | `{"project", "include_global", "agents": [{"id", "roots", "skills", "duplicates"}]}`. Skill rows include `name`, `path`, `scope`, `tracked`, `state` and optional `aliases`. |
 | `doctor` | `{"project", "ok", "checks": [{"level": "ok\|warn\|error", "message"}]}` |
 | `search` | `{"query", "count", "skills": [{"name", "description", "source", "domain", "stacks", "packs", "state"?}]}` |

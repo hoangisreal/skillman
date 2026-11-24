@@ -551,6 +551,12 @@ type SkillStatus struct {
 	LinkOK        bool     `json:"link_ok"`
 	State         string   `json:"state"`
 	SameAsLibrary *bool    `json:"same_as_library,omitempty"`
+	// MatchesManifest compares the project copy with the committed manifest,
+	// which is what verify and teammates share; Library compares it with this
+	// machine's library: "same", "differs" or "absent". Both are set for
+	// tracked skills with a project copy.
+	MatchesManifest *bool  `json:"matches_manifest,omitempty"`
+	Library         string `json:"library,omitempty"`
 }
 
 // ProjectStatus: ok | outdated | modified | conflict | missing | orphan | untracked | invalid per skill.
@@ -613,6 +619,16 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 			var lib string
 			if r.InLibrary {
 				lib = hash(src)
+			}
+			matches := cur == rec
+			r.MatchesManifest = &matches
+			switch {
+			case !r.InLibrary:
+				r.Library = "absent"
+			case cur == lib:
+				r.Library = "same"
+			default:
+				r.Library = "differs"
 			}
 			switch {
 			case !r.InLibrary:

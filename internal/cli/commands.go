@@ -671,6 +671,14 @@ func cmdStatus(a *Args) int {
 		if !r.LinkOK && r.State != "missing" {
 			flags += " link!"
 		}
+		// Separate what the team committed from this machine's library.
+		switch {
+		case r.MatchesManifest == nil:
+		case *r.MatchesManifest && r.Library != "same":
+			flags += " (matches manifest; library on this machine " + r.Library + ")"
+		case !*r.MatchesManifest && r.Library == "same":
+			flags += " (differs from manifest; verify fails until update records it)"
+		}
 		via := strings.Join(r.Packs, ",")
 		if via == "" && r.Manual {
 			via = "manual"

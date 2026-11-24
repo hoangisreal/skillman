@@ -468,3 +468,41 @@ func TestInstallScript(t *testing.T) {
 		t.Errorf("install.sh syntax: %v %s", err, out)
 	}
 }
+
+func TestStatusSeparatesManifestFromLibrary(t *testing.T) {
+	lib, p := setup(t)
+	runOK(t, "add", "-C", p, "vue-best-practices")
+	status := func() core.SkillStatus {
+		t.Helper()
+		var st []core.SkillStatus
+		if rc := runJSON(t, &st, "status", "-C", p); rc != 0 {
+			t.Fatal(rc)
+		}
+		for _, s := range st {
+			if s.Name == "vue-best-practices" {
+				return s
+			}
+		}
+		t.Fatal("not listed")
+		return core.SkillStatus{}
+	}
+	if s := status(); s.MatchesManifest == nil || !*s.MatchesManifest || s.Library != "same" {
+		t.Fatalf("fresh install: %+v", s)
+	}
+	// A teammate's newer library: the committed copy still matches the manifest.
+	skill := filepath.Join(lib, "skills", "vue-best-practices", "SKILL.md")
+	b, err := os.ReadFile(skill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, append(b, []byte("newer\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := status()
+	if s.State != "outdated" || !*s.MatchesManifest || s.Library != "differs" {
+		t.Fatalf("newer library: %+v", s)
+	}
+	if _, out, _ := run(t, "status", "-C", p); !strings.Contains(out, "matches manifest; library on this machine differs") {
+		t.Fatalf("text status: %s", out)
+	}
+}
