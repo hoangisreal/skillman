@@ -294,6 +294,7 @@ var vietnameseMessages = map[string]string{
 	"suggesting skills …":                 "đang tìm skill phù hợp …",
 	"Suggested project skills":            "Skill gợi ý cho dự án",
 	"baseline":                            "cơ bản",
+	"library":                             "thư viện",
 	"doctor …":                            "đang chẩn đoán …",
 	"no problems found":                   "không phát hiện vấn đề",
 	"no .agents/skill-manifest.json: verify (and CI) would fail": "thiếu .agents/skill-manifest.json nên chưa thể xác minh trong CI",

@@ -3,6 +3,7 @@ package search
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -96,5 +97,62 @@ func TestRecommendTaskCoverage(t *testing.T) {
 	again := Recommend(proj, rows, "", 1, 0)
 	if again.Shortlist[0].Name != rec.Shortlist[0].Name {
 		t.Fatal("recommendation not deterministic")
+	}
+}
+
+func TestRecommendTaskSearchesWholeLibrary(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "vue-testing-best-practices", "Use for Vue.js testing. Covers Vitest, Vue Test Utils and component testing.")
+	mkskill(t, lib, "vue-best-practices", "Vue 3 composition API best practices")
+	mkskill(t, lib, "multi-stage-dockerfile", "Write multi-stage Dockerfiles and deploy containers with Docker Compose")
+	mkskill(t, lib, "pytest-testing", "Python testing with pytest fixtures and component testing")
+	if err := core.SavePack(&core.Pack{Name: "web-vue", Skills: []string{"vue-best-practices", "vue-testing-best-practices"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte(`{"dependencies":{"vue":"3"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows := core.LoadIndex()
+
+	// A task outside the detected stacks still finds the local skill.
+	rec := Recommend(proj, rows, "docker deploy", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "multi-stage-dockerfile" || rec.Shortlist[0].Evidence != "library" {
+		t.Fatalf("off-stack task: %+v %s", rec.Shortlist, rec.Message)
+	}
+	if len(rec.InstallArgs) == 0 || rec.InstallArgs[len(rec.InstallArgs)-1] != "multi-stage-dockerfile" {
+		t.Fatalf("install args: %v", rec.InstallArgs)
+	}
+	// A stack match wins over an equally good match elsewhere.
+	rec = Recommend(proj, rows, "component testing", 3, 0)
+	if len(rec.Shortlist) < 2 || rec.Shortlist[0].Name != "vue-testing-best-practices" || rec.Shortlist[1].Name != "pytest-testing" {
+		t.Fatalf("stack preference: %+v", rec.Shortlist)
+	}
+	// Filler words do not count as matches.
+	rec = Recommend(proj, rows, "write tests for vue components", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vue-testing-best-practices" || slices.Contains(rec.Shortlist[0].Matched, "for") {
+		t.Fatalf("stop words: %+v", rec.Shortlist)
+	}
+	// Without a task the shortlist stays within the project's stacks.
+	for _, c := range Recommend(proj, rows, "", 5, 0).Shortlist {
+		if c.Evidence == "library" {
+			t.Fatalf("unrelated skill without a task: %+v", c)
+		}
 	}
 }

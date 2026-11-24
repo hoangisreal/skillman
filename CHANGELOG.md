@@ -11,6 +11,9 @@
   folder. The new link is now created next to the old one.
 
 ### Changed
+- `recommend --task` also ranks library skills outside the detected stacks (evidence `library`). A stack match
+  still wins over an equally good match elsewhere, declared `--stack` IDs keep the scope closed, and filler
+  words such as "for" or "the" no longer count as matches.
 - `add`, `update` and `adopt` refuse a skill that contains symlinks and name the links. Git for Windows checks
   them out as plain files by default, so the committed copy would fail `verify` there. Replace the links with
   regular files in the library skill. Imports already inline or drop upstream symlinks.
