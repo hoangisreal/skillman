@@ -17,7 +17,8 @@ The strongest stack gives the skill its primary domain; up to four stacks are ke
 to its legacy tag's domain, else **General / other**. Results are cached in `.cache/classify.json`; editing a pack or
 `taxonomy.yaml` invalidates the cache automatically.
 
-Your project's stacks come from the same detection as `suggest` (`package.json`, `pyproject.toml`, `Dockerfile`, …):
+Your project's stacks come from the same detection as `suggest` (`package.json`, `pyproject.toml`, `Dockerfile`, …;
+`go.mod`, `Cargo.toml`, `composer.json`, `Gemfile` and `Package.swift` mark the Go, Rust, PHP, Ruby and Swift stacks):
 each suggested pack maps to its stacks, which are marked ★ and listed under **This project**.
 
 ## Customizing

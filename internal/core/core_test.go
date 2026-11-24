@@ -649,3 +649,20 @@ func contains2(xs []PackProblem, x PackProblem) bool {
 	}
 	return false
 }
+
+func TestProjectSignalsLanguageStacks(t *testing.T) {
+	tax := LoadTaxonomy()
+	for file, stack := range map[string]string{
+		"go.mod": "go", "Cargo.toml": "rust", "composer.json": "php", "Gemfile": "ruby",
+		"demo.gemspec": "ruby", "Package.swift": "ios",
+	} {
+		d := t.TempDir()
+		must(t, os.WriteFile(filepath.Join(d, file), []byte("x\n"), 0o644))
+		found := false
+		for _, s := range projectSignals(d, map[string]bool{}) {
+			found = found || (s.Stack == stack && s.Reason == file)
+		}
+		check(t, found, "%s should signal stack %s: %v", file, stack, projectSignals(d, map[string]bool{}))
+		check(t, tax.Stack(stack) != nil, "taxonomy lacks stack %s", stack)
+	}
+}

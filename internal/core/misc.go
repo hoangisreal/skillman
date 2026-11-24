@@ -119,6 +119,19 @@ var SuggestRules = []SuggestRule{
 	{"research-writing", []string{"*.tex", "*.bib"}, nil},
 }
 
+// StackRules detect languages that have a taxonomy stack but no curated pack.
+// Their recommendations come from library skills classified under the stack.
+var StackRules = []struct {
+	Stack string
+	Globs []string
+}{
+	{"go", []string{"go.mod"}},
+	{"rust", []string{"Cargo.toml"}},
+	{"php", []string{"composer.json"}},
+	{"ruby", []string{"Gemfile", "*.gemspec"}},
+	{"ios", []string{"Package.swift"}},
+}
+
 var skipScan = set("node_modules", ".git", ".claude", ".agents", ".codex", ".opencode", ".venv", "venv", "dist", "build", "target", ".next", ".nuxt", "__pycache__")
 
 // scanFiles walks d to depth 3 (plus .github/workflows), skipping vendored dirs. Returns relative paths.
@@ -164,6 +177,15 @@ func pathMatch(rel, pattern string) bool {
 	return true
 }
 
+func anyGlob(rel string, globs []string) bool {
+	for _, g := range globs {
+		if pathMatch(rel, g) {
+			return true
+		}
+	}
+	return false
+}
+
 // Suggestion is a pack proposed for a project and the file that triggered it.
 type Suggestion struct {
 	Pack   string `json:"pack"`
@@ -202,14 +224,7 @@ func projectSignals(d string, available map[string]bool) []Suggestion {
 			continue
 		}
 		for _, f := range files {
-			hit := false
-			for _, g := range r.Globs {
-				if pathMatch(f, g) {
-					hit = true
-					break
-				}
-			}
-			if !hit {
+			if !anyGlob(f, r.Globs) {
 				continue
 			}
 			if r.Rx == nil {
@@ -243,10 +258,12 @@ func projectSignals(d string, available map[string]bool) []Suggestion {
 		seen[s.Pack] = len(dd)
 		dd = append(dd, s)
 	}
-	for _, file := range files {
-		if pathMatch(file, "go.mod") {
-			dd = append(dd, Suggestion{Stack: "go", Reason: file})
-			break
+	for _, r := range StackRules {
+		for _, file := range files {
+			if anyGlob(file, r.Globs) {
+				dd = append(dd, Suggestion{Stack: r.Stack, Reason: file})
+				break
+			}
 		}
 	}
 	return dd

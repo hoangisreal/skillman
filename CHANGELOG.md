@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+- Stack detection for Rust (`Cargo.toml`), PHP (`composer.json`), Ruby (`Gemfile`, `*.gemspec`) and Swift
+  (`Package.swift`), next to Go. `recommend` suggests library skills classified under those stacks.
+
 ### Fixed
 - Skill hashes are the same on Windows, Linux and macOS: symlink targets are hashed with forward slashes, import
   checkouts keep LF line endings, and every project gets the `-text` `.gitattributes` files, not only copy-mode
