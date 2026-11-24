@@ -48,7 +48,8 @@ Then, as needed: `skillman browse --stack postgres --json`, `skillman search "po
 with `skillman add -C <project> <selected names> --dry-run --json`, installs the selected names, and confirms with
 `status -C <project> --json` and `verify -C <project> --json`. Pass `install_args` directly as arguments when the
 whole proposed selection is wanted. These arguments include missing tracked copies that can be restored.
-An empty array means every shortlisted copy is present or the shortlist is empty.
+An empty array means every shortlisted copy is present or the shortlist is empty. `install_tokens` is the
+description cost those arguments add, and `message` warns when that total exceeds the budget.
 For an untracked copy, inspect `diff` before `adopt`. When the library needs content, preview the pinned sources
 with `bootstrap --pack core --dry-run --json`. For a supplied GitHub source, list the skills and preview the selected name.
 
