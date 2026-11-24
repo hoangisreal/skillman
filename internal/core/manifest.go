@@ -301,36 +301,35 @@ func WriteManifest(d string, m *ManifestData) error {
 		top.Set("packs", map[string]any{})
 	}
 	top.Set("packs", m.Packs)
-	var mode string
+	// Every mode needs -text: Git checkouts that convert line endings would
+	// otherwise change the bytes that the manifest hashes.
 	var added []string
-	if top.Get("claude_mode", &mode) && mode == "copy" {
-		if err := CheckProjectDirs(d); err != nil {
+	if err := CheckProjectDirs(d); err != nil {
+		return err
+	}
+	for _, dir := range []string{".agents/skills", ".claude/skills"} {
+		p := filepath.Join(d, dir, ".gitattributes")
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			removeAddedAttributes(added)
 			return err
 		}
-		for _, dir := range []string{".agents/skills", ".claude/skills"} {
-			p := filepath.Join(d, dir, ".gitattributes")
-			if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-				removeAddedAttributes(added)
-				return err
-			}
-			f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-			if os.IsExist(err) {
-				continue
-			}
-			if err != nil {
-				removeAddedAttributes(added)
-				return err
-			}
-			added = append(added, p)
-			_, err = f.WriteString("# Keep Skillman manifest hashes stable across Git checkouts.\n* -text\n")
-			closeErr := f.Close()
-			if err == nil {
-				err = closeErr
-			}
-			if err != nil {
-				removeAddedAttributes(added)
-				return err
-			}
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if os.IsExist(err) {
+			continue
+		}
+		if err != nil {
+			removeAddedAttributes(added)
+			return err
+		}
+		added = append(added, p)
+		_, err = f.WriteString("# Keep Skillman manifest hashes stable across Git checkouts.\n* -text\n")
+		closeErr := f.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			removeAddedAttributes(added)
+			return err
 		}
 	}
 	err := WriteJSON(filepath.Join(d, ".agents", Manifest), top)

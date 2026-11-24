@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Skill hashes are the same on Windows, Linux and macOS: symlink targets are hashed with forward slashes, import
+  checkouts keep LF line endings, and every project gets the `-text` `.gitattributes` files, not only copy-mode
+  projects. A manifest written on Windows for a skill that contains a symlink shows the skill as changed once; run
+  `skillman update` or pin it again.
+
 ## 0.2.0 — Go rewrite
 
 skillman is now a single Go binary (Bubble Tea v2 TUI + CLI). Library, packs, project manifests, trash and registry

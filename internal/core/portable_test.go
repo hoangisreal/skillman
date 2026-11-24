@@ -148,3 +148,45 @@ func TestPortableClaudeModeRoundTrip(t *testing.T) {
 		t.Fatalf("symlink to copy: %v", err)
 	}
 }
+
+func TestPortableSymlinkModeCheckout(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SKILL_LIBRARY", filepath.Join(root, "lib"))
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	Configure()
+	mkskill(t, SKILLS, "example", "A test skill", "line one\nline two\n", nil)
+	p := filepath.Join(root, "app")
+	must(t, os.MkdirAll(p, 0o755))
+	sh(t, p, "git", "init", "-q")
+	if _, err := ConvertClaudeMode(p, "symlink", false); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	if rs, err := Install(p, []Item{{Name: "example"}}, false); err != nil || !allOK(rs) {
+		t.Fatal(rs, err)
+	}
+	sh(t, p, "git", "add", "-A")
+	sh(t, p, "git", "commit", "-qm", "skills")
+	// A teammate whose Git converts line endings on checkout must still verify.
+	clone := filepath.Join(root, "clone")
+	sh(t, root, "git", "-c", "core.autocrlf=true", "-c", "core.symlinks=true", "clone", "-q", p, clone)
+	if rs := Verify(clone); !allOK(rs) {
+		t.Fatalf("verify after autocrlf checkout: %+v", rs)
+	}
+}
+
+func TestPortableMaterializeKeepsGitBytes(t *testing.T) {
+	f, _ := newFixture(t, []string{"alpha"}, nil)
+	must(t, os.WriteFile(filepath.Join(f.up, "skills", "alpha", ".gitattributes"), []byte("* text=auto\n"), 0o644))
+	c := f.push("normalize text")
+	// Git for Windows defaults to CRLF for text=auto files.
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.eol")
+	t.Setenv("GIT_CONFIG_VALUE_0", "crlf")
+	staged, _, err := Materialize("acme/skills", c, "skills/alpha", "alpha", "", nil)
+	must(t, err)
+	b, err := os.ReadFile(filepath.Join(staged, "SKILL.md"))
+	must(t, err)
+	if strings.Contains(string(b), "\r\n") {
+		t.Fatalf("checkout converted line endings: %q", b)
+	}
+}
