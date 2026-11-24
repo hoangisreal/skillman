@@ -245,8 +245,14 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	if len(r.Shortlist) > 0 && r.Budget.Total+r.Shortlist[0].AddedTokens > r.Budget.Budget {
 		r.Message = strings.TrimSpace(r.Message + " Top choice exceeds the description token budget.")
 	}
+	// Off-stack choices fill the shortlist for review; install them by default
+	// only when nothing in the project's stacks fits the task.
+	inStack := false
 	for _, c := range r.Shortlist {
-		if !core.NeedsProjectCopy(c.State) {
+		inStack = inStack || !c.offStack
+	}
+	for _, c := range r.Shortlist {
+		if !core.NeedsProjectCopy(c.State) || (inStack && c.offStack) {
 			continue
 		}
 		if len(r.InstallArgs) == 0 {

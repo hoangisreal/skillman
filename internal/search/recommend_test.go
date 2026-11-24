@@ -117,6 +117,7 @@ func TestRecommendTaskSearchesWholeLibrary(t *testing.T) {
 	mkskill(t, lib, "vue-best-practices", "Vue 3 composition API best practices")
 	mkskill(t, lib, "multi-stage-dockerfile", "Write multi-stage Dockerfiles and deploy containers with Docker Compose")
 	mkskill(t, lib, "pytest-testing", "Python testing with pytest fixtures and component testing")
+	mkskill(t, lib, "testing-library-patterns", "Testing Library patterns for any framework")
 	if err := core.SavePack(&core.Pack{Name: "web-vue", Skills: []string{"vue-best-practices", "vue-testing-best-practices"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +144,15 @@ func TestRecommendTaskSearchesWholeLibrary(t *testing.T) {
 	rec = Recommend(proj, rows, "component testing", 3, 0)
 	if len(rec.Shortlist) < 2 || rec.Shortlist[0].Name != "vue-testing-best-practices" || rec.Shortlist[1].Name != "pytest-testing" {
 		t.Fatalf("stack preference: %+v", rec.Shortlist)
+	}
+	// A stronger name match elsewhere still needs twice the score to win,
+	// and off-stack fillers stay out of the default install.
+	rec = Recommend(proj, rows, "testing", 3, 0)
+	if len(rec.Shortlist) < 2 || rec.Shortlist[0].Name != "vue-testing-best-practices" || rec.Shortlist[1].Name != "testing-library-patterns" {
+		t.Fatalf("stack bonus: %+v", rec.Shortlist)
+	}
+	if !slices.Contains(rec.InstallArgs, "vue-testing-best-practices") || slices.Contains(rec.InstallArgs, "testing-library-patterns") || slices.Contains(rec.InstallArgs, "pytest-testing") {
+		t.Fatalf("install args: %v", rec.InstallArgs)
 	}
 	// Filler words do not count as matches.
 	rec = Recommend(proj, rows, "write tests for vue components", 3, 0)
