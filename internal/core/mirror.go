@@ -154,8 +154,11 @@ func ConvertClaudeMode(d, mode string, dry bool) ([]string, error) {
 			}
 			// Git reports the checkout as clean: restore the committed bytes.
 			if !dry {
-				if err := restoreCommitted(src, files); err != nil || TreeHash(src) != m.Skills[n].TreeHash {
-					return msgs, rollback(errors.Join(errf("cannot restore committed bytes: %s", src), err))
+				if err := restoreCommitted(src, files); err != nil {
+					return msgs, rollback(errf("cannot restore committed bytes in %s: %v", src, err))
+				}
+				if TreeHash(src) != m.Skills[n].TreeHash {
+					return msgs, rollback(errf("restored %s but it still differs from the manifest", src))
 				}
 			}
 		}

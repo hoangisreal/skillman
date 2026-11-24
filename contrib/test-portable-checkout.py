@@ -30,6 +30,7 @@ if phase in ("create", "create-symlink"):
 elif phase == "convert":
     # Git for Windows defaults: CRLF text and symlinks checked out as plain files.
     subprocess.run(["git", "-c", "core.autocrlf=true", "-c", "core.symlinks=false", "clone", bundle, project], check=True)
+    git("config", "core.autocrlf", "true")
     git("config", "core.symlinks", "false")
     cli("repair-links", "-C", project, "--mode", "copy")
     cli("verify", "-C", project)
@@ -48,6 +49,10 @@ if phase != "verify":
         cli("repair-links", "-C", project, "--mode", "symlink")
     cli("add" if phase.startswith("create") else "update", "-C", project, "portable-example")
     cli("verify", "-C", project)
+    if phase == "create-symlink":
+        # Projects created before Skillman wrote .gitattributes: Windows converts them to CRLF.
+        for attributes in (".agents/skills/.gitattributes", ".claude/skills/.gitattributes"):
+            (project / attributes).unlink()
     git("add", ".")
     git("commit", "-m", phase)
     git("bundle", "create", str(bundle), "--all")

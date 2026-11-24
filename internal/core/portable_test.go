@@ -328,3 +328,42 @@ func TestPortableRefusesSkillTextAttributes(t *testing.T) {
 		t.Fatalf("-text and binary rules are safe: %+v", rs[1])
 	}
 }
+
+func TestPortableKeepsHiddenEditsInWindowsCheckout(t *testing.T) {
+	for _, flag := range []string{"--assume-unchanged", "--skip-worktree"} {
+		_, clone := windowsCheckoutOfOldLinuxProject(t)
+		edited := filepath.Join(Dest(clone, "example"), "refs", "a.md")
+		sh(t, clone, "git", "update-index", flag, ".agents/skills/example/refs/a.md")
+		must(t, os.WriteFile(edited, []byte("local change\r\n"), 0o644))
+		if _, err := ConvertClaudeMode(clone, "copy", false); err == nil {
+			t.Fatalf("%s: converted over a hidden edit", flag)
+		}
+		if b, _ := os.ReadFile(edited); string(b) != "local change\r\n" {
+			t.Fatalf("%s: edit lost: %q", flag, b)
+		}
+	}
+}
+
+func TestPortableIgnoredFileIsNotACheckoutConversion(t *testing.T) {
+	_, clone := windowsCheckoutOfOldLinuxProject(t)
+	must(t, os.WriteFile(filepath.Join(clone, ".gitignore"), []byte("*.log\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(Dest(clone, "example"), "run.log"), []byte("x"), 0o644))
+	if _, ok := checkoutConverted(clone, Dest(clone, "example"), ReadManifest(clone).Skills["example"].TreeHash); ok {
+		t.Fatal("an ignored extra file was reported as a checkout conversion")
+	}
+}
+
+func TestPortableTextAttributeRules(t *testing.T) {
+	for attrs, unsafe := range map[string]bool{
+		"* text=auto\n":   true,
+		"* !text\n":       true,
+		"*.md eol=crlf\n": true,
+		"* -text\n":       false,
+		"*.png binary\n":  false,
+		"# keep text files byte-exact\n* -text\n": false,
+	} {
+		if got := unsafeTextAttributes([]byte(attrs)); got != unsafe {
+			t.Errorf("%q: unsafe=%v, want %v", attrs, got, unsafe)
+		}
+	}
+}

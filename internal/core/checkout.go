@@ -22,6 +22,16 @@ func committedSkill(project, dir string) (map[string][]byte, bool) {
 	if st.Code != 0 || strings.TrimSpace(st.Stdout) != "" {
 		return nil, false
 	}
+	// git status hides edits to assume-unchanged and skip-worktree entries.
+	tags := Git([]string{"ls-files", "-v", "-z", "--", rel}, project, 30)
+	if tags.Code != 0 {
+		return nil, false
+	}
+	for _, line := range strings.Split(tags.Stdout, "\x00") {
+		if line != "" && !strings.HasPrefix(line, "H ") {
+			return nil, false
+		}
+	}
 	ls := Git([]string{"ls-files", "-s", "-z", "--", rel}, project, 30)
 	if ls.Code != 0 || ls.Stdout == "" {
 		return nil, false
@@ -74,6 +84,20 @@ func checkoutConverted(project, dir, want string) (map[string][]byte, bool) {
 	if !ok || hashFiles(files) != want {
 		return nil, false
 	}
+	// Ignored files are invisible to git status but part of the hash.
+	n := 0
+	for _, e := range Rglob(dir) {
+		if hasIgnoredPart(e.Rel, HashIgnore) || e.Mode.IsDir() {
+			continue
+		}
+		if _, tracked := files[e.Rel]; !tracked || e.IsSymlink() {
+			return nil, false
+		}
+		n++
+	}
+	if n != len(files) {
+		return nil, false
+	}
 	return files, true
 }
 
@@ -96,6 +120,30 @@ func restoreCommitted(dir string, files map[string][]byte) error {
 		}
 	}
 	return nil
+}
+
+// unsafeTextAttributes reports whether a .gitattributes file sets attributes
+// that change bytes on checkout (text, eol, crlf, ident, filter,
+// working-tree-encoding), including "!attr", which re-enables core.autocrlf.
+// "-attr" and binary are safe.
+func unsafeTextAttributes(b []byte) bool {
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || strings.HasPrefix(fields[0], "#") {
+			continue
+		}
+		for _, attr := range fields[1:] {
+			if strings.HasPrefix(attr, "-") {
+				continue
+			}
+			name, _, _ := strings.Cut(strings.TrimPrefix(attr, "!"), "=")
+			switch name {
+			case "text", "eol", "crlf", "ident", "filter", "working-tree-encoding":
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // gitLinkPlaceholder reports whether lp is the plain file Git writes for a

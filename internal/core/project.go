@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -130,9 +129,6 @@ func linkOK(d, name string, copies bool, hash func(string) string) bool {
 	return err == nil && rel == "."
 }
 
-// textAttr matches .gitattributes rules that turn on line-ending conversion.
-var textAttr = regexp.MustCompile(`(?m)(^|\s)(text|eol|crlf)(=\S*)?(\s|$)`)
-
 // checkPortableSkill refuses skills whose committed bytes would change on another
 // checkout: symlinks (Git for Windows checks them out as plain files by default)
 // and .gitattributes rules that override the project's "* -text".
@@ -145,7 +141,7 @@ func checkPortableSkill(name, dir string) error {
 		if e.IsSymlink() {
 			links = append(links, e.Rel)
 		} else if path.Base(e.Rel) == ".gitattributes" {
-			if b, err := os.ReadFile(e.Path); err == nil && textAttr.Match(b) {
+			if b, err := os.ReadFile(e.Path); err == nil && unsafeTextAttributes(b) {
 				attrs = append(attrs, e.Rel)
 			}
 		}
