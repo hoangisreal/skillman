@@ -1,5 +1,17 @@
 # Project skill selection measurements
 
+
+## Labelled task set
+
+`internal/search/eval_test.go` (`TestRecommendationQuality`) runs 20 labelled cases against a 22-skill catalog with six packs and nine project fixtures (Vue + PostgreSQL, React/Next.js, FastAPI, Rust, Go, PHP, Ruby, Swift and an empty folder). Eighteen cases have one correct skill; two have none and expect an empty shortlist. The test fails when any metric drops below the recorded level.
+
+| Code | Top-1 | Top-3 | Empty when nothing fits | `install_args` missing the answer |
+|---|---:|---:|---:|---:|
+| `60653ce` (before whole-library task ranking and language detection) | 10/18 | 10/18 | 2/2 | 0 |
+| Current | 18/18 | 18/18 | 2/2 | 0 |
+
+The eight earlier misses were tasks outside the detected stacks (Docker or Helm in a Vue project, Terraform or CI in an empty folder) and Rust, PHP, Ruby and Swift projects. The catalog has one specialist per task, so the set checks routing rather than fine ranking among similar skills, and it was written by the same author as the ranking changes. Add cases from real requests, especially misses, before tuning weights.
+
 ## Project status in copy mode
 
 On Linux, `status -C <project> --json` compared 100 tracked skills against matching Claude copies and a matching
