@@ -69,6 +69,12 @@ func decideInstall(project, src string, item Item, prev *Entry, force, copies bo
 		decision.action = "blocked"
 		return refuse("%s: expected a regular SKILL.md", name)
 	}
+	if decision.copyNeeded {
+		if err := checkSkillLinks(name, src); err != nil {
+			decision.action = "blocked"
+			return refuse("%v", err)
+		}
+	}
 	if !decision.copyNeeded && !regularSkill(dest) {
 		decision.action = "blocked"
 		return refuse("%s: expected a regular SKILL.md", name)

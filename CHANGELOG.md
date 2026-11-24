@@ -10,6 +10,11 @@
 - On Windows, replacing an existing `.claude/skills` symlink created a file link that clients could not open as a
   folder. The new link is now created next to the old one.
 
+### Changed
+- `add`, `update` and `adopt` refuse a skill that contains symlinks and name the links. Git for Windows checks
+  them out as plain files by default, so the committed copy would fail `verify` there. Replace the links with
+  regular files in the library skill. Imports already inline or drop upstream symlinks.
+
 ## 0.2.0 — Go rewrite
 
 skillman is now a single Go binary (Bubble Tea v2 TUI + CLI). Library, packs, project manifests, trash and registry

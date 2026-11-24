@@ -128,6 +128,22 @@ func linkOK(d, name string, copies bool, hash func(string) string) bool {
 	return err == nil && rel == "."
 }
 
+// checkSkillLinks refuses skills that contain symlinks. Git for Windows checks
+// them out as plain files by default, so a committed copy would not verify there.
+func checkSkillLinks(name, dir string) error {
+	var links []string
+	for _, e := range Rglob(dir) {
+		if e.IsSymlink() && !hasIgnoredPart(e.Rel, HashIgnore) {
+			links = append(links, e.Rel)
+		}
+	}
+	if len(links) == 0 {
+		return nil
+	}
+	return errf("%s contains symlinks (%s); replace them with regular files in %s so every checkout gets the same bytes",
+		name, strings.Join(links, ", "), dir)
+}
+
 func regularSkill(dir string) bool {
 	p := filepath.Join(dir, "SKILL.md")
 	return !IsSymlink(dir) && !IsSymlink(p) && IsFile(p)
@@ -323,6 +339,9 @@ func installFiles(d, name, src string, copyNeeded, copies bool, previous *Entry,
 	if copyNeeded {
 		parent := filepath.Dir(c.dest)
 		if err = os.MkdirAll(parent, 0755); err != nil {
+			return c, err
+		}
+		if err := checkSkillLinks(name, src); err != nil {
 			return c, err
 		}
 		tmp, err := os.MkdirTemp(parent, ".install-")
@@ -771,7 +790,11 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 			case IsSymlink(filepath.Join(src, "SKILL.md")):
 				out = append(out, res(name, false, "%s: expected a regular SKILL.md", name))
 			default:
-				if err := checkInstallTargets(d, name, prev, copies); err != nil {
+				err := checkSkillLinks(name, src)
+				if err == nil {
+					err = checkInstallTargets(d, name, prev, copies)
+				}
+				if err != nil {
 					out = append(out, res(name, false, "%v", err))
 				} else {
 					out = append(out, res(name, true, "would %s", verb))
@@ -856,6 +879,10 @@ func Adopt(d string, names []string) ([]Result, error) {
 		}
 		if !r.InLibrary {
 			out = append(out, res(name, false, "not in library (project-local skill; left as is)"))
+			continue
+		}
+		if err := checkSkillLinks(name, Dest(d, name)); err != nil {
+			out = append(out, res(name, false, "%v", err))
 			continue
 		}
 		e := newEntry(filepath.Join(SKILLS, name), "", nil)

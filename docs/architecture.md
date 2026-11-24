@@ -87,7 +87,8 @@ copies go to `~/.local/state/skillman/trash/`. If that directory is not writable
 - **Git for history, trash for the rest.** Library changes are commits you can revert. Project removals are moves
   you can restore. Nothing is deleted without an explicit "empty trash".
 - **Refuse rather than guess.** Symlinked `.agents/` or `.claude/skills/` folders, real folders where a link
-  belongs, invalid names, path traversal in names and a dirty library working tree are refused with a message.
+  belongs, symlinks inside a skill (Git for Windows checks them out as plain files), invalid names, path traversal
+  in names and a dirty library working tree are refused with a message.
 - **Locks and atomic writes.** Manifest and pack writes take an `flock` lock and go through a temp file plus rename,
   so the TUI and a CLI run at the same time cannot corrupt each other's state.
 

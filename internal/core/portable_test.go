@@ -210,3 +210,41 @@ func TestPortableRelinkKeepsDirectoryLink(t *testing.T) {
 		}
 	}
 }
+
+func TestPortableRefusesSkillSymlinks(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SKILL_LIBRARY", filepath.Join(root, "lib"))
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	Configure()
+	src := mkskill(t, SKILLS, "linked", "", "", map[string]string{"refs/a.md": "a\n"})
+	if err := os.Symlink("refs/a.md", filepath.Join(src, "alias.md")); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	p := filepath.Join(root, "app")
+	must(t, os.MkdirAll(p, 0o755))
+	// Git for Windows checks links out as plain files, so the copy would not verify there.
+	preview, err := PreviewInstall(p, []Item{{Name: "linked"}}, false)
+	must(t, err)
+	if preview.OK || preview.Skills[0].Action != "blocked" || !strings.Contains(preview.Skills[0].Reason, "alias.md") {
+		t.Fatalf("preview: %+v", preview.Skills)
+	}
+	if rs, err := Install(p, []Item{{Name: "linked"}}, false); err != nil || rs[0].OK || Lexists(Dest(p, "linked")) {
+		t.Fatalf("install: %v %+v", err, rs)
+	}
+	must(t, CopyTree(src, Dest(p, "linked"), nil))
+	if rs, err := Adopt(p, []string{"linked"}); err != nil || rs[0].OK || ReadManifest(p).Skills["linked"] != nil {
+		t.Fatalf("adopt: %v %+v", err, rs)
+	}
+	must(t, os.RemoveAll(Dest(p, "linked")))
+	plain := mkskill(t, SKILLS, "plain", "", "", nil)
+	if rs, err := Install(p, []Item{{Name: "plain"}}, false); err != nil || !rs[0].OK {
+		t.Fatalf("install plain: %v %+v", err, rs)
+	}
+	must(t, os.Symlink("SKILL.md", filepath.Join(plain, "alias.md")))
+	if rs, err := PreviewProjectUpdate(p, []string{"plain"}, false); err != nil || rs[0].OK {
+		t.Fatalf("update preview: %v %+v", err, rs)
+	}
+	if rs, err := UpdateProject(p, []string{"plain"}, false); err != nil || rs[0].OK || Lexists(filepath.Join(Dest(p, "plain"), "alias.md")) {
+		t.Fatalf("update: %v %+v", err, rs)
+	}
+}
