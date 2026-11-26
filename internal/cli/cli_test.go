@@ -532,3 +532,29 @@ func TestInfoKeepsFullDescriptionAndResultsGoToStdout(t *testing.T) {
 		}
 	}
 }
+
+func TestSimilarSkillsInInfoDoctorAndLibrary(t *testing.T) {
+	lib, p := setup(t)
+	mkskill(t, lib, "postgres", "PostgreSQL "+strings.Repeat("schema design, indexing and operations guidance ", 6))
+	mkskill(t, lib, "postgres-best-practices", "PostgreSQL schema and query best practices")
+	runOK(t, "library", "rebuild-index")
+	var info struct {
+		Similar []core.Similar
+	}
+	if rc := runJSON(t, &info, "info", "postgres"); rc != 0 || len(info.Similar) != 1 || info.Similar[0].Name != "postgres-best-practices" || info.Similar[0].Tokens == 0 {
+		t.Fatalf("info similar: %+v", info.Similar)
+	}
+	if _, out, _ := run(t, "info", "postgres"); !strings.Contains(out, "similar to postgres-best-practices, which is") {
+		t.Fatalf("info text: %s", out)
+	}
+	var dup struct {
+		Duplicates []struct{ A, B string }
+	}
+	if rc := runJSON(t, &dup, "library", "duplicates"); rc != 0 || len(dup.Duplicates) != 1 || dup.Duplicates[0].A != "postgres" {
+		t.Fatalf("duplicates: %+v", dup)
+	}
+	runOK(t, "add", "-C", p, "postgres", "postgres-best-practices")
+	if _, out, _ := run(t, "doctor", "-C", p); !strings.Contains(out, "postgres and postgres-best-practices cover the same topic") {
+		t.Fatalf("doctor: %s", out)
+	}
+}

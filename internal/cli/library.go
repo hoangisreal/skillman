@@ -385,6 +385,34 @@ func cmdLibrary(a *Args) int {
 		}
 		rep := core.UpdateLibrary(names, sub, a.Has("allow-risky"), !a.Has("no-commit"), progressLine(a.Has("json")))
 		return printUpdateReport(a, rep, sub)
+	case "duplicates":
+		type pair struct {
+			A       string `json:"a"`
+			B       string `json:"b"`
+			ATokens int    `json:"a_tokens"`
+			BTokens int    `json:"b_tokens"`
+			Reason  string `json:"reason"`
+		}
+		pairs := []pair{}
+		for name, sims := range core.SimilarSkills(core.LoadIndex(), nil) {
+			for _, s := range sims {
+				if name < s.Name {
+					pairs = append(pairs, pair{name, s.Name, core.SkillTokens(filepath.Join(core.SKILLS, name)), core.SkillTokens(filepath.Join(core.SKILLS, s.Name)), s.Reason})
+				}
+			}
+		}
+		sort.Slice(pairs, func(i, j int) bool { return pairs[i].A+pairs[i].B < pairs[j].A+pairs[j].B })
+		if a.Has("json") {
+			printJSON(map[string]any{"duplicates": pairs})
+			return 0
+		}
+		for _, p := range pairs {
+			outf("%-32s %4dt  ~  %-32s %4dt  (%s)\n", p.A, p.ATokens, p.B, p.BTokens, p.Reason)
+		}
+		if len(pairs) == 0 {
+			outf("no near-duplicate skills\n")
+		}
+		return 0
 	case "pending":
 		p := core.LoadPending()
 		if a.Has("json") {
