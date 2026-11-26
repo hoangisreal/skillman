@@ -45,7 +45,7 @@ func init() {
 		"Remove skills or a pack from a project (to trash; skills still used by another pack stay).", []string{"C"}, cmdRemove)
 	reg("status", "[dir] [-C dir] [--agents [--include-global]] [--json]", "Project skill state, or on-disk skill locations by agent with --agents.",
 		[]string{"C"}, cmdStatus)
-	reg("doctor", "[dir] [--json]", "Check links, drift, shadowing by global skills and the description token budget.",
+	reg("doctor", "[dir] [--self] [--json]", "Check links, drift, shadowing by global skills and the description token budget. --self checks the installed binary, its PATH links, the library and agent setup instead.",
 		[]string{"C"}, cmdDoctor)
 	reg("verify", "[dir] [--json]", "CI check: committed skills match the manifest hashes (needs no library).",
 		[]string{"C"}, cmdVerify)
@@ -702,6 +702,9 @@ func cmdStatus(a *Args) int {
 }
 
 func cmdDoctor(a *Args) int {
+	if a.Has("self") {
+		return cmdDoctorSelf(a)
+	}
 	d, err := projectDir(a, true)
 	if err != nil {
 		return fail(err)
@@ -1022,6 +1025,11 @@ func cmdInit(a *Args) int {
 			outf("skill 'skillman' installed in the library (agents: skillman agent-setup)\n")
 		}
 	}
+	if rm := filepath.Join(core.LIB, "README.md"); !core.Lexists(rm) || isLegacyReadme(readOr(rm)) {
+		if err := core.AtomicWrite(rm, []byte(libraryReadme)); err == nil {
+			outf("README.md: current commands (any earlier text stays in the library's git history)\n")
+		}
+	}
 	if gi := filepath.Join(core.LIB, ".gitignore"); !core.Lexists(gi) {
 		os.WriteFile(gi, []byte(".cache/\n__pycache__/\n*.pyc\n.claude/\n.mcp.json\n"), 0o644)
 	}
@@ -1035,6 +1043,13 @@ func cmdInit(a *Args) int {
 	}
 	if _, _, _, err := core.RebuildIndex(true); err != nil {
 		return fail(err)
+	}
+	// Give a new library a first commit, so later changes show up as reviewable diffs.
+	if core.Git([]string{"rev-parse", "--verify", "-q", "HEAD"}, core.LIB, 30).Code != 0 {
+		core.Git([]string{"add", "-A"}, core.LIB, 60)
+		if core.Git([]string{"commit", "-q", "-m", "Initialize skill library"}, core.LIB, 60).Code == 0 {
+			outf("committed the new library\n")
+		}
 	}
 	outf("library ready at %s (%d skills)\n", core.LIB, len(core.LibraryNames()))
 	outf("Preview starter sources: skillman bootstrap --pack core --dry-run\n")
