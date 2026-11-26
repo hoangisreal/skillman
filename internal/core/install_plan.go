@@ -40,6 +40,11 @@ func decideInstall(project, src string, item Item, prev *Entry, force, copies bo
 	if IsSymlink(dest) {
 		return refuse("%s is a symlink; refusing", dest)
 	}
+	for _, dir := range []string{filepath.Dir(dest), filepath.Dir(LinkP(project, name))} {
+		if err := WritableDir(dir); err != nil {
+			return refuse("cannot write %v", err)
+		}
+	}
 	hash := inspectionHashes()
 	switch {
 	case !Exists(dest):
@@ -117,6 +122,7 @@ type InstallPreview struct {
 	AddedTokens int                  `json:"added_tokens"`
 	BudgetAfter int                  `json:"budget_after"`
 	Budget      int                  `json:"budget"`
+	Warnings    []string             `json:"warnings"`
 }
 
 func PreviewInstall(project string, items []Item, force bool) (InstallPreview, error) {
@@ -125,7 +131,7 @@ func PreviewInstall(project string, items []Item, force bool) (InstallPreview, e
 		return InstallPreview{}, err
 	}
 	states, budget := StatusMap(rows), TokenBudgetOf(project)
-	preview := InstallPreview{Project: project, Skills: []InstallPreviewItem{}, BudgetAfter: budget.Total, Budget: budget.Budget}
+	preview := InstallPreview{Project: project, Skills: []InstallPreviewItem{}, BudgetAfter: budget.Total, Budget: budget.Budget, Warnings: StateWarnings()}
 	var results []Result
 	copies := man.copyMode()
 	for _, item := range items {

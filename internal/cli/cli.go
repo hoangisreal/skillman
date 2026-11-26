@@ -157,6 +157,9 @@ func fail(err error) int {
 	if errors.As(err, &se) {
 		errfln("skillman: %s", se.Msg)
 	} else {
+		if !strings.Contains(err.Error(), core.SandboxHint) {
+			err = core.ExplainFSError(err)
+		}
 		errfln("skillman: %v", err)
 	}
 	return 1

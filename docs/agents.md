@@ -22,6 +22,16 @@ upgrading on Windows, run `skillman init` followed by `skillman agent-setup` to 
 
 Both clients discover project skills under `.agents/skills` and personal skills under `~/.agents/skills`. Run `skillman agent-setup` to expose the Skillman instructions. Open the project in Cursor and check its Skills settings, or run `/skills reload` and inspect `/skills` in Copilot CLI. Ask “Trong thư viện local, skill nào phù hợp để test component Vue? Chưa cài gì.” Check that the recommendation targets this project and that only the selected name is passed to `add` after selection. [Cursor skills](https://cursor.com/docs/skills) · [Copilot CLI skills](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)
 
+
+## Running inside an agent sandbox
+
+Agent sandboxes often mask protected paths with a device file (for example `.claude/skills`) and make
+`~/.local/state/skillman` read-only. `add --dry-run` reports both: a masked or read-only target blocks the skill
+with the reason, and an unwritable state directory is listed under `warnings` (the project registry used by
+library updates). `status --agents` gives a `reason` for every `invalid`, `drifted` or `external_link` entry.
+Run installs outside the sandbox, or exclude `skillman` from it; in Claude Code, add it to
+`sandbox.excludedCommands`.
+
 ## The workflow the skill teaches
 
 Ask the agent to select skills **from your local Skillman library for this project**. For explicit invocation use
