@@ -506,3 +506,29 @@ func TestStatusSeparatesManifestFromLibrary(t *testing.T) {
 		t.Fatalf("text status: %s", out)
 	}
 }
+
+func TestInfoKeepsFullDescriptionAndResultsGoToStdout(t *testing.T) {
+	lib, p := setup(t)
+	long := strings.Repeat("performance patterns for React components ", 8) + "end-of-description"
+	mkskill(t, lib, "long-desc", long)
+	runOK(t, "library", "rebuild-index")
+	var info map[string]any
+	if rc := runJSON(t, &info, "info", "long-desc"); rc != 0 || !strings.HasSuffix(info["description"].(string), "end-of-description") {
+		t.Fatalf("info description cut: %v", info["description"])
+	}
+	var rec struct {
+		Shortlist []struct{ Name, Description string }
+	}
+	runJSON(t, &rec, "recommend", "-C", p, "--task", "react performance patterns", "--brief")
+	for _, c := range rec.Shortlist {
+		if c.Name == "long-desc" && !strings.HasSuffix(c.Description, "end-of-description") {
+			t.Fatalf("recommend description cut: %q", c.Description)
+		}
+	}
+	for _, args := range [][]string{{"add", "-C", p, "long-desc"}, {"verify", "-C", p}} {
+		rc, out, errOut := run(t, args...)
+		if rc != 0 || !strings.Contains(out, "✓ long-desc") || strings.Contains(errOut, "✓") {
+			t.Fatalf("%v: rc=%d stdout=%q stderr=%q", args, rc, out, errOut)
+		}
+	}
+}

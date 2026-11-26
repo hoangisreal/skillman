@@ -200,6 +200,9 @@ func ResolveRecSkill(s RecSkill) RecSkill {
 	dir := SKILLS + "/" + s.Name
 	if s.InLibrary && IsFile(dir+"/SKILL.md") {
 		s.Tokens = SkillTokens(dir)
+		if full := FullDescription(dir); full != "" {
+			s.Description = full
+		}
 	} else {
 		s.Description, s.Source, s.InLibrary = "⚠ not in library", "", false
 	}

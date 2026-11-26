@@ -457,6 +457,15 @@ func CheckSkill(d, name string) ([]string, []string, *IndexRow) {
 }
 
 // SkillTokens estimates the description tokens a skill injects per session.
+// FullDescription is the skill's whole frontmatter description on one line.
+// The index keeps only the first 200 characters.
+func FullDescription(d string) string {
+	if v, ok := SkillMeta(d)["description"]; ok {
+		return collapseWS(pyStr(v))
+	}
+	return ""
+}
+
 func SkillTokens(d string) int {
 	m := SkillMeta(d)
 	n, ok := m["name"]

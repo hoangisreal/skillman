@@ -256,6 +256,9 @@ func cmdInfo(a *Args) int {
 	src := core.LoadMap(filepath.Join(d, "SOURCE.json"))
 	proj, _ := core.ResolveProject(a.Str("C", "."), false)
 	state := stateMap(proj)[name]
+	if full := core.FullDescription(d); full != "" {
+		row.Description = full
+	}
 	info := map[string]any{
 		"name": name, "description": row.Description, "source": row.Source, "commit": src["commit"],
 		"domain": row.Domain, "stacks": nzs(row.Stacks), "tags": row.Tags, "packs": nzs(pbs[name]),
