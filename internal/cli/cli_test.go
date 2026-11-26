@@ -541,7 +541,8 @@ func TestSkillAddSuggestMatchesRecommend(t *testing.T) {
 	if rc := Run("skill-add", []string{"--suggest", "-C", p, "--limit", "1"}); rc != 0 {
 		t.Fatalf("rc=%d %s", rc, e.String())
 	}
-	if !strings.Contains(o.String(), "whole packs") || !strings.Contains(o.String(), "skillman add -C '"+p+"' @") {
+	// The project path is resolved (macOS /private/var, Windows long names), so match its shape.
+	if !strings.Contains(o.String(), "whole packs") || !strings.Contains(o.String(), "skillman add -C '") || !strings.Contains(o.String(), filepath.Base(p)+"' @") {
 		t.Fatalf("text: %s", o.String())
 	}
 	o.Reset()
