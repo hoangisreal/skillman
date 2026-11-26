@@ -65,6 +65,10 @@ skillman/                          this repository (MIT, tooling only)
 }
 ```
 
+A skill created with `skillman new --project` (or tracked with `adopt --project`) has `"source": "project"` and no
+upstream commit: it lives only in the project, `status` compares it with its recorded hash only, and `update <name>`
+records an edit.
+
 `tree_hash` is a SHA-256 over every file's relative path and bytes (symlinks by target), ignoring `__pycache__` and
 `.DS_Store`. Comparing three hashes gives the skill's state: the recorded one, the project copy's and the library's.
 A copy that matches neither the record nor the library is a `conflict`.

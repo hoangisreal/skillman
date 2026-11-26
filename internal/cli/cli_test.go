@@ -532,3 +532,103 @@ func TestInfoKeepsFullDescriptionAndResultsGoToStdout(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectSkillsStayOutOfTheLibrary(t *testing.T) {
+	lib, p := setup(t)
+	before := core.LibraryNames()
+	if rc, _, errOut := run(t, "new", "kq-content", "--project", "-C", p, "-d", "x"); rc == 0 || !strings.Contains(errOut, "placeholder") {
+		t.Fatalf("placeholder description accepted: %s", errOut)
+	}
+	src := filepath.Join(t.TempDir(), "draft.md")
+	if err := os.WriteFile(src, []byte("---\nname: draft\ndescription: Write KQ content pages from the source notes and check facts\n---\n## Rules\n- Cite sources.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runOK(t, "new", "kq-content", "--project", "-C", p, "--from-file", src)
+	if !slices.Equal(core.LibraryNames(), before) || core.Exists(filepath.Join(lib, "skills", "kq-content")) {
+		t.Fatal("project skill leaked into the library")
+	}
+	body, _ := os.ReadFile(filepath.Join(core.Dest(p, "kq-content"), "SKILL.md"))
+	if !strings.Contains(string(body), "name: kq-content") || !strings.Contains(string(body), "Cite sources") || !strings.Contains(string(body), "check facts") {
+		t.Fatalf("from-file content: %s", body)
+	}
+	if !core.LinkOK(p, "kq-content") {
+		t.Fatal(".claude/skills link missing")
+	}
+	status := func() core.SkillStatus {
+		var st []core.SkillStatus
+		runJSON(t, &st, "status", "-C", p)
+		for _, s := range st {
+			if s.Name == "kq-content" {
+				return s
+			}
+		}
+		t.Fatal("not in status")
+		return core.SkillStatus{}
+	}
+	if s := status(); s.State != "ok" || s.Scope != "project" {
+		t.Fatalf("new project skill: %+v", s)
+	}
+	runOK(t, "verify", "-C", p)
+	// Edit in place, then record it.
+	f := filepath.Join(core.Dest(p, "kq-content"), "SKILL.md")
+	if err := os.WriteFile(f, append(body, []byte("- Keep it short.\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s := status(); s.State != "modified" {
+		t.Fatalf("edited: %+v", s)
+	}
+	if _, out, _ := run(t, "doctor", "-C", p); !strings.Contains(out, "edited project skill (record it with: skillman update kq-content)") {
+		t.Fatalf("doctor: %s", out)
+	}
+	if rc, _, _ := run(t, "verify", "-C", p); rc == 0 {
+		t.Fatal("verify accepted an unrecorded edit")
+	}
+	runOK(t, "update", "-C", p, "kq-content")
+	if s := status(); s.State != "ok" {
+		t.Fatalf("recorded: %+v", s)
+	}
+	runOK(t, "verify", "-C", p)
+	// A tracked library skill can stop following the library.
+	runOK(t, "add", "-C", p, "vue-best-practices")
+	runOK(t, "adopt", "--project", "-C", p, "vue-best-practices")
+	appendToFile(t, filepath.Join(lib, "skills", "vue-best-practices", "SKILL.md"), "newer upstream text\n")
+	var st []core.SkillStatus
+	runJSON(t, &st, "status", "-C", p)
+	for _, s := range st {
+		if s.Name == "vue-best-practices" && (s.State != "ok" || s.Scope != "project") {
+			t.Fatalf("adopted project skill follows the library: %+v", s)
+		}
+	}
+}
+
+func TestLibraryNewScaffold(t *testing.T) {
+	lib, _ := setup(t)
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"} {
+		t.Setenv(k, "t")
+	}
+	for _, k := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "t@example.invalid")
+	}
+	if rc, _, errOut := run(t, "library", "new", "short-desc", "-d", "x"); rc == 0 || !strings.Contains(errOut, "placeholder") {
+		t.Fatalf("placeholder accepted: rc=%d %s", rc, errOut)
+	}
+	runOK(t, "library", "new", "ghi-chu", "--lang", "vi", "-d", "Ghi chú quy trình phát hành cho nhóm và khi nào cần dùng")
+	b, _ := os.ReadFile(filepath.Join(lib, "skills", "ghi-chu", "SKILL.md"))
+	if !strings.Contains(string(b), "## Khi nào dùng") {
+		t.Fatalf("Vietnamese template: %s", b)
+	}
+	if st := core.Git([]string{"status", "--porcelain", "--", "skills/ghi-chu", "INDEX.json"}, lib, 30); strings.TrimSpace(st.Stdout) != "" {
+		t.Fatalf("library left uncommitted: %s", st.Stdout)
+	}
+}
+
+func appendToFile(t *testing.T, p, s string) {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, append(b, []byte(s)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -39,7 +39,8 @@ Search syntax (TUI and CLI): plain words must all match · `-word` excludes · `
 | `diff <name>` | Unified diff library → project copy |
 | `update [names] [--force] [--dry-run] [--json]` | Refresh `outdated` copies. Explicit names can include local edits or pins with `--force`. Use `--dry-run` to preview eligible and blocked updates without writing files. Exit 1 if any selected update is blocked. |
 | `update-projects [--dry-run]` | Refresh outdated skills in every registered project |
-| `adopt [names]` | Start tracking copies that were added before the manifest existed |
+| `adopt [names] [--project]` | Start tracking copies that were added before the manifest existed. `--project` tracks named folders as project skills, including a library skill that should stop following the library |
+| `new <skill> --project [-C dir] -d DESC [--from-file F] [--lang en\|vi]` | Create a skill that lives only in this project: `.agents/skills/<skill>`, its Claude link or copy, and a manifest entry with `"source": "project"`. Other projects never see it in `search` or `recommend`; `verify` checks it like any skill. After editing it, `update <skill>` records the new content |
 | `pin <names>` · `unpin <names>` | Keep a project copy as it is: skipped by `update`, accepted by `verify` |
 | `repair-links [dir]` | Repair Claude links and copies. When only the project skill has changed, refresh the unchanged Claude copy. Reports separately edited copies and occupied paths for manual review. |
 | `repair-links [-C dir] --mode copy\|symlink [--dry-run]` | Preview or change the project's Claude paths and store the mode in its manifest. |
@@ -88,7 +89,7 @@ Pack files are written exactly as before (PyYAML style), so editing them causes 
 | `library pending [--json]` | Risky updates waiting for review |
 | `library rollback <skill>` | Restore the previous library version from git and pin it |
 | `library pin <skills>` · `library unpin <skills>` | Freeze a library skill against upstream updates |
-| `library new <skill> [-d DESC]` | Scaffold a local skill (no upstream; updates never touch it) |
+| `library new <skill> [-d DESC] [--from-file F] [--lang en\|vi] [--no-commit]` | Scaffold a local library skill (no upstream; updates never touch it) and commit it with the index. Placeholder descriptions such as `x` are refused; without `-d` a TODO description is written. `--from-file` takes a SKILL.md (its body and description) or a Markdown body; `--lang vi` uses Vietnamese headings. `skillman new <skill>` is the same |
 | `library rebuild-index` · `library validate [--strict] [-v]` | Re-validate every skill, rewrite `INDEX.md/json` and `VALIDATION.md` |
 | `library build-packs` | Regenerate `packs/vendor/*` (one pack per upstream owner with ≥ 3 skills) |
 | `trash list \| restore <id> \| empty --yes [ids] [-C dir]` | Removed project copies and deleted packs. Use `-C dir` to include entries saved in that project's fallback trash. |
