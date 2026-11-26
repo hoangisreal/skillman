@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,7 +29,7 @@ var toolConfigs = map[string]string{
 // the file that shows it (package.json dependencies, lock and config files).
 // It returns nil when the project has no package.json.
 func ProjectDependencies(d string) map[string]string {
-	files := scanFiles(d)
+	files := append(scanFiles(d), deepPackageFiles(d)...)
 	deps := map[string]string{}
 	js := false
 	for _, f := range files {
@@ -74,6 +75,30 @@ func ProjectDependencies(d string) map[string]string {
 	return deps
 }
 
+// deepPackageFiles finds package.json files below the depth scanFiles covers,
+// so a deep workspace still counts before a tool is judged unused.
+func deepPackageFiles(d string) []string {
+	var out []string
+	filepath.WalkDir(d, func(p string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(d, p)
+		depth := strings.Count(filepath.ToSlash(rel), "/")
+		if e.IsDir() {
+			if p != d && (skipScan[e.Name()] || strings.HasPrefix(e.Name(), ".") || depth >= 7) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if e.Name() == "package.json" && depth >= 3 {
+			out = append(out, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	return out
+}
+
 // setDep keeps the shallowest file as evidence.
 func setDep(deps map[string]string, name, file string) {
 	if old, ok := deps[name]; !ok || strings.Count(file, "/") < strings.Count(old, "/") {
@@ -95,10 +120,15 @@ var toolSkills = map[string][]string{
 	"expo": {"expo"}, "svelte": {"svelte"}, "sveltekit": {"@sveltejs/kit"}, "angular": {"@angular/core"},
 	"remix": {"@remix-run/*"}, "astro": {"astro"}, "hono": {"hono"}, "nestjs": {"@nestjs/core"},
 	"express": {"express"}, "fastify": {"fastify"}, "mongoose": {"mongoose"}, "graphql": {"graphql"},
-	"cloudflare": {"wrangler", "@cloudflare/*"}, "workers": {"wrangler", "@cloudflare/*"},
-	"supabase": {"@supabase/supabase-js", "@supabase/*", "supabase"}, "firebase": {"firebase", "firebase-admin"},
+	"cloudflare": {"wrangler", "@cloudflare/*"},
+	"supabase":   {"@supabase/supabase-js", "@supabase/*", "supabase"}, "firebase": {"firebase", "firebase-admin"},
 	"netlify": {"netlify-cli", "@netlify/*"},
 }
+
+// platformSkills may appear anywhere in a name ("nextjs-on-cloudflare");
+// other tool names only count as the first segment, so "sandbox-next" is
+// not about Next.js.
+var platformSkills = set("cloudflare", "supabase", "firebase", "netlify")
 
 // ToolUse describes the JavaScript tools a skill name refers to.
 type ToolUse struct {
@@ -114,9 +144,9 @@ func ToolEvidence(name string, deps map[string]string) ToolUse {
 	if deps == nil {
 		return u
 	}
-	for _, seg := range strings.Split(name, "-") {
+	for i, seg := range strings.Split(name, "-") {
 		pkgs, ok := toolSkills[seg]
-		if !ok {
+		if !ok || (i > 0 && !platformSkills[seg]) {
 			continue
 		}
 		if dep, file := findDep(deps, pkgs); dep != "" {

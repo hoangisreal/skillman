@@ -532,3 +532,27 @@ func TestInfoKeepsFullDescriptionAndResultsGoToStdout(t *testing.T) {
 		}
 	}
 }
+
+func TestSkillAddSuggestMatchesRecommend(t *testing.T) {
+	_, p := setup(t)
+	var o, e bytes.Buffer
+	stdout, stderr = &o, &e
+	defer func() { stdout, stderr = os.Stdout, os.Stderr }()
+	if rc := Run("skill-add", []string{"--suggest", "-C", p, "--limit", "1"}); rc != 0 {
+		t.Fatalf("rc=%d %s", rc, e.String())
+	}
+	if !strings.Contains(o.String(), "whole packs") || !strings.Contains(o.String(), "skillman add -C '"+p+"' @") {
+		t.Fatalf("text: %s", o.String())
+	}
+	o.Reset()
+	if rc := Run("skill-add", []string{"--suggest", "-C", p, "--json"}); rc != 0 {
+		t.Fatal(rc)
+	}
+	var out struct {
+		Project string
+		Packs   []core.Suggestion
+	}
+	if err := json.Unmarshal(o.Bytes(), &out); err != nil || out.Project == "" || len(out.Packs) == 0 {
+		t.Fatalf("JSON shape changed: %v %s", err, o.String())
+	}
+}

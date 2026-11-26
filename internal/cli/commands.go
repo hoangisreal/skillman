@@ -1152,9 +1152,12 @@ Tracked in <dir>/.agents/skill-manifest.json. Manage with: skillman (TUI) or ski
 		return find("pack").run(parse([]string{"list"}))
 	case "--suggest":
 		// Same advice as recommend: a short list of skills, with whole packs as an aside.
-		a := parse(argv[1:], "C")
+		a := parse(argv[1:], find("recommend").values...)
+		if a.Has("json") {
+			return cmdSuggest(a) // unchanged JSON for scripts: {"project", "packs"}
+		}
 		a.bools["brief"] = true
-		if rc := cmdRecommend(a); rc != 0 || a.Has("json") {
+		if rc := cmdRecommend(a); rc != 0 {
 			return rc
 		}
 		d, err := projectDir(a, true)
@@ -1166,7 +1169,8 @@ Tracked in <dir>/.agents/skill-manifest.json. Manage with: skillman (TUI) or ski
 			packs = append(packs, "@"+s.Pack)
 		}
 		if len(packs) > 0 {
-			outf("\nwhole packs (every member's description loads in each session): %s\npreview one with: skillman add %s --dry-run\n", strings.Join(packs, " "), packs[0])
+			quoted := "'" + strings.ReplaceAll(d, "'", "'\"'\"'") + "'"
+			outf("\nwhole packs (every member's description loads in each session): %s\npreview one with: skillman add -C %s %s --dry-run\n", strings.Join(packs, " "), quoted, packs[0])
 		}
 		return 0
 	}

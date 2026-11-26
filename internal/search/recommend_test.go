@@ -235,6 +235,7 @@ func TestRecommendUsesDependenciesAndNames(t *testing.T) {
 		"sql-optimization":        "SQL tips",
 		"github-actions":          "GitHub Actions workflows, caching and matrices",
 		"commit":                  "Use for every request to commit changes; conventional commits",
+		"sandbox-next":            "Build Cloudflare Sandbox apps on the preview SDK",
 	} {
 		mkskill(t, lib, name, desc)
 	}
@@ -290,8 +291,24 @@ func TestRecommendUsesDependenciesAndNames(t *testing.T) {
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vitest" {
 		t.Fatalf("named tool: %+v", rec.Shortlist)
 	}
-	rec = Recommend(proj, core.LoadIndex(), "deploy to cloudflare workers", 3, 0)
+	rec = Recommend(proj, core.LoadIndex(), "deploy Next.js to cloudflare workers", 3, 0)
 	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "nextjs-on-cloudflare" {
 		t.Fatalf("named platform: %+v", rec.Shortlist)
+	}
+	// "next" as a later name segment is an ordinary word, not Next.js.
+	rec = Recommend(proj, core.LoadIndex(), "sandbox preview sdk", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "sandbox-next" {
+		t.Fatalf("ordinary next: %+v", rec.Shortlist)
+	}
+	// A package.json deeper than the stack scan still counts as a dependency.
+	deep := filepath.Join(proj, "services", "web", "apps", "site", "package.json")
+	if err := os.MkdirAll(filepath.Dir(deep), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(deep, []byte(`{"devDependencies":{"vitest":"3"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if deps := core.ProjectDependencies(proj); deps["vitest"] != "services/web/apps/site/package.json" {
+		t.Fatalf("deep dependency: %v", deps)
 	}
 }

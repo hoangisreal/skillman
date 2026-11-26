@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/hoangisreal/skillman/internal/core"
 )
@@ -46,7 +47,7 @@ var commonWords = map[string]bool{
 // name, e.g. "deploy with vllm" for vllm-deploy-docker.
 func namesSkillTech(name string, words []string) bool {
 	for _, seg := range strings.Split(name, "-") {
-		if len(seg) > 2 && !commonWords[seg] && slices.Contains(words, seg) {
+		if len(seg) > 2 && !commonWords[seg] && slices.ContainsFunc(words, func(w string) bool { return alnum(w) == seg }) {
 			return true
 		}
 	}
@@ -70,6 +71,15 @@ func groupTokens(g core.RecGroup) []string {
 		}
 	}
 	return out
+}
+
+func alnum(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return -1
+	}, s)
 }
 
 // otherTech reports whether a skill's stacks tie it to a technology the
@@ -112,7 +122,10 @@ func (c *Choice) applyEvidence(deps map[string]string, tokens, words []string) {
 	}
 	missing := use.Missing[:0:0]
 	for _, m := range use.Missing {
-		if !slices.ContainsFunc(words, func(w string) bool { return strings.HasPrefix(m, w) || strings.HasPrefix(w, m) }) {
+		if !slices.ContainsFunc(words, func(w string) bool {
+			w = alnum(w) // "next.js" names nextjs
+			return w != "" && (strings.HasPrefix(m, w) || strings.HasPrefix(w, m))
+		}) {
 			missing = append(missing, m)
 		}
 	}
@@ -375,7 +388,7 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		}
 		// Without a task, extra picks in a project with a known stack need
 		// evidence beyond pack membership; an empty project gets the baseline.
-		if len(words) == 0 && r.HasStack && c.affinity <= 0 {
+		if len(words) == 0 && r.HasStack && len(declared) == 0 && c.affinity <= 0 {
 			continue
 		}
 		add(c)
