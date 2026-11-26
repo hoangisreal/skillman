@@ -541,7 +541,7 @@ func TestDoctorSelfFindsBrokenInstallAndLegacyLibrary(t *testing.T) {
 	}
 	// Links left by the Python installer point into a removed bin/ folder.
 	for _, name := range []string{"skillman", "skill-add"} {
-		if err := os.Symlink(filepath.Join(t.TempDir(), "gone", name), filepath.Join(bin, name)); err != nil {
+		if err := os.Symlink(filepath.Join(t.TempDir(), "gone", name), filepath.Join(bin, exeName(name))); err != nil {
 			t.Skip("symlinks unavailable:", err)
 		}
 	}
@@ -572,8 +572,8 @@ func TestDoctorSelfFindsBrokenInstallAndLegacyLibrary(t *testing.T) {
 		return false
 	}
 	for _, want := range []struct{ level, text string }{
-		{"error", filepath.Join(bin, "skillman") + " is a broken link"},
-		{"error", filepath.Join(bin, "skill-add") + " is a broken link"},
+		{"error", filepath.Join(bin, exeName("skillman")) + " is a broken link"},
+		{"error", filepath.Join(bin, exeName("skill-add")) + " is a broken link"},
 		{"warn", "skillman is not on PATH"},
 		{"warn", "broken link to the removed Python scripts"},
 		{"warn", "describes the Python skillcore.py commands"},
