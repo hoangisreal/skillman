@@ -57,7 +57,9 @@ func TestDryRunReportsReadOnlyTargets(t *testing.T) {
 }
 
 func TestAgentStatusExplainsInvalidSkills(t *testing.T) {
-	root := t.TempDir()
+	// Resolve like ResolveProject: macOS and Windows temp dirs go through links.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	must(t, err)
 	t.Setenv("SKILL_LIBRARY", filepath.Join(root, "lib"))
 	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
 	Configure()
