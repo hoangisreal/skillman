@@ -41,7 +41,7 @@ func checkInstallTargets(project, name string, prev *Entry, copies bool) error {
 			return err
 		}
 		if !info.IsDir() {
-			return errf("%s is not a directory", dir)
+			return errf("%s", occupiedReason(dir, info))
 		}
 	}
 	if !Lexists(path) {

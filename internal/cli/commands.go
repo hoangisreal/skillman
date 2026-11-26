@@ -554,6 +554,9 @@ func cmdAdd(a *Args) int {
 				outf("    %s · %s · %s · %s\n", target.Path, target.Role, target.Mode, strings.Join(target.Agents, ", "))
 			}
 		}
+		for _, w := range preview.Warnings {
+			outf("warning: %s\n", w)
+		}
 		outf("would add ≈%d description tokens → %d/%d (dry run, nothing changed)\n", preview.AddedTokens, preview.BudgetAfter, preview.Budget)
 		if preview.BudgetAfter > preview.Budget {
 			outf("warning: over the description token budget\n")
@@ -565,6 +568,11 @@ func cmdAdd(a *Args) int {
 		return fail(err)
 	}
 	summary := core.SummarizeInstall(rs)
+	if summary.Installed > 0 && !a.Has("json") {
+		for _, w := range core.StateWarnings() {
+			errfln("warning: %s", w)
+		}
+	}
 	rc := 0
 	if !summary.OK() {
 		rc = 1
@@ -640,9 +648,15 @@ func cmdStatus(a *Args) int {
 			outf("\n%s\n", agent.ID)
 			for _, root := range agent.Roots {
 				outf("  %s root: %s (%s)\n", root.Scope, root.Path, root.State)
+				if root.Reason != "" {
+					outf("    %s\n", root.Reason)
+				}
 			}
 			for _, skill := range agent.Skills {
 				outf("  %-14s %-28s %s\n", skill.State, skill.Name, skill.Path)
+				if skill.Reason != "" {
+					outf("    %s\n", skill.Reason)
+				}
 				for _, alias := range skill.Aliases {
 					outf("    also at %s\n", alias)
 				}

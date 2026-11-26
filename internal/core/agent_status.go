@@ -22,9 +22,10 @@ type AgentStatus struct {
 }
 
 type AgentSkillRoot struct {
-	Path  string `json:"path"`
-	Scope string `json:"scope"`
-	State string `json:"state"`
+	Path   string `json:"path"`
+	Scope  string `json:"scope"`
+	State  string `json:"state"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type AgentSkill struct {
@@ -33,6 +34,7 @@ type AgentSkill struct {
 	Scope   string   `json:"scope"`
 	Tracked bool     `json:"tracked"`
 	State   string   `json:"state"`
+	Reason  string   `json:"reason,omitempty"` // why the state is not "available"
 	Aliases []string `json:"aliases,omitempty"`
 }
 
@@ -56,12 +58,12 @@ var agentDirs = []agentSkillDirs{
 }
 
 type scannedSkill struct {
-	path, resolved, state string
+	path, resolved, state, reason string
 }
 
 type scannedSkillRoot struct {
-	state  string
-	skills map[string]scannedSkill
+	state, reason string
+	skills        map[string]scannedSkill
 }
 
 func pathKey(path string) string {
@@ -123,7 +125,7 @@ func InspectAgents(project string, includeGlobal bool) (AgentStatusReport, error
 				scan = scanSkillRoot(r.path, pathRoots)
 				scans[rootPath] = scan
 			}
-			view.Roots = append(view.Roots, AgentSkillRoot{agentReportPath(project, r.path, r.scope), r.scope, scan.state})
+			view.Roots = append(view.Roots, AgentSkillRoot{agentReportPath(project, r.path, r.scope), r.scope, scan.state, scan.reason})
 			canonical := r.scope == "project" && rootPath == canonicalRoot
 			claude := r.scope == "project" && rootPath == claudeRoot
 			names := make(map[string]bool)
@@ -146,17 +148,21 @@ func InspectAgents(project string, includeGlobal bool) (AgentStatusReport, error
 				if !found {
 					entry = scannedSkill{path: filepath.Join(r.path, name), state: "missing"}
 					if scan.state != "available" && scan.state != "missing" {
-						entry.state = scan.state
+						entry.state, entry.reason = scan.state, scan.reason
 					} else if scan.state == "available" && Lexists(entry.path) {
 						entry.state = "invalid"
+						if entry.reason = pathReason(entry.path); entry.reason == "" {
+							entry.reason = "not a folder or a link to one"
+						}
 					}
 				}
-				row := AgentSkill{Name: name, Path: agentReportPath(project, entry.path, r.scope), Scope: r.scope, Tracked: tracked, State: entry.state}
+				row := AgentSkill{Name: name, Path: agentReportPath(project, entry.path, r.scope), Scope: r.scope, Tracked: tracked, State: entry.state, Reason: entry.reason}
 				if tracked && claude && row.State == "available" {
 					if canonicalRootSafe && linkOK(project, name, copies, hash) {
 						entry.resolved = Dest(project, name)
 					} else {
 						row.State = "drifted"
+						row.Reason = "differs from .agents/skills/" + name + " (run: skillman repair-links)"
 					}
 				}
 				if entry.state == "available" {
@@ -207,13 +213,17 @@ func scanSkillRoot(path string, roots map[string]bool) scannedSkillRoot {
 	case os.IsNotExist(err):
 		return scannedSkillRoot{state: "missing"}
 	case err != nil:
-		return scannedSkillRoot{state: "invalid"}
+		return scannedSkillRoot{state: "invalid", reason: ExplainFSError(err).Error()}
 	case pathKey(path) != pathKey(resolved):
-		return scannedSkillRoot{state: "external_link"}
+		return scannedSkillRoot{state: "external_link", reason: "links outside the project to " + resolved}
 	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return scannedSkillRoot{state: "invalid"}
+		reason := pathReason(path)
+		if reason == "" {
+			reason = ExplainFSError(err).Error()
+		}
+		return scannedSkillRoot{state: "invalid", reason: reason}
 	}
 	scan := scannedSkillRoot{state: "available", skills: map[string]scannedSkill{}}
 	for _, child := range entries {
@@ -233,26 +243,37 @@ func scanAgentSkill(path, name string, roots map[string]bool) scannedSkill {
 			target = filepath.Join(filepath.Dir(path), target)
 		}
 		if !roots[pathKey(filepath.Dir(target))] {
-			entry.state = "external_link"
+			entry.state, entry.reason = "external_link", "links outside the skill folders to "+target
 			return entry
 		}
 		real, err := filepath.EvalSymlinks(target)
 		if err != nil {
+			entry.reason = "broken link to " + target
 			return entry
 		}
 		if !roots[pathKey(filepath.Dir(real))] {
-			entry.state = "external_link"
+			entry.state, entry.reason = "external_link", "links outside the skill folders to "+real
 			return entry
 		}
 		entry.resolved = real
 	}
 	if !regularSkill(entry.resolved) {
+		if entry.reason = pathReason(filepath.Join(entry.resolved, "SKILL.md")); entry.reason == "" {
+			entry.reason = "no regular SKILL.md file"
+		}
 		return entry
 	}
 	meta := SkillMeta(entry.resolved)
 	desc, _ := meta["description"].(string)
 	actualName, _ := meta["name"].(string)
-	if KEBAB.MatchString(name) && actualName == name && strings.TrimSpace(desc) != "" {
+	switch {
+	case !KEBAB.MatchString(name):
+		entry.reason = "folder name is not lowercase kebab-case"
+	case actualName != name:
+		entry.reason = sprintf("SKILL.md name is %q, folder is %q", actualName, name)
+	case strings.TrimSpace(desc) == "":
+		entry.reason = "SKILL.md has no description"
+	default:
 		entry.state = "available"
 	}
 	return entry
