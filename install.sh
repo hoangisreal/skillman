@@ -25,6 +25,13 @@ mkdir -p "$BIN"
 backup() { if [ -e "$1" ] && [ ! -L "$1" ]; then mv "$1" "$1.bak-$TS"; echo "backed up $1 -> $1.bak-$TS"; fi; }
 ours() { [ -x "$1" ] && "$1" --version 2>/dev/null | grep -q '^skillman '; }
 ours "$BIN/skillman" || backup "$BIN/skillman"   # a previous build of ours is simply replaced
+# Agent sandboxes often make the Go build cache read-only; build with a temporary cache then.
+cache="$(go env GOCACHE)"
+if ! { mkdir -p "$cache" 2>/dev/null && [ -w "$cache" ]; }; then
+  GOCACHE="$(mktemp -d)"; export GOCACHE
+  trap 'rm -rf "$GOCACHE"' EXIT
+  echo "note: $cache is not writable; using a temporary build cache"
+fi
 (cd "$REPO" && go build -trimpath -ldflags "-s -w" -o "$BIN/skillman.new" ./cmd/skillman)
 mv -f "$BIN/skillman.new" "$BIN/skillman"
 for f in skill-add skill-search; do
