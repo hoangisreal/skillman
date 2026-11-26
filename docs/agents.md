@@ -48,6 +48,12 @@ source, stack evidence file, matched keywords, project state and additional desc
 directly detected stacks each get a turn. With a task, skills outside the project's stacks are ranked too: their
 evidence is `library`, an equally good stack match comes first, and `install_args` leaves them out when a stack
 match is shortlisted. Omit `--brief` to inspect the detailed groups.
+Each choice lists `signals` that explain it even without a task: its pack or stack and evidence file, a
+dependency that shows the project uses the tool (`dependency next in apps/web/package.json`), a name that
+matches the stack, an installed copy, or the task keywords. In a JavaScript project, a skill named for a tool the
+project does not depend on (`vitest` without a `vitest` dependency, `nextjs-on-cloudflare` without `wrangler`)
+is left out unless the task names that tool, and with a task, skills for a technology outside the project's
+stacks (a Vue or Flutter skill in a React project) are left out too.
 Task fit and stack evidence take priority. Equally relevant skills favor a matching project copy, then a lower
 additional description cost. A budget warning leaves the top choice visible. Reuse an installed matching skill directly.
 For a new project with a chosen stack, pass `--stack vue --stack postgres` or `--stack vue,postgres`.

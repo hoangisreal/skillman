@@ -1,6 +1,7 @@
 package search
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -13,10 +14,120 @@ type Choice struct {
 	Evidence    string   `json:"evidence"`
 	AddedTokens int      `json:"added_tokens"`
 	Matched     []string `json:"matched_keywords"`
-	score       int
-	group       int
-	stackMatch  int
-	offStack    bool
+	// Signals say why the skill was chosen, also when there is no task:
+	// its pack or stack, a matching dependency, a name match, an installed copy.
+	Signals    []string `json:"signals"`
+	score      int
+	group      int
+	stackMatch int
+	offStack   bool
+	// affinity: 2 the name matches the group's pack or stack, 1 the project
+	// depends on the tool the skill is for, -1 the skill names a tool the
+	// project does not use.
+	affinity int
+}
+
+// techDomains hold stacks that tie a skill to one technology; a project on
+// React gains nothing from a Vue or Flutter skill outside its stacks.
+var techDomains = map[string]bool{
+	"web-frontend": true, "backend": true, "mobile": true, "languages": true, "desktop": true, "web3": true,
+	"data": true, "ml-ai": true,
+}
+
+// commonWords never count as naming a technology in a task.
+var commonWords = map[string]bool{
+	"add": true, "adding": true, "api": true, "app": true, "apps": true, "best": true, "build": true, "create": true,
+	"data": true, "debug": true, "deploy": true, "deployment": true, "docs": true, "guide": true, "migration": true,
+	"migrations": true, "patterns": true, "planner": true, "practices": true, "review": true, "setup": true,
+	"simple": true, "test": true, "testing": true, "tests": true, "tool": true, "tools": true, "unit": true,
+}
+
+// namesSkillTech reports whether the task names the technology in a skill's
+// name, e.g. "deploy with vllm" for vllm-deploy-docker.
+func namesSkillTech(name string, words []string) bool {
+	for _, seg := range strings.Split(name, "-") {
+		if len(seg) > 2 && !commonWords[seg] && slices.Contains(words, seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// genericTokens never count as a name match between a skill and its group.
+var genericTokens = map[string]bool{
+	"web": true, "core": true, "app": true, "apps": true, "dev": true, "quality": true, "best": true,
+	"practices": true, "general": true, "workflow": true, "build": true, "test": true, "tests": true,
+	"data": true, "backend": true, "frontend": true, "stack": true,
+}
+
+func groupTokens(g core.RecGroup) []string {
+	var out []string
+	for _, id := range append([]string{g.Pack}, g.Stacks...) {
+		for _, t := range strings.Split(id, "-") {
+			if len(t) >= 3 && !genericTokens[t] {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// otherTech reports whether a skill's stacks tie it to a technology the
+// project does not use while the project's own technology is known.
+func otherTech(catalog *core.RecommendationCatalog, stacks []string, detected map[string]bool) bool {
+	known := false
+	for s := range detected {
+		known = known || techDomains[catalog.StackDomain(s)]
+	}
+	tied := false
+	for _, s := range stacks {
+		if techDomains[catalog.StackDomain(s)] {
+			if detected[s] {
+				return false
+			}
+			tied = true
+		}
+	}
+	return known && tied
+}
+
+// nameToken returns the group token that a segment of the skill name starts with.
+func nameToken(name string, tokens []string) string {
+	for _, seg := range strings.Split(name, "-") {
+		for _, t := range tokens {
+			if strings.HasPrefix(seg, t) {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
+// applyEvidence sets affinity and signals from project dependencies and names.
+// A tool the project does not use counts against the skill unless the task names it.
+func (c *Choice) applyEvidence(deps map[string]string, tokens, words []string) {
+	use := core.ToolEvidence(c.Name, deps)
+	for _, u := range use.Used {
+		c.Signals = append(c.Signals, "dependency "+u)
+	}
+	missing := use.Missing[:0:0]
+	for _, m := range use.Missing {
+		if !slices.ContainsFunc(words, func(w string) bool { return strings.HasPrefix(m, w) || strings.HasPrefix(w, m) }) {
+			missing = append(missing, m)
+		}
+	}
+	switch {
+	case len(missing) > 0:
+		c.affinity = -1
+	case nameToken(c.Name, tokens) != "":
+		c.affinity = 2
+		c.Signals = append(c.Signals, "name matches "+nameToken(c.Name, tokens))
+	case len(use.Used) > 0:
+		c.affinity = 1
+	}
+	if c.State == "ok" {
+		c.Signals = append(c.Signals, "installed")
+	}
 }
 
 // rank halves the score of a skill outside the project's stacks, so a stack
@@ -104,6 +215,19 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		resolved[s.Name] = s
 		return s
 	}
+	detected := map[string]bool{}
+	for _, g := range r.Groups {
+		if g.Reason == "baseline" {
+			continue
+		}
+		for _, s := range g.Stacks {
+			detected[s] = true
+		}
+	}
+	rowStacks := map[string][]string{}
+	for _, row := range rows {
+		rowStacks[row.Name] = row.Stacks
+	}
 	for i := range r.Groups {
 		g := &r.Groups[i]
 		visible := g.Skills[:0]
@@ -131,6 +255,15 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			}
 			if s.InPack {
 				c.Reason = "@" + g.Pack
+				c.Signals = []string{"pack @" + g.Pack + " (" + g.Reason + ")"}
+			} else {
+				c.Signals = []string{"stack " + strings.Join(g.Stacks, ", ") + " (" + g.Reason + ")"}
+			}
+			c.applyEvidence(r.Deps, groupTokens(*g), words)
+			// Never suggest a skill for a tool or technology the project does not
+			// use, unless the task names it. Curated pack members are kept.
+			if c.affinity < 0 || (!s.InPack && otherTech(catalog, rowStacks[s.Name], detected) && !namesSkillTech(s.Name, words)) {
+				continue
 			}
 			if len(words) > 0 {
 				doc := Doc{name: s.Name, desc: strings.ToLower(s.Description), src: strings.ToLower(s.Source)}
@@ -140,6 +273,7 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 				}
 				c.score, c.Matched = score, matched
 				c.Reason += " · " + strings.Join(matched, ", ")
+				c.Signals = append(c.Signals, "task keywords "+strings.Join(matched, ", "))
 			}
 			ranked = append(ranked, c)
 		}
@@ -159,7 +293,11 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 				continue
 			}
 			s := core.RecSkill{Name: row.Name, Description: row.Description, Source: row.Source, InLibrary: true, State: r.States[row.Name]}
-			c := Choice{RecSkill: s, group: -1, offStack: true, Evidence: "library", score: score, Matched: matched}
+			c := Choice{RecSkill: s, group: -1, offStack: true, Evidence: "library", score: score, Matched: matched, Signals: []string{"task keywords " + strings.Join(matched, ", ")}}
+			c.applyEvidence(r.Deps, nil, words)
+			if c.affinity < 0 || (otherTech(catalog, row.Stacks, detected) && !namesSkillTech(row.Name, words)) {
+				continue
+			}
 			c.Reason = strings.Join(matched, ", ")
 			if len(row.Stacks) > 0 {
 				c.Reason = strings.Join(row.Stacks, ", ") + " · " + c.Reason
@@ -181,14 +319,18 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		if a.score != b.score {
 			return a.score > b.score
 		}
+		if a.affinity != b.affinity {
+			return a.affinity > b.affinity
+		}
 		if a.stackMatch != b.stackMatch {
 			return a.stackMatch > b.stackMatch
 		}
-		if a.InPack != b.InPack {
-			return a.InPack
-		}
+		// An installed copy that fits costs nothing more and is already reviewed.
 		if (a.State == "ok") != (b.State == "ok") {
 			return a.State == "ok"
+		}
+		if a.InPack != b.InPack {
+			return a.InPack
 		}
 		if a.AddedTokens != b.AddedTokens {
 			return a.AddedTokens < b.AddedTokens
@@ -230,6 +372,11 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	for _, c := range ranked {
 		if len(r.Shortlist) >= limit {
 			break
+		}
+		// Without a task, extra picks in a project with a known stack need
+		// evidence beyond pack membership; an empty project gets the baseline.
+		if len(words) == 0 && r.HasStack && c.affinity <= 0 {
+			continue
 		}
 		add(c)
 	}

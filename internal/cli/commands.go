@@ -473,11 +473,7 @@ func cmdSuggest(a *Args) int {
 		outf("@%-20s (%s)\n", s.Pack, s.Reason)
 	}
 	if len(sg) > 0 {
-		var ps []string
-		for _, s := range sg {
-			ps = append(ps, "@"+s.Pack)
-		}
-		outf("\nskill-add %s\n", strings.Join(ps, " "))
+		outf("\nFor a short list of skills instead of whole packs: skillman recommend --brief\n")
 	}
 	return 0
 }
@@ -1155,7 +1151,24 @@ Tracked in <dir>/.agents/skill-manifest.json. Manage with: skillman (TUI) or ski
 	case "--packs":
 		return find("pack").run(parse([]string{"list"}))
 	case "--suggest":
-		return cmdSuggest(parse(argv[1:], "C"))
+		// Same advice as recommend: a short list of skills, with whole packs as an aside.
+		a := parse(argv[1:], "C")
+		a.bools["brief"] = true
+		if rc := cmdRecommend(a); rc != 0 || a.Has("json") {
+			return rc
+		}
+		d, err := projectDir(a, true)
+		if err != nil {
+			return fail(err)
+		}
+		var packs []string
+		for _, s := range core.SuggestPacks(d) {
+			packs = append(packs, "@"+s.Pack)
+		}
+		if len(packs) > 0 {
+			outf("\nwhole packs (every member's description loads in each session): %s\npreview one with: skillman add %s --dry-run\n", strings.Join(packs, " "), packs[0])
+		}
+		return 0
 	}
 	if !core.IsDir(core.SKILLS) {
 		return fail(fmt.Errorf("library not found: %s (set SKILL_LIBRARY)", core.LIB))

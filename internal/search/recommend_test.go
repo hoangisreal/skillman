@@ -210,3 +210,88 @@ func TestRecommendBudgetCountsWholeInstall(t *testing.T) {
 		t.Fatalf("message: %q", rec.Message)
 	}
 }
+
+// A Next.js monorepo that tests with node --test, as in a reported project.
+func TestRecommendUsesDependenciesAndNames(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, desc := range map[string]string{
+		"react-best-practices":    "React and Next.js performance guidelines for components, rendering and data fetching",
+		"vite":                    "Vite config and plugins",
+		"vitest":                  "Vitest unit tests and mocks",
+		"nextjs-on-cloudflare":    "Deploy Next.js apps to Cloudflare Workers",
+		"postgres":                "PostgreSQL " + strings.Repeat("schema design, indexing and operations guidance ", 12),
+		"postgres-best-practices": "PostgreSQL schema and query best practices",
+		"sql-optimization":        "SQL tips",
+		"github-actions":          "GitHub Actions workflows, caching and matrices",
+		"commit":                  "Use for every request to commit changes; conventional commits",
+	} {
+		mkskill(t, lib, name, desc)
+	}
+	for name, skills := range map[string][]string{
+		"web-react": {"react-best-practices", "vite", "vitest"},
+		"postgres":  {"postgres", "postgres-best-practices", "sql-optimization"},
+		"ci-github": {"github-actions", "commit"},
+	} {
+		if err := core.SavePack(&core.Pack{Name: name, Skills: skills}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{
+		"package.json":             `{"packageManager":"pnpm@9.0.0","scripts":{"test":"node --test"}}`,
+		"apps/web/package.json":    `{"dependencies":{"next":"15","react":"19"}}`,
+		"packages/db/package.json": `{"dependencies":{"pg":"8"}}`,
+		".github/workflows/ci.yml": "on: push\n",
+	} {
+		p := filepath.Join(proj, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := Recommend(proj, core.LoadIndex(), "", 5, 0)
+	got := map[string]Choice{}
+	for _, c := range rec.Shortlist {
+		got[c.Name] = c
+		if len(c.Signals) == 0 {
+			t.Errorf("%s has no signals", c.Name)
+		}
+	}
+	for _, want := range []string{"react-best-practices", "postgres-best-practices", "github-actions"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("missing %s in %v", want, rec.Shortlist)
+		}
+	}
+	for _, unwanted := range []string{"vite", "vitest", "nextjs-on-cloudflare", "sql-optimization", "commit"} {
+		if _, ok := got[unwanted]; ok {
+			t.Errorf("suggested %s: %v", unwanted, got[unwanted].Signals)
+		}
+	}
+	if s := strings.Join(got["react-best-practices"].Signals, "; "); !strings.Contains(s, "name matches react") {
+		t.Errorf("react signals: %s", s)
+	}
+	// A task that names the tool still finds it.
+	rec = Recommend(proj, core.LoadIndex(), "vitest unit tests", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "vitest" {
+		t.Fatalf("named tool: %+v", rec.Shortlist)
+	}
+	rec = Recommend(proj, core.LoadIndex(), "deploy to cloudflare workers", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "nextjs-on-cloudflare" {
+		t.Fatalf("named platform: %+v", rec.Shortlist)
+	}
+}
