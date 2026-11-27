@@ -2,6 +2,7 @@ package core
 
 import (
 	"sort"
+	"strings"
 )
 
 // StackNode is one stack of the Browse tree with the skills classified into it.
@@ -191,6 +192,22 @@ func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
 
 // Classify files a row under the catalog's taxonomy (domain and stacks).
 func (c *RecommendationCatalog) Classify(row *IndexRow) { c.tax.Classify(row, c.bySkill[row.Name]) }
+
+// MentionedStacks lists the stacks whose match pattern hits text, such as a
+// description. Classification keeps only the strongest stacks (a pack wins),
+// so a CI skill "for React Native builds" filed under ci-cd still mentions react-native.
+func (c *RecommendationCatalog) MentionedStacks(text string) []string {
+	hay := strings.ToLower(text)
+	var out []string
+	for _, d := range c.tax.Domains {
+		for _, s := range d.Stacks {
+			if s.rx != nil && s.rx.MatchString(hay) && (s.notRx == nil || !s.notRx.MatchString(hay)) {
+				out = append(out, s.ID)
+			}
+		}
+	}
+	return out
+}
 
 // StackDomain returns the taxonomy domain of a stack ID ("" if unknown).
 func (c *RecommendationCatalog) StackDomain(id string) string {

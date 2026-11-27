@@ -307,6 +307,11 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			detected[s] = true
 		}
 	}
+	// Stacks the task itself names ("react native ci" names react-native).
+	taskStacks := map[string]bool{}
+	for _, id := range catalog.MentionedStacks(task) {
+		taskStacks[id] = true
+	}
 	rowStacks := map[string][]string{}
 	for _, row := range rows {
 		rowStacks[row.Name] = row.Stacks
@@ -345,7 +350,20 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			c.applyEvidence(r.Deps, groupTokens(*g), words)
 			// Never suggest a skill for a tool or technology the project does not
 			// use, unless the task names it. Curated pack members are kept.
-			if c.affinity < 0 || (!s.InPack && otherTech(catalog, rowStacks[s.Name], detected) && !namesSkillTech(s.Name, words, detected)) {
+			// Pack members are kept unless their description is about another
+			// technology (a CI pack member written for React Native builds).
+			stacks := rowStacks[s.Name]
+			if s.InPack {
+				stacks = append(append([]string{}, stacks...), catalog.MentionedStacks(s.Description)...)
+			}
+			// The task names the other technology itself ("react native ci").
+			namesTech := slices.ContainsFunc(stacks, func(id string) bool {
+				return taskStacks[id] && !detected[id] && techDomains[catalog.StackDomain(id)]
+			})
+			if !s.InPack {
+				namesTech = namesTech || namesSkillTech(s.Name, words, detected)
+			}
+			if c.affinity < 0 || (otherTech(catalog, stacks, detected) && !namesTech) {
 				continue
 			}
 			if len(words) > 0 {

@@ -455,3 +455,53 @@ func TestRecommendSuggestsUpstreamCandidates(t *testing.T) {
 		t.Fatalf("preview: %+v %q", rec.Upstream[0], rec.Message)
 	}
 }
+
+// A pack member whose description is about another technology is not
+// suggested unless the task names that technology.
+func TestRecommendDropsPackMembersForOtherTech(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "react-best-practices", "React rendering guidelines")
+	mkskill(t, lib, "github-actions", "GitHub Actions workflow patterns for React Native iOS simulator and Android emulator cloud builds")
+	mkskill(t, lib, "gh-fix-ci", "Debug failing GitHub Actions checks on a pull request")
+	for name, skills := range map[string][]string{"web-react": {"react-best-practices"}, "ci-github": {"github-actions", "gh-fix-ci"}} {
+		if err := core.SavePack(&core.Pack{Name: name, Skills: skills}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{"package.json": `{"dependencies":{"react":"19"}}`, ".github/workflows/ci.yml": "on: push\n"} {
+		p := filepath.Join(proj, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(task string) []string {
+		var out []string
+		for _, c := range Recommend(proj, core.LoadIndex(), task, 5, 0).Shortlist {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+	if got := names("github actions ci"); slices.Contains(got, "github-actions") || !slices.Contains(got, "gh-fix-ci") {
+		t.Fatalf("React project: %v", got)
+	}
+	if got := names("react native ci builds"); !slices.Contains(got, "github-actions") {
+		t.Fatalf("task names React Native: %v", got)
+	}
+}
