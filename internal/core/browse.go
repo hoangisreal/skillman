@@ -209,6 +209,21 @@ func (c *RecommendationCatalog) MentionedStacks(text string) []string {
 	return out
 }
 
+// Detectable reports whether a project can be detected as using stack id:
+// it has a pack or a file rule. Stacks such as typescript or web-build are
+// only topics, so mentioning them says nothing about another technology.
+func (c *RecommendationCatalog) Detectable(id string) bool {
+	if s := c.tax.Stack(id); s != nil && len(s.Packs) > 0 {
+		return true
+	}
+	for _, r := range StackRules {
+		if r.Stack == id {
+			return true
+		}
+	}
+	return false
+}
+
 // StackDomain returns the taxonomy domain of a stack ID ("" if unknown).
 func (c *RecommendationCatalog) StackDomain(id string) string {
 	if s := c.tax.Stack(id); s != nil {

@@ -359,6 +359,10 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 		refresh = refresh || action == "imported" || action == "reused"
 	}
 	if !dry && refresh {
+		committed := func(name string) bool {
+			st := Git([]string{"status", "--porcelain", "--", "skills/" + name}, LIB, 30)
+			return st.Code == 0 && strings.TrimSpace(st.Stdout) == ""
+		}
 		if _, _, _, err := RebuildIndex(true); err != nil {
 			return out, plans, err
 		}
@@ -366,7 +370,8 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 		if IsDir(filepath.Join(LIB, ".git")) {
 			var names, paths []string
 			for _, s := range out {
-				if s.Action == "imported" {
+				// A reused copy may be left over from an import whose commit failed.
+				if s.Action == "imported" || (s.Action == "reused" && !committed(s.Name)) {
 					names = append(names, s.Name)
 					paths = append(paths, "skills/"+s.Name)
 				}
@@ -380,7 +385,7 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 				msg := sprintf("Import %s from %s@%s", strings.Join(names, ", "), src.Repo, shortSHA(src.Commit))
 				if err := commitLibrary(msg, paths); err != nil {
 					for i := range out {
-						if out[i].Action == "imported" {
+						if out[i].Action == "imported" || out[i].Action == "reused" {
 							out[i].Detail = strings.TrimSpace(out[i].Detail + " (library change not committed: " + err.Error() + ")")
 						}
 					}

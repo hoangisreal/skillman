@@ -474,7 +474,9 @@ func TestRecommendDropsPackMembersForOtherTech(t *testing.T) {
 	mkskill(t, lib, "react-best-practices", "React rendering guidelines")
 	mkskill(t, lib, "github-actions", "GitHub Actions workflow patterns for React Native iOS simulator and Android emulator cloud builds")
 	mkskill(t, lib, "gh-fix-ci", "Debug failing GitHub Actions checks on a pull request")
-	for name, skills := range map[string][]string{"web-react": {"react-best-practices"}, "ci-github": {"github-actions", "gh-fix-ci"}} {
+	// Mentions of a language or build tool do not tie a skill to another technology.
+	mkskill(t, lib, "gha-node-cache", "Cache pnpm, Vite and TypeScript builds in GitHub Actions; works with any CLI tools")
+	for name, skills := range map[string][]string{"web-react": {"react-best-practices"}, "ci-github": {"github-actions", "gh-fix-ci", "gha-node-cache"}} {
 		if err := core.SavePack(&core.Pack{Name: name, Skills: skills}); err != nil {
 			t.Fatal(err)
 		}
@@ -498,10 +500,21 @@ func TestRecommendDropsPackMembersForOtherTech(t *testing.T) {
 		}
 		return out
 	}
-	if got := names("github actions ci"); slices.Contains(got, "github-actions") || !slices.Contains(got, "gh-fix-ci") {
+	if got := names("github actions ci"); slices.Contains(got, "github-actions") || !slices.Contains(got, "gh-fix-ci") || !slices.Contains(got, "gha-node-cache") {
 		t.Fatalf("React project: %v", got)
 	}
 	if got := names("react native ci builds"); !slices.Contains(got, "github-actions") {
 		t.Fatalf("task names React Native: %v", got)
+	}
+}
+
+func TestTaskMatchNeedsASpecificWord(t *testing.T) {
+	react := Doc{name: "react-best-practices", desc: "react rendering best practices"}
+	if s, _ := taskMatch(react, taskWords("pulumi best practices")); s != 0 {
+		t.Fatalf("generic words alone matched: %d", s)
+	}
+	pulumi := Doc{name: "pulumi-best-practices", desc: "pulumi programs"}
+	if s, _ := taskMatch(pulumi, taskWords("pulumi best practices")); s == 0 {
+		t.Fatal("specific word did not match")
 	}
 }

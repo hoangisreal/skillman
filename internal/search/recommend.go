@@ -30,6 +30,10 @@ type Choice struct {
 
 // techDomains hold stacks that tie a skill to one technology; a project on
 // React gains nothing from a Vue or Flutter skill outside its stacks.
+// frameworkDomains hold stacks a description can mention to say what a skill
+// is written for (React Native, Vue); languages are mentioned too loosely.
+var frameworkDomains = map[string]bool{"web-frontend": true, "backend": true, "mobile": true, "desktop": true, "web3": true}
+
 var techDomains = map[string]bool{
 	"web-frontend": true, "backend": true, "mobile": true, "languages": true, "desktop": true, "web3": true,
 	"data": true, "ml-ai": true,
@@ -45,6 +49,7 @@ var commonWords = map[string]bool{
 	"validation": true, "runner": true, "starter": true, "run": true, "lint": true, "linting": true, "check": true,
 	"audit": true, "fix": true, "web": true, "code": true, "config": true, "integration": true,
 	"node": true, // Node.js, but also cluster and graph nodes
+	"dev":  true, "endpoint": true, "endpoints": true, "hooks": true, "local": true, "locally": true,
 }
 
 // namesSkillTech reports whether the task names the technology in a skill's
@@ -86,6 +91,14 @@ func alnum(s string) string {
 		}
 		return -1
 	}, s)
+}
+
+// namesOtherTech reports whether the task itself names one of a skill's
+// technologies the project does not use ("react native ci").
+func namesOtherTech(catalog *core.RecommendationCatalog, stacks []string, taskStacks, detected map[string]bool) bool {
+	return slices.ContainsFunc(stacks, func(id string) bool {
+		return taskStacks[id] && !detected[id] && techDomains[catalog.StackDomain(id)]
+	})
 }
 
 // otherTech reports whether a skill's stacks tie it to a technology the
@@ -227,6 +240,10 @@ func upstreamHints(catalog *core.RecommendationCatalog, rows []core.IndexRow, wo
 			continue
 		}
 		score, _ := taskMatch(Doc{name: c.Name, desc: strings.ToLower(c.Description), src: strings.ToLower(c.Repo)}, words)
+		// Too few task words match, unless a task word is the candidate's whole name ("seo").
+		if score == 0 && !slices.ContainsFunc(words, func(w string) bool { return alnum(w) == alnum(c.Name) }) {
+			continue
+		}
 		row := core.IndexRow{Name: c.Name, Description: c.Description}
 		catalog.Classify(&row)
 		if otherTech(catalog, row.Stacks, detected) && !namesSkillTech(c.Name, words, detected) {
@@ -268,6 +285,11 @@ func taskMatch(doc Doc, words []string) (int, []string) {
 		}
 	}
 	if 3*len(matched) < 2*len(words) {
+		return 0, nil
+	}
+	// Generic words alone ("best practices" of "pulumi best practices") are not a match.
+	specific := func(w string) bool { return !commonWords[alnum(w)] }
+	if slices.ContainsFunc(words, specific) && !slices.ContainsFunc(matched, specific) {
 		return 0, nil
 	}
 	return score, matched
@@ -354,15 +376,15 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			// technology (a CI pack member written for React Native builds).
 			stacks := rowStacks[s.Name]
 			if s.InPack {
-				stacks = append(append([]string{}, stacks...), catalog.MentionedStacks(s.Description)...)
+				for _, id := range catalog.MentionedStacks(s.Description) {
+					if catalog.Detectable(id) && frameworkDomains[catalog.StackDomain(id)] {
+						stacks = append(stacks[:len(stacks):len(stacks)], id)
+					}
+				}
 			}
-			// The task names the other technology itself ("react native ci").
-			namesTech := slices.ContainsFunc(stacks, func(id string) bool {
-				return taskStacks[id] && !detected[id] && techDomains[catalog.StackDomain(id)]
-			})
-			if !s.InPack {
-				namesTech = namesTech || namesSkillTech(s.Name, words, detected)
-			}
+			// A pack member is vetoed by what its description is written for, so
+			// only the task naming that technology brings it back.
+			namesTech := namesOtherTech(catalog, stacks, taskStacks, detected) || (!s.InPack && namesSkillTech(s.Name, words, detected))
 			if c.affinity < 0 || (otherTech(catalog, stacks, detected) && !namesTech) {
 				continue
 			}
@@ -396,7 +418,7 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			s := core.RecSkill{Name: row.Name, Description: row.Description, Source: row.Source, InLibrary: true, State: r.States[row.Name]}
 			c := Choice{RecSkill: s, group: -1, offStack: true, Evidence: "library", score: score, Matched: matched, Signals: []string{"task keywords " + strings.Join(matched, ", ")}}
 			c.applyEvidence(r.Deps, nil, words)
-			if c.affinity < 0 || (otherTech(catalog, row.Stacks, detected) && !namesSkillTech(row.Name, words, detected)) {
+			if c.affinity < 0 || (otherTech(catalog, row.Stacks, detected) && !namesOtherTech(catalog, row.Stacks, taskStacks, detected) && !namesSkillTech(row.Name, words, detected)) {
 				continue
 			}
 			c.Reason = strings.Join(matched, ", ")
