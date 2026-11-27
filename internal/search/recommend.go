@@ -30,6 +30,10 @@ type Choice struct {
 
 // techDomains hold stacks that tie a skill to one technology; a project on
 // React gains nothing from a Vue or Flutter skill outside its stacks.
+// frameworkDomains hold stacks a description can mention to say what a skill
+// is written for (React Native, Vue); languages are mentioned too loosely.
+var frameworkDomains = map[string]bool{"web-frontend": true, "backend": true, "mobile": true, "desktop": true, "web3": true}
+
 var techDomains = map[string]bool{
 	"web-frontend": true, "backend": true, "mobile": true, "languages": true, "desktop": true, "web3": true,
 	"data": true, "ml-ai": true,
@@ -41,17 +45,24 @@ var commonWords = map[string]bool{
 	"data": true, "debug": true, "deploy": true, "deployment": true, "docs": true, "guide": true, "migration": true,
 	"migrations": true, "patterns": true, "planner": true, "practices": true, "review": true, "setup": true,
 	"simple": true, "test": true, "testing": true, "tests": true, "tool": true, "tools": true, "unit": true,
+	"router": true, "server": true, "client": true, "components": true, "component": true, "metadata": true,
+	"validation": true, "runner": true, "starter": true, "run": true, "lint": true, "linting": true, "check": true,
+	"audit": true, "fix": true, "web": true, "code": true, "config": true, "integration": true,
+	"node": true, // Node.js, but also cluster and graph nodes
+	"dev":  true, "endpoint": true, "endpoints": true, "hooks": true, "local": true, "locally": true,
 }
 
 // namesSkillTech reports whether the task names the technology in a skill's
 // name, e.g. "deploy with vllm" for vllm-deploy-docker.
-func namesSkillTech(name string, words []string) bool {
-	for _, seg := range strings.Split(name, "-") {
-		if len(seg) > 2 && !commonWords[seg] && slices.ContainsFunc(words, func(w string) bool { return alnum(w) == seg }) {
-			return true
-		}
+// Only the first segment names the technology ("vllm-deploy-docker" is about
+// vLLM, "kafka-schema-registry" about Kafka), and a stack the project already
+// uses does not count: "docker compose" does not name vLLM.
+func namesSkillTech(name string, words []string, detected map[string]bool) bool {
+	seg, _, _ := strings.Cut(name, "-")
+	if len(seg) <= 2 || commonWords[seg] || detected[seg] {
+		return false
 	}
-	return false
+	return slices.ContainsFunc(words, func(w string) bool { return alnum(w) == seg })
 }
 
 // genericTokens never count as a name match between a skill and its group.
@@ -80,6 +91,14 @@ func alnum(s string) string {
 		}
 		return -1
 	}, s)
+}
+
+// namesOtherTech reports whether the task itself names one of a skill's
+// technologies the project does not use ("react native ci").
+func namesOtherTech(catalog *core.RecommendationCatalog, stacks []string, taskStacks, detected map[string]bool) bool {
+	return slices.ContainsFunc(stacks, func(id string) bool {
+		return taskStacks[id] && !detected[id] && techDomains[catalog.StackDomain(id)]
+	})
 }
 
 // otherTech reports whether a skill's stacks tie it to a technology the
@@ -180,6 +199,74 @@ type Recommendation struct {
 	// InstallTokens is the description cost that InstallArgs would add.
 	InstallTokens int    `json:"install_tokens"`
 	Message       string `json:"message,omitempty"`
+	// Upstream lists import candidates that fit the task when no local skill does.
+	Upstream []UpstreamHint `json:"upstream,omitempty"`
+}
+
+// UpstreamHint is a skill from staging/CANDIDATES.md that is not in the library yet.
+type UpstreamHint struct {
+	Name        string   `json:"name"`
+	Repo        string   `json:"repo"`
+	Description string   `json:"description"`
+	PreviewArgs []string `json:"preview_args"` // arguments after the executable
+}
+
+// upstreamHints matches the task against the upstream candidate list (offline).
+func upstreamHints(catalog *core.RecommendationCatalog, rows []core.IndexRow, words []string, deps map[string]string, detected map[string]bool, limit int) []UpstreamHint {
+	inLibrary := map[string]bool{}
+	for _, row := range rows {
+		inLibrary[row.Name] = true
+	}
+	type scored struct {
+		UpstreamHint
+		score int
+	}
+	var hits []scored
+	seen := map[string]bool{}
+	for _, c := range core.ReadCandidates() {
+		key := c.Repo + "/" + c.Name
+		if inLibrary[c.Name] || seen[key] || !core.KEBAB.MatchString(c.Name) {
+			continue
+		}
+		seen[key] = true
+		// The candidate list is large and unreviewed: only offer a candidate whose
+		// name carries a specific word of the task ("seo", "nextjs" for "next.js").
+		segs := strings.Split(c.Name, "-")
+		nameHit := slices.ContainsFunc(words, func(w string) bool {
+			aw := alnum(w)
+			return len(aw) > 2 && !commonWords[aw] && (slices.Contains(segs, aw) || alnum(c.Name) == aw)
+		})
+		if !nameHit {
+			continue
+		}
+		score, _ := taskMatch(Doc{name: c.Name, desc: strings.ToLower(c.Description), src: strings.ToLower(c.Repo)}, words)
+		// Too few task words match, unless a task word is the candidate's whole name ("seo").
+		if score == 0 && !slices.ContainsFunc(words, func(w string) bool { return alnum(w) == alnum(c.Name) }) {
+			continue
+		}
+		row := core.IndexRow{Name: c.Name, Description: c.Description}
+		catalog.Classify(&row)
+		if otherTech(catalog, row.Stacks, detected) && !namesSkillTech(c.Name, words, detected) {
+			continue
+		}
+		ch := Choice{RecSkill: core.RecSkill{Name: c.Name}}
+		ch.applyEvidence(deps, nil, words)
+		if ch.affinity < 0 {
+			continue
+		}
+		hits = append(hits, scored{UpstreamHint{c.Name, c.Repo, c.Description, []string{"import", c.Repo, "--skill", c.Name, "--dry-run"}}, score})
+	}
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].score != hits[j].score {
+			return hits[i].score > hits[j].score
+		}
+		return hits[i].Repo+hits[i].Name < hits[j].Repo+hits[j].Name
+	})
+	var out []UpstreamHint
+	for i := 0; i < len(hits) && i < limit; i++ {
+		out = append(out, hits[i].UpstreamHint)
+	}
+	return out
 }
 
 // Match most of a task's keywords. A two-word query still needs both words,
@@ -198,6 +285,11 @@ func taskMatch(doc Doc, words []string) (int, []string) {
 		}
 	}
 	if 3*len(matched) < 2*len(words) {
+		return 0, nil
+	}
+	// Generic words alone ("best practices" of "pulumi best practices") are not a match.
+	specific := func(w string) bool { return !commonWords[alnum(w)] }
+	if slices.ContainsFunc(words, specific) && !slices.ContainsFunc(matched, specific) {
 		return 0, nil
 	}
 	return score, matched
@@ -237,6 +329,11 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			detected[s] = true
 		}
 	}
+	// Stacks the task itself names ("react native ci" names react-native).
+	taskStacks := map[string]bool{}
+	for _, id := range catalog.MentionedStacks(task) {
+		taskStacks[id] = true
+	}
 	rowStacks := map[string][]string{}
 	for _, row := range rows {
 		rowStacks[row.Name] = row.Stacks
@@ -275,7 +372,20 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			c.applyEvidence(r.Deps, groupTokens(*g), words)
 			// Never suggest a skill for a tool or technology the project does not
 			// use, unless the task names it. Curated pack members are kept.
-			if c.affinity < 0 || (!s.InPack && otherTech(catalog, rowStacks[s.Name], detected) && !namesSkillTech(s.Name, words)) {
+			// Pack members are kept unless their description is about another
+			// technology (a CI pack member written for React Native builds).
+			stacks := rowStacks[s.Name]
+			if s.InPack {
+				for _, id := range catalog.MentionedStacks(s.Description) {
+					if catalog.Detectable(id) && frameworkDomains[catalog.StackDomain(id)] {
+						stacks = append(stacks[:len(stacks):len(stacks)], id)
+					}
+				}
+			}
+			// A pack member is vetoed by what its description is written for, so
+			// only the task naming that technology brings it back.
+			namesTech := namesOtherTech(catalog, stacks, taskStacks, detected) || (!s.InPack && namesSkillTech(s.Name, words, detected))
+			if c.affinity < 0 || (otherTech(catalog, stacks, detected) && !namesTech) {
 				continue
 			}
 			if len(words) > 0 {
@@ -308,7 +418,7 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 			s := core.RecSkill{Name: row.Name, Description: row.Description, Source: row.Source, InLibrary: true, State: r.States[row.Name]}
 			c := Choice{RecSkill: s, group: -1, offStack: true, Evidence: "library", score: score, Matched: matched, Signals: []string{"task keywords " + strings.Join(matched, ", ")}}
 			c.applyEvidence(r.Deps, nil, words)
-			if c.affinity < 0 || (otherTech(catalog, row.Stacks, detected) && !namesSkillTech(row.Name, words)) {
+			if c.affinity < 0 || (otherTech(catalog, row.Stacks, detected) && !namesOtherTech(catalog, row.Stacks, taskStacks, detected) && !namesSkillTech(row.Name, words, detected)) {
 				continue
 			}
 			c.Reason = strings.Join(matched, ", ")
@@ -323,11 +433,13 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		a, b := ranked[i], ranked[j]
-		if len(a.Matched) != len(b.Matched) {
-			return len(a.Matched) > len(b.Matched)
-		}
+		// The score already adds up every matched word, and a word in the
+		// name counts far more than one in a long description.
 		if a.rank() != b.rank() {
 			return a.rank() > b.rank()
+		}
+		if len(a.Matched) != len(b.Matched) {
+			return len(a.Matched) > len(b.Matched)
 		}
 		if a.score != b.score {
 			return a.score > b.score
@@ -408,7 +520,22 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		r.Groups = nil
 	}
 	if len(r.Shortlist) == 0 {
-		r.Message = "No matching local skills. Browse the library, preview a starter pack (core, web-vue, postgres) with skillman bootstrap --pack <pack> --dry-run, or preview an import from a chosen source."
+		if len(words) > 0 {
+			r.Upstream = upstreamHints(catalog, rows, words, r.Deps, detected, 3)
+		}
+		switch {
+		case len(r.Upstream) > 0:
+			var names []string
+			for _, u := range r.Upstream {
+				names = append(names, u.Name+" ("+u.Repo+")")
+			}
+			r.Message = "No matching local skills. Upstream candidates: " + strings.Join(names, ", ") +
+				". Preview one with skillman import <repo> --skill <name> --dry-run (see upstream[].preview_args); imports need an upstream license."
+		case r.HasStack:
+			r.Message = "No matching local skills. Search the upstream list with skillman upstream candidates <words>, or preview an import from a chosen source with skillman import <owner/repo> --list."
+		default:
+			r.Message = "No matching local skills. Preview a starter pack (core, web-vue, postgres) with skillman bootstrap --pack <pack> --dry-run, or preview an import from a chosen source."
+		}
 	}
 	if !r.HasStack {
 		r.Message = strings.TrimSpace("No project stack detected. Pass --stack <id> when known, or preview @core with skillman add -C <project> @core --dry-run. " + r.Message)

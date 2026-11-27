@@ -361,3 +361,160 @@ func TestRecommendSkipsNearDuplicates(t *testing.T) {
 		t.Fatalf("installed duplicate not preferred: %v", got)
 	}
 }
+
+func TestNamesSkillTech(t *testing.T) {
+	detected := map[string]bool{"docker": true, "react": true}
+	for _, c := range []struct {
+		name, task string
+		want       bool
+	}{
+		{"vllm-deploy-docker", "deploy with vllm", true},
+		{"vllm-deploy-docker", "docker compose deploy", false},
+		{"kafka-schema-registry", "drizzle schema migration", false},
+		{"docker-compose-patterns", "docker compose", false}, // the project's own stack
+	} {
+		if got := namesSkillTech(c.name, taskWords(c.task), detected); got != c.want {
+			t.Errorf("%s / %q: %v", c.name, c.task, got)
+		}
+	}
+}
+
+// A skill named for the task beats one that only mentions every word in its description.
+func TestRecommendPrefersNameMatches(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "docker-compose-patterns", "Compose services, volumes and networks")
+	mkskill(t, lib, "otel-collector", "Wire an OpenTelemetry collector with docker compose and deploy it")
+	if err := core.SavePack(&core.Pack{Name: "docker", Skills: []string{"docker-compose-patterns"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "Dockerfile"), []byte("FROM scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := Recommend(proj, core.LoadIndex(), "docker compose deploy", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "docker-compose-patterns" {
+		t.Fatalf("shortlist: %+v", rec.Shortlist)
+	}
+}
+
+// When nothing local fits, recommend points to matching upstream candidates.
+func TestRecommendSuggestsUpstreamCandidates(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "react-best-practices", "React rendering guidelines")
+	if err := core.SavePack(&core.Pack{Name: "web-react", Skills: []string{"react-best-practices"}}); err != nil {
+		t.Fatal(err)
+	}
+	candidates := "# Candidates\n\n## web\n\n### acme/web-skills (official) · `abc` · LICENSE\n" +
+		"- [ ] `seo` — Improve search engine visibility, meta tags and structured data <sub>skills/seo · 80L</sub>\n" +
+		"- [ ] `dicom-metadata-extract` — Extract DICOM metadata from medical images <sub>skills/dicom · 40L</sub>\n" +
+		"- [ ] `nuxt-seo` — SEO for Nuxt and Vue apps with metadata <sub>skills/nuxt-seo · 60L</sub>\n"
+	if err := os.WriteFile(filepath.Join(lib, "staging", "CANDIDATES.md"), []byte(candidates), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte(`{"dependencies":{"react":"19"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := Recommend(proj, core.LoadIndex(), "seo metadata", 3, 0)
+	if len(rec.Shortlist) != 0 || len(rec.Upstream) != 1 || rec.Upstream[0].Name != "seo" || rec.Upstream[0].Repo != "acme/web-skills" {
+		t.Fatalf("upstream hints: %+v", rec.Upstream)
+	}
+	if !slices.Equal(rec.Upstream[0].PreviewArgs, []string{"import", "acme/web-skills", "--skill", "seo", "--dry-run"}) || !strings.Contains(rec.Message, "seo (acme/web-skills)") {
+		t.Fatalf("preview: %+v %q", rec.Upstream[0], rec.Message)
+	}
+}
+
+// A pack member whose description is about another technology is not
+// suggested unless the task names that technology.
+func TestRecommendDropsPackMembersForOtherTech(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "react-best-practices", "React rendering guidelines")
+	mkskill(t, lib, "github-actions", "GitHub Actions workflow patterns for React Native iOS simulator and Android emulator cloud builds")
+	mkskill(t, lib, "gh-fix-ci", "Debug failing GitHub Actions checks on a pull request")
+	// Mentions of a language or build tool do not tie a skill to another technology.
+	mkskill(t, lib, "gha-node-cache", "Cache pnpm, Vite and TypeScript builds in GitHub Actions; works with any CLI tools")
+	for name, skills := range map[string][]string{"web-react": {"react-best-practices"}, "ci-github": {"github-actions", "gh-fix-ci", "gha-node-cache"}} {
+		if err := core.SavePack(&core.Pack{Name: name, Skills: skills}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	for path, body := range map[string]string{"package.json": `{"dependencies":{"react":"19"}}`, ".github/workflows/ci.yml": "on: push\n"} {
+		p := filepath.Join(proj, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(task string) []string {
+		var out []string
+		for _, c := range Recommend(proj, core.LoadIndex(), task, 5, 0).Shortlist {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+	if got := names("github actions ci"); slices.Contains(got, "github-actions") || !slices.Contains(got, "gh-fix-ci") || !slices.Contains(got, "gha-node-cache") {
+		t.Fatalf("React project: %v", got)
+	}
+	if got := names("react native ci builds"); !slices.Contains(got, "github-actions") {
+		t.Fatalf("task names React Native: %v", got)
+	}
+}
+
+func TestTaskMatchNeedsASpecificWord(t *testing.T) {
+	react := Doc{name: "react-best-practices", desc: "react rendering best practices"}
+	if s, _ := taskMatch(react, taskWords("pulumi best practices")); s != 0 {
+		t.Fatalf("generic words alone matched: %d", s)
+	}
+	pulumi := Doc{name: "pulumi-best-practices", desc: "pulumi programs"}
+	if s, _ := taskMatch(pulumi, taskWords("pulumi best practices")); s == 0 {
+		t.Fatal("specific word did not match")
+	}
+}

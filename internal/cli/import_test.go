@@ -24,6 +24,12 @@ func TestImportWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SKILLCORE_GIT_BASE", filepath.ToSlash(gitBase)+"/")
+	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"} {
+		t.Setenv(k, "test")
+	}
+	for _, k := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		t.Setenv(k, "test@example.invalid")
+	}
 	core.Configure()
 	git := func(args ...string) string {
 		t.Helper()
@@ -72,6 +78,9 @@ func TestImportWorkflow(t *testing.T) {
 	git("branch", "release/v1")
 	tree := "https://github.com/acme/skills/tree/release/v1/skills/example-skill"
 	preview := invoke(0, tree, "-C", p, "--dry-run")
+	if preview.Library[0].License != "MIT" || preview.Library[0].Audit == "" {
+		t.Fatalf("preview must name the license and audit level: %+v", preview.Library[0])
+	}
 	if preview.Commit != sha || preview.Project != p || preview.Library[0].Action != "would_import" || len(preview.Install) != 1 || !slices.Contains(preview.ApplyArgs, sha) {
 		t.Fatal(preview)
 	}
@@ -112,6 +121,9 @@ func TestImportWorkflow(t *testing.T) {
 	}
 	if data := core.LoadMap(filepath.Join(target, "SOURCE.json")); data["commit"] != sha || data["subpath"] != "skills/example-skill" {
 		t.Fatal(data)
+	}
+	if st := core.Git([]string{"status", "--porcelain", "--", "skills/example-skill", "INDEX.json"}, lib, 30); st.Code != 0 || strings.TrimSpace(st.Stdout) != "" {
+		t.Fatalf("import left the library uncommitted: %s %s", st.Stdout, failed.Library[0].Detail)
 	}
 	if err := os.Remove(obstacle); err != nil {
 		t.Fatal(err)

@@ -21,7 +21,8 @@ Show the shortlisted names with their source, stack evidence file, matched keywo
 and added description tokens. Evidence `library` means the skill fits the task but lies outside the
 project's detected stacks; say so. Lead with task fit and reuse an existing matching project copy when
 available. Describe any budget warning alongside the relevant choice. Use `info <name> --json` or
-`info <name> --body --json` when a decision needs more detail. If the shortlist is empty, say which
+`info <name> --body --json` when a decision needs more detail. If the shortlist is empty and `upstream` lists candidates, offer their `preview_args` dry-run (it shows the
+license and audit level) and import only what the user approves. Otherwise say which
 capability is missing locally.
 
 After the user chooses, run `skillman add -C <project> <chosen names> --dry-run --json` using the exact

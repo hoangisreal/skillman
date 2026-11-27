@@ -29,6 +29,12 @@ type ImportSource struct {
 	Skills  []ImportSkill `json:"skills"`
 }
 
+// ImportRepo returns the owner/repo of an import source.
+func ImportRepo(source string) (string, bool) {
+	repo, _, err := sourceParts(source)
+	return repo, err == nil
+}
+
 // sourceParts accepts a GitHub slug or HTTPS repository/tree URL.
 func sourceParts(source string) (repo, tree string, err error) {
 	raw := source
@@ -237,11 +243,34 @@ func sameImport(existing, staged string) bool {
 
 type LibraryImport struct {
 	ImportSkill
-	Action string `json:"action"`
-	Detail string `json:"detail,omitempty"`
+	Action  string `json:"action"`
+	Detail  string `json:"detail,omitempty"`
+	License string `json:"license,omitempty"` // first line of the license file that ships with the skill
+	Audit   string `json:"audit,omitempty"`   // audit level of the staged copy: ok, info, review
 }
 
-func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview func(name, source string)) (string, string, error) {
+// LicenseSummary names the license that ships in a skill folder: the first
+// non-empty line of LICENSE*, COPYING* or UPSTREAM-LICENSE.txt.
+func LicenseSummary(dir string) string {
+	for _, e := range SortedDir(dir) {
+		n := strings.ToUpper(e.Name())
+		if !e.Type().IsRegular() || !(strings.HasPrefix(n, "LICENSE") || strings.HasPrefix(n, "LICENCE") || strings.HasPrefix(n, "COPYING") || n == "UPSTREAM-LICENSE.TXT") {
+			continue
+		}
+		text, err := ReadText(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(text, "\n") {
+			if line = strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "#=*-")); line != "" {
+				return runeCut(line, 80)
+			}
+		}
+	}
+	return ""
+}
+
+func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview func(name, source string), info *LibraryImport) (string, string, error) {
 	if err := CheckName(s.Name); err != nil {
 		return "", "", err
 	}
@@ -266,6 +295,8 @@ func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview fu
 		return "", "", err
 	}
 	defer os.RemoveAll(staged)
+	info.License = LicenseSummary(staged)
+	info.Audit = auditSkill(staged, s.Name).Level
 	note, err := checkImportAudit(staged, s.Name, allowRisky)
 	if err != nil {
 		return "", "", err
@@ -318,16 +349,56 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 	out := make([]LibraryImport, 0, len(selected))
 	refresh := false
 	for _, s := range selected {
-		action, detail, err := importOne(src, s, dry, allowRisky, preview)
+		info := LibraryImport{ImportSkill: s}
+		action, detail, err := importOne(src, s, dry, allowRisky, preview, &info)
 		if err != nil {
 			action, detail = "failed", err.Error()
 		}
-		out = append(out, LibraryImport{s, action, detail})
+		info.Action, info.Detail = action, detail
+		out = append(out, info)
 		refresh = refresh || action == "imported" || action == "reused"
 	}
 	if !dry && refresh {
-		_, _, _, err := RebuildIndex(true)
-		return out, plans, err
+		committed := func(name string) bool {
+			st := Git([]string{"status", "--porcelain", "--", "skills/" + name}, LIB, 30)
+			return st.Code == 0 && strings.TrimSpace(st.Stdout) == ""
+		}
+		if _, _, _, err := RebuildIndex(true); err != nil {
+			return out, plans, err
+		}
+		// Commit the import so the library has no half-finished change.
+		if IsDir(filepath.Join(LIB, ".git")) {
+			var names, paths []string
+			for _, s := range out {
+				// A reused copy may be left over from an import whose commit failed.
+				if s.Action == "imported" || (s.Action == "reused" && !committed(s.Name)) {
+					names = append(names, s.Name)
+					paths = append(paths, "skills/"+s.Name)
+				}
+			}
+			if len(paths) > 0 {
+				for _, f := range []string{"INDEX.json", "INDEX.md", "VALIDATION.md"} {
+					if Exists(filepath.Join(LIB, f)) {
+						paths = append(paths, f)
+					}
+				}
+				msg := sprintf("Import %s from %s@%s", strings.Join(names, ", "), src.Repo, shortSHA(src.Commit))
+				if err := commitLibrary(msg, paths); err != nil {
+					for i := range out {
+						if out[i].Action == "imported" || out[i].Action == "reused" {
+							out[i].Detail = strings.TrimSpace(out[i].Detail + " (library change not committed: " + err.Error() + ")")
+						}
+					}
+				}
+			}
+		}
 	}
 	return out, plans, nil
+}
+
+func shortSHA(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
 }

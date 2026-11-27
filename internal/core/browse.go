@@ -2,6 +2,7 @@ package core
 
 import (
 	"sort"
+	"strings"
 )
 
 // StackNode is one stack of the Browse tree with the skills classified into it.
@@ -187,6 +188,40 @@ func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
 	}
 	rows, _, _, err := rebuildIndex(true, c.tax, c.bySkill)
 	return rows, err
+}
+
+// Classify files a row under the catalog's taxonomy (domain and stacks).
+func (c *RecommendationCatalog) Classify(row *IndexRow) { c.tax.Classify(row, c.bySkill[row.Name]) }
+
+// MentionedStacks lists the stacks whose match pattern hits text, such as a
+// description. Classification keeps only the strongest stacks (a pack wins),
+// so a CI skill "for React Native builds" filed under ci-cd still mentions react-native.
+func (c *RecommendationCatalog) MentionedStacks(text string) []string {
+	hay := strings.ToLower(text)
+	var out []string
+	for _, d := range c.tax.Domains {
+		for _, s := range d.Stacks {
+			if s.rx != nil && s.rx.MatchString(hay) && (s.notRx == nil || !s.notRx.MatchString(hay)) {
+				out = append(out, s.ID)
+			}
+		}
+	}
+	return out
+}
+
+// Detectable reports whether a project can be detected as using stack id:
+// it has a pack or a file rule. Stacks such as typescript or web-build are
+// only topics, so mentioning them says nothing about another technology.
+func (c *RecommendationCatalog) Detectable(id string) bool {
+	if s := c.tax.Stack(id); s != nil && len(s.Packs) > 0 {
+		return true
+	}
+	for _, r := range StackRules {
+		if r.Stack == id {
+			return true
+		}
+	}
+	return false
 }
 
 // StackDomain returns the taxonomy domain of a stack ID ("" if unknown).
