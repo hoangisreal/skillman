@@ -28,6 +28,12 @@ func tail(s string, n int) string {
 }
 
 // EnsureClone returns a persistent blob-less clone (no checkout).
+// HasClone reports whether repo is already cloned in the cache.
+func HasClone(repo string) bool {
+	dest := CloneDir(repo)
+	return Exists(filepath.Join(dest, ".git")) || Exists(filepath.Join(dest, "HEAD"))
+}
+
 func EnsureClone(repo string) (string, error) {
 	dest := CloneDir(repo)
 	if Exists(filepath.Join(dest, ".git")) || Exists(filepath.Join(dest, "HEAD")) {

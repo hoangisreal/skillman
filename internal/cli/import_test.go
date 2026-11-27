@@ -72,6 +72,9 @@ func TestImportWorkflow(t *testing.T) {
 	git("branch", "release/v1")
 	tree := "https://github.com/acme/skills/tree/release/v1/skills/example-skill"
 	preview := invoke(0, tree, "-C", p, "--dry-run")
+	if preview.Library[0].License != "MIT" || preview.Library[0].Audit == "" {
+		t.Fatalf("preview must name the license and audit level: %+v", preview.Library[0])
+	}
 	if preview.Commit != sha || preview.Project != p || preview.Library[0].Action != "would_import" || len(preview.Install) != 1 || !slices.Contains(preview.ApplyArgs, sha) {
 		t.Fatal(preview)
 	}

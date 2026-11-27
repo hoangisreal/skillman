@@ -21,6 +21,8 @@
   (`postgres` / `postgres-best-practices`); `recommend` shortlists only one of a pair, preferring an installed copy.
 - `recommend` choices carry `signals` that explain them without a task: pack or stack and evidence file, a project
   dependency, a name that matches the stack, an installed copy, task keywords.
+- When no local skill fits a task, `recommend` lists matching upstream candidates (`upstream`, with
+  `preview_args`); `import --dry-run` reports each skill's `license` and `audit` level and notes a slow first clone.
 - `status --agents` gives a `reason` for every `invalid`, `drifted` or `external_link` entry.
 
 ### Fixed
@@ -54,6 +56,10 @@
   (`vite`, `vitest`, `nextjs-on-cloudflare` without `wrangler`) is left out unless the task names it, names that
   match the stack and installed copies come first, and with a task, skills tied to another technology are left
   out. `skill-add --suggest` prints the same shortlist and lists whole packs as an aside; its `--json` is unchanged.
+- `recommend` ranks by score before the number of matched words, so a skill named for the task beats one that
+  mentions every word in its description, and a skill whose first name segment is another technology (`vllm-`,
+  `kafka-`) is no longer kept because the task shares a generic word with it. `--brief --json` includes
+  `install_tokens`.
 - The shipped `ci-github` pack no longer includes `commit`, which imposes its own commit conventions.
 - `library new` refuses placeholder descriptions, takes `--from-file` and `--lang vi`, and commits the new skill
   with the index.

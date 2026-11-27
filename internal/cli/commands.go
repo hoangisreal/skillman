@@ -409,9 +409,12 @@ func cmdRecommend(a *Args) int {
 	}
 	if a.Has("json") {
 		if brief {
-			out := map[string]any{"project": rec.Project, "budget": rec.Budget, "shortlist": rec.Shortlist, "install_args": rec.InstallArgs}
+			out := map[string]any{"project": rec.Project, "budget": rec.Budget, "shortlist": rec.Shortlist, "install_args": rec.InstallArgs, "install_tokens": rec.InstallTokens}
 			if rec.Message != "" {
 				out["message"] = rec.Message
+			}
+			if len(rec.Upstream) > 0 {
+				out["upstream"] = rec.Upstream
 			}
 			printJSON(out)
 		} else {
@@ -425,6 +428,9 @@ func cmdRecommend(a *Args) int {
 	}
 	for _, c := range rec.Shortlist {
 		outf("  %-32s +%dt · %s (%s) %s\n", c.Name, c.AddedTokens, c.Reason, c.Evidence, c.State)
+	}
+	for _, u := range rec.Upstream {
+		outf("  upstream: %-24s %s · skillman %s\n", u.Name, u.Repo, strings.Join(u.PreviewArgs, " "))
 	}
 	if brief {
 		return 0

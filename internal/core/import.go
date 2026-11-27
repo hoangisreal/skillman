@@ -29,6 +29,12 @@ type ImportSource struct {
 	Skills  []ImportSkill `json:"skills"`
 }
 
+// ImportRepo returns the owner/repo of an import source.
+func ImportRepo(source string) (string, bool) {
+	repo, _, err := sourceParts(source)
+	return repo, err == nil
+}
+
 // sourceParts accepts a GitHub slug or HTTPS repository/tree URL.
 func sourceParts(source string) (repo, tree string, err error) {
 	raw := source
@@ -237,11 +243,34 @@ func sameImport(existing, staged string) bool {
 
 type LibraryImport struct {
 	ImportSkill
-	Action string `json:"action"`
-	Detail string `json:"detail,omitempty"`
+	Action  string `json:"action"`
+	Detail  string `json:"detail,omitempty"`
+	License string `json:"license,omitempty"` // first line of the license file that ships with the skill
+	Audit   string `json:"audit,omitempty"`   // audit level of the staged copy: ok, info, review
 }
 
-func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview func(name, source string)) (string, string, error) {
+// LicenseSummary names the license that ships in a skill folder: the first
+// non-empty line of LICENSE*, COPYING* or UPSTREAM-LICENSE.txt.
+func LicenseSummary(dir string) string {
+	for _, e := range SortedDir(dir) {
+		n := strings.ToUpper(e.Name())
+		if !e.Type().IsRegular() || !(strings.HasPrefix(n, "LICENSE") || strings.HasPrefix(n, "LICENCE") || strings.HasPrefix(n, "COPYING") || n == "UPSTREAM-LICENSE.TXT") {
+			continue
+		}
+		text, err := ReadText(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(text, "\n") {
+			if line = strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "#=*-")); line != "" {
+				return runeCut(line, 80)
+			}
+		}
+	}
+	return ""
+}
+
+func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview func(name, source string), info *LibraryImport) (string, string, error) {
 	if err := CheckName(s.Name); err != nil {
 		return "", "", err
 	}
@@ -266,6 +295,8 @@ func importOne(src ImportSource, s ImportSkill, dry, allowRisky bool, preview fu
 		return "", "", err
 	}
 	defer os.RemoveAll(staged)
+	info.License = LicenseSummary(staged)
+	info.Audit = auditSkill(staged, s.Name).Level
 	note, err := checkImportAudit(staged, s.Name, allowRisky)
 	if err != nil {
 		return "", "", err
@@ -318,11 +349,13 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 	out := make([]LibraryImport, 0, len(selected))
 	refresh := false
 	for _, s := range selected {
-		action, detail, err := importOne(src, s, dry, allowRisky, preview)
+		info := LibraryImport{ImportSkill: s}
+		action, detail, err := importOne(src, s, dry, allowRisky, preview, &info)
 		if err != nil {
 			action, detail = "failed", err.Error()
 		}
-		out = append(out, LibraryImport{s, action, detail})
+		info.Action, info.Detail = action, detail
+		out = append(out, info)
 		refresh = refresh || action == "imported" || action == "reused"
 	}
 	if !dry && refresh {

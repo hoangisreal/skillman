@@ -39,6 +39,9 @@ func (r importReport) output(a *Args, err error) int {
 		}
 		for _, s := range r.Library {
 			outf("  library  %s  %s (%s)  %s\n", s.Action, s.Name, s.Path, s.Detail)
+			if s.License != "" || s.Audit != "" {
+				outf("           license: %s · audit: %s\n", orDash(s.License), orDash(s.Audit))
+			}
 		}
 		for _, s := range r.Install {
 			outf("  project  %s  %s\n", s.Name, s.Message)
@@ -93,6 +96,9 @@ func cmdImport(a *Args) int {
 	}
 	if a.Has("skill") && len(a.List("skill")) == 0 {
 		return usage("--skill requires a name")
+	}
+	if repo, ok := core.ImportRepo(a.Pos[0]); ok && !core.HasClone(repo) {
+		errfln("cloning %s (the first clone of a large repository can take minutes)…", repo)
 	}
 	src, err := core.DiscoverImport(a.Pos[0], a.Str("commit", ""))
 	r.ImportSource = src

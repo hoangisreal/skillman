@@ -189,6 +189,9 @@ func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
 	return rows, err
 }
 
+// Classify files a row under the catalog's taxonomy (domain and stacks).
+func (c *RecommendationCatalog) Classify(row *IndexRow) { c.tax.Classify(row, c.bySkill[row.Name]) }
+
 // StackDomain returns the taxonomy domain of a stack ID ("" if unknown).
 func (c *RecommendationCatalog) StackDomain(id string) string {
 	if s := c.tax.Stack(id); s != nil {

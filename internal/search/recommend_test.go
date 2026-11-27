@@ -361,3 +361,97 @@ func TestRecommendSkipsNearDuplicates(t *testing.T) {
 		t.Fatalf("installed duplicate not preferred: %v", got)
 	}
 }
+
+func TestNamesSkillTech(t *testing.T) {
+	detected := map[string]bool{"docker": true, "react": true}
+	for _, c := range []struct {
+		name, task string
+		want       bool
+	}{
+		{"vllm-deploy-docker", "deploy with vllm", true},
+		{"vllm-deploy-docker", "docker compose deploy", false},
+		{"kafka-schema-registry", "drizzle schema migration", false},
+		{"docker-compose-patterns", "docker compose", false}, // the project's own stack
+	} {
+		if got := namesSkillTech(c.name, taskWords(c.task), detected); got != c.want {
+			t.Errorf("%s / %q: %v", c.name, c.task, got)
+		}
+	}
+}
+
+// A skill named for the task beats one that only mentions every word in its description.
+func TestRecommendPrefersNameMatches(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "docker-compose-patterns", "Compose services, volumes and networks")
+	mkskill(t, lib, "otel-collector", "Wire an OpenTelemetry collector with docker compose and deploy it")
+	if err := core.SavePack(&core.Pack{Name: "docker", Skills: []string{"docker-compose-patterns"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "Dockerfile"), []byte("FROM scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := Recommend(proj, core.LoadIndex(), "docker compose deploy", 3, 0)
+	if len(rec.Shortlist) == 0 || rec.Shortlist[0].Name != "docker-compose-patterns" {
+		t.Fatalf("shortlist: %+v", rec.Shortlist)
+	}
+}
+
+// When nothing local fits, recommend points to matching upstream candidates.
+func TestRecommendSuggestsUpstreamCandidates(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "react-best-practices", "React rendering guidelines")
+	if err := core.SavePack(&core.Pack{Name: "web-react", Skills: []string{"react-best-practices"}}); err != nil {
+		t.Fatal(err)
+	}
+	candidates := "# Candidates\n\n## web\n\n### acme/web-skills (official) · `abc` · LICENSE\n" +
+		"- [ ] `seo` — Improve search engine visibility, meta tags and structured data <sub>skills/seo · 80L</sub>\n" +
+		"- [ ] `dicom-metadata-extract` — Extract DICOM metadata from medical images <sub>skills/dicom · 40L</sub>\n" +
+		"- [ ] `nuxt-seo` — SEO for Nuxt and Vue apps with metadata <sub>skills/nuxt-seo · 60L</sub>\n"
+	if err := os.WriteFile(filepath.Join(lib, "staging", "CANDIDATES.md"), []byte(candidates), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte(`{"dependencies":{"react":"19"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := Recommend(proj, core.LoadIndex(), "seo metadata", 3, 0)
+	if len(rec.Shortlist) != 0 || len(rec.Upstream) != 1 || rec.Upstream[0].Name != "seo" || rec.Upstream[0].Repo != "acme/web-skills" {
+		t.Fatalf("upstream hints: %+v", rec.Upstream)
+	}
+	if !slices.Equal(rec.Upstream[0].PreviewArgs, []string{"import", "acme/web-skills", "--skill", "seo", "--dry-run"}) || !strings.Contains(rec.Message, "seo (acme/web-skills)") {
+		t.Fatalf("preview: %+v %q", rec.Upstream[0], rec.Message)
+	}
+}
