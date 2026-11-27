@@ -137,6 +137,49 @@ func similarPair(a, b *IndexRow, wa, wb map[string]bool) (int, string, bool) {
 	return score, "", false
 }
 
+// SimilarIndex answers "which skills are similar to X" for one set of rows,
+// splitting descriptions into words once.
+type SimilarIndex struct {
+	rows  []IndexRow
+	words []map[string]bool
+	cache map[string][]Similar
+}
+
+func NewSimilarIndex(rows []IndexRow) *SimilarIndex {
+	return &SimilarIndex{rows: rows, words: make([]map[string]bool, len(rows)), cache: map[string][]Similar{}}
+}
+
+func (ix *SimilarIndex) wordsOf(i int) map[string]bool {
+	if ix.words[i] == nil {
+		ix.words[i] = descWords(ix.rows[i].Description)
+	}
+	return ix.words[i]
+}
+
+// For lists the skills similar to name (nil if name is not in the rows).
+func (ix *SimilarIndex) For(name string) []Similar {
+	if s, ok := ix.cache[name]; ok {
+		return s
+	}
+	var out []Similar
+	for i := range ix.rows {
+		if ix.rows[i].Name != name {
+			continue
+		}
+		for j := range ix.rows {
+			// Only names that share a topic segment can pair, so most rows need no word split.
+			if i == j || !sharesSegment(ix.rows[i].Name, ix.rows[j].Name) {
+				continue
+			}
+			if score, reason, ok := similarPair(&ix.rows[i], &ix.rows[j], ix.wordsOf(i), ix.wordsOf(j)); ok {
+				out = append(out, Similar{Name: ix.rows[j].Name, Reason: reason, Score: score})
+			}
+		}
+	}
+	ix.cache[name] = out
+	return out
+}
+
 // SimilarSkills finds near-duplicate library skills, keyed by name. Only rows
 // whose name is in names are compared (nil compares every row).
 func SimilarSkills(rows []IndexRow, names []string) map[string][]Similar {

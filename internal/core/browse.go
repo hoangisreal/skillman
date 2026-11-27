@@ -152,6 +152,7 @@ type Recommendation struct {
 	Budget       Budget            `json:"budget"`
 	ProjectState []string          `json:"installed"`
 	States       map[string]string `json:"-"` // project state by skill name
+	Deps         map[string]string `json:"-"` // JavaScript dependencies and tools -> evidence file
 }
 
 // RecommendationCatalog shares the same taxonomy and pack definitions between
@@ -186,6 +187,14 @@ func (c *RecommendationCatalog) Index() ([]IndexRow, error) {
 	}
 	rows, _, _, err := rebuildIndex(true, c.tax, c.bySkill)
 	return rows, err
+}
+
+// StackDomain returns the taxonomy domain of a stack ID ("" if unknown).
+func (c *RecommendationCatalog) StackDomain(id string) string {
+	if s := c.tax.Stack(id); s != nil {
+		return s.Domain
+	}
+	return ""
 }
 
 func (c *RecommendationCatalog) pack(name string) (*Pack, error) {
@@ -259,7 +268,7 @@ func (c *RecommendationCatalog) Candidates(d string, rows []IndexRow, extra int,
 	for i := range rows {
 		byName[rows[i].Name] = &rows[i]
 	}
-	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}, States: map[string]string{}}
+	rec := Recommendation{Project: d, Budget: TokenBudgetOf(d), ProjectState: []string{}, States: map[string]string{}, Deps: ProjectDependencies(d)}
 	for _, s := range status {
 		rec.ProjectState = append(rec.ProjectState, s.Name)
 		rec.States[s.Name] = s.State

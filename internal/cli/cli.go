@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +18,33 @@ import (
 
 // Version is set by the build (-ldflags "-X .../cli.Version=...").
 var Version = "0.2.0"
+
+// versionString adds the Git revision of the build, so two builds of the
+// same release can be told apart (doctor --self compares them).
+func versionString() string {
+	v := "skillman " + Version
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v
+	}
+	rev, dirty := "", false
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	if len(rev) >= 7 {
+		v += " (" + rev[:7]
+		if dirty {
+			v += ", modified"
+		}
+		v += ")"
+	}
+	return v
+}
 
 // TUI is installed by main to avoid an import cycle (cli <- tui).
 var TUI func(project string) error
@@ -253,7 +281,7 @@ func Run(prog string, argv []string) int {
 		return 0
 	}
 	if name == "--version" || name == "version" {
-		outf("skillman %s\n", Version)
+		outf("%s\n", versionString())
 		return 0
 	}
 	c := find(name)
