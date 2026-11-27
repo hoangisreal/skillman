@@ -359,8 +359,41 @@ func ImportToLibrary(src ImportSource, selected []ImportSkill, dry, allowRisky b
 		refresh = refresh || action == "imported" || action == "reused"
 	}
 	if !dry && refresh {
-		_, _, _, err := RebuildIndex(true)
-		return out, plans, err
+		if _, _, _, err := RebuildIndex(true); err != nil {
+			return out, plans, err
+		}
+		// Commit the import so the library has no half-finished change.
+		if IsDir(filepath.Join(LIB, ".git")) {
+			var names, paths []string
+			for _, s := range out {
+				if s.Action == "imported" {
+					names = append(names, s.Name)
+					paths = append(paths, "skills/"+s.Name)
+				}
+			}
+			if len(paths) > 0 {
+				for _, f := range []string{"INDEX.json", "INDEX.md", "VALIDATION.md"} {
+					if Exists(filepath.Join(LIB, f)) {
+						paths = append(paths, f)
+					}
+				}
+				msg := sprintf("Import %s from %s@%s", strings.Join(names, ", "), src.Repo, shortSHA(src.Commit))
+				if err := commitLibrary(msg, paths); err != nil {
+					for i := range out {
+						if out[i].Action == "imported" {
+							out[i].Detail = strings.TrimSpace(out[i].Detail + " (library change not committed: " + err.Error() + ")")
+						}
+					}
+				}
+			}
+		}
 	}
 	return out, plans, nil
+}
+
+func shortSHA(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
 }

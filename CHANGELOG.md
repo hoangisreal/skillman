@@ -21,6 +21,8 @@
   (`postgres` / `postgres-best-practices`); `recommend` shortlists only one of a pair, preferring an installed copy.
 - `recommend` choices carry `signals` that explain them without a task: pack or stack and evidence file, a project
   dependency, a name that matches the stack, an installed copy, task keywords.
+- `import` commits the imported skills with the rebuilt index, like `library new`; a failed commit is reported in
+  the skill's `detail` instead of failing the import.
 - When no local skill fits a task, `recommend` lists matching upstream candidates (`upstream`, with
   `preview_args`); `import --dry-run` reports each skill's `license` and `audit` level and notes a slow first clone.
 - `status --agents` gives a `reason` for every `invalid`, `drifted` or `external_link` entry.
