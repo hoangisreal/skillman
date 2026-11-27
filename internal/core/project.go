@@ -565,6 +565,8 @@ type SkillStatus struct {
 	LinkOK        bool     `json:"link_ok"`
 	State         string   `json:"state"`
 	SameAsLibrary *bool    `json:"same_as_library,omitempty"`
+	// Scope is "project" for a skill that lives only in this project.
+	Scope string `json:"scope,omitempty"`
 	// MatchesManifest compares the project copy with the committed manifest,
 	// which is what verify and teammates share; Library compares it with this
 	// machine's library: "same", "differs" or "absent". Both are set for
@@ -622,6 +624,12 @@ func projectStatus(d string, man *ManifestData) []SkillStatus {
 			r.State = "invalid"
 		case !Exists(dest):
 			r.State = "missing"
+		case e.ProjectOnly():
+			matches := hash(dest) == e.TreeHash
+			r.Scope, r.MatchesManifest, r.State = "project", &matches, "ok"
+			if !matches {
+				r.State = "modified"
+			}
 		case e == nil:
 			r.State = "untracked"
 			if r.InLibrary {
@@ -785,6 +793,27 @@ func updateProject(d string, names []string, force, dry bool) ([]Result, error) 
 	copies := man.copyMode()
 	for _, name := range targets {
 		r, ok := st[name]
+		// A project skill is edited in place: update records the current copy.
+		if prev := man.Skills[name]; ok && prev.ProjectOnly() {
+			switch {
+			case r.State == "ok":
+				out = append(out, res(name, true, "already up to date"))
+			case r.State != "modified":
+				out = append(out, res(name, false, "cannot update from state %s", r.State))
+			case dry:
+				out = append(out, res(name, true, "would record the edited project skill"))
+			default:
+				change, err := installFiles(d, name, "", false, copies, prev, "update")
+				if err != nil {
+					out = append(out, res(name, false, "%v", err))
+					continue
+				}
+				changes = append(changes, change)
+				man.Skills[name] = projectEntry(Dest(d, name), prev)
+				out = append(out, res(name, true, "recorded the edited project skill"))
+			}
+			continue
+		}
 		switch {
 		case !ok:
 			out = append(out, res(name, false, "not installed"))
@@ -1078,6 +1107,8 @@ func Doctor(d string) []Diagnostic {
 			add("error", "%s: invalid project skill (expected a real folder with a regular SKILL.md)", r.Name)
 		case s == "missing" || s == "invalid":
 			add("error", "%s: %s (manifest says installed)", r.Name, s)
+		case s == "modified" && r.Scope == "project":
+			add("warn", "%s: edited project skill (record it with: skillman update %s)", r.Name, r.Name)
 		case s == "outdated" || s == "modified" || s == "conflict" || s == "orphan" || s == "untracked":
 			add("warn", "%s: %s", r.Name, s)
 		}

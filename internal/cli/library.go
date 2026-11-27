@@ -231,6 +231,51 @@ func cmdPack(a *Args) int {
 	return helpFor("pack")
 }
 
+// newSkill implements "skillman new" and "skillman library new".
+func newSkill(a *Args, name string, project bool) int {
+	o := core.SkillOptions{Description: a.Str("d", a.Str("description", "")), Lang: a.Str("lang", ""), NoCommit: a.Has("no-commit")}
+	if f := a.Str("from-file", ""); f != "" {
+		desc, body, err := core.SkillFromFile(f)
+		if err != nil {
+			return fail(err)
+		}
+		o.Body = body
+		if o.Description == "" {
+			o.Description = desc
+		}
+	}
+	if project {
+		d, err := core.ResolveProject(a.Str("C", "."), false)
+		if err != nil {
+			return fail(err)
+		}
+		dest, err := core.NewProjectSkill(d, name, o)
+		if err != nil {
+			return fail(err)
+		}
+		outf("✓ created %s/SKILL.md as a project skill (tracked in the manifest, not in the library)\n", dest)
+		outf("  after editing it, record the change: skillman update -C %s %s\n", d, name)
+		return 0
+	}
+	d, commitErr, err := core.NewLibrarySkill(name, o)
+	if err != nil {
+		return fail(err)
+	}
+	committed := " and committed it to the library"
+	if o.NoCommit || !core.IsDir(filepath.Join(core.LIB, ".git")) {
+		committed = ""
+	}
+	if commitErr != nil {
+		committed = ""
+		errfln("warning: the library change is not committed: %v", commitErr)
+	}
+	outf("✓ created %s/SKILL.md%s — edit it, then: skillman add %s\n", d, committed, name)
+	if o.Description == "" {
+		outf("  replace the TODO description: agents choose skills by it\n")
+	}
+	return 0
+}
+
 func commitHint() string {
 	return fmt.Sprintf(" (commit: git -C %s commit packs)", core.LIB)
 }
@@ -492,14 +537,9 @@ func cmdLibrary(a *Args) int {
 		return 0
 	case "new":
 		if len(rest) != 1 {
-			return usage("skillman library new <skill> [-d DESC]")
+			return usage("skillman library new <skill> [-d DESC] [--from-file FILE] [--lang en|vi] [--no-commit]")
 		}
-		d, err := core.NewSkill(rest[0], a.Str("d", a.Str("description", "")))
-		if err != nil {
-			return fail(err)
-		}
-		outf("✓ created %s/SKILL.md — edit it, then: skillman add %s\n", d, rest[0])
-		return 0
+		return newSkill(a, rest[0], false)
 	case "build-packs":
 		n, err := core.BuildVendorPacks()
 		if err != nil {
