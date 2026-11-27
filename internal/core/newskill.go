@@ -285,8 +285,13 @@ func AdoptProject(d string, names []string) ([]Result, error) {
 		}
 		man.Skills[name] = projectEntry(dest, prev)
 		msg := "tracked as a project skill"
-		if prev != nil && IsFile(filepath.Join(SKILLS, name, "SKILL.md")) {
-			msg += sprintf(" (it no longer follows the library; remove the library copy with: git -C %s rm -r skills/%s)", LIB, name)
+		if lib := filepath.Join(SKILLS, name); IsFile(filepath.Join(lib, "SKILL.md")) {
+			// The library copy is no longer used by this project; say how to drop it.
+			if Git([]string{"ls-files", "--error-unmatch", "skills/" + name + "/SKILL.md"}, LIB, 10).Code == 0 {
+				msg += sprintf("; it no longer follows the library, remove the library copy with: git -C %s rm -r skills/%s", LIB, name)
+			} else {
+				msg += sprintf("; it no longer follows the library, and the uncommitted library copy %s can be deleted", lib)
+			}
 		}
 		out = append(out, res(name, true, "%s", msg))
 	}

@@ -654,7 +654,9 @@ func TestProjectSkillsStayOutOfTheLibrary(t *testing.T) {
 	runOK(t, "verify", "-C", p)
 	// A tracked library skill can stop following the library.
 	runOK(t, "add", "-C", p, "vue-best-practices")
-	runOK(t, "adopt", "--project", "-C", p, "vue-best-practices")
+	if _, out, _ := run(t, "adopt", "--project", "-C", p, "vue-best-practices"); !strings.Contains(out, "tracked as a project skill") || !strings.Contains(out, "vue-best-practices") {
+		t.Fatalf("adopt --project: %s", out)
+	}
 	appendToFile(t, filepath.Join(lib, "skills", "vue-best-practices", "SKILL.md"), "newer upstream text\n")
 	var st []core.SkillStatus
 	runJSON(t, &st, "status", "-C", p)
