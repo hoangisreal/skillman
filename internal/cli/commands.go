@@ -699,6 +699,8 @@ func cmdStatus(a *Args) int {
 		// Separate what the team committed from this machine's library.
 		switch {
 		case r.MatchesManifest == nil:
+		case r.Scope == "project":
+			flags += " (project skill)"
 		case *r.MatchesManifest && r.Library != "same":
 			flags += " (matches manifest; library on this machine " + r.Library + ")"
 		case !*r.MatchesManifest && r.Library == "same":

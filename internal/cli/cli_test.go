@@ -632,6 +632,9 @@ func TestProjectSkillsStayOutOfTheLibrary(t *testing.T) {
 	if s := status(); s.State != "ok" || s.Scope != "project" {
 		t.Fatalf("new project skill: %+v", s)
 	}
+	if _, out, _ := run(t, "status", "-C", p); !strings.Contains(out, "(project skill)") || strings.Contains(out, "library on this machine )") {
+		t.Fatalf("status text for a project skill: %s", out)
+	}
 	runOK(t, "verify", "-C", p)
 	// Edit in place, then record it.
 	f := filepath.Join(core.Dest(p, "kq-content"), "SKILL.md")

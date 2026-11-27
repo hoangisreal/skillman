@@ -10,6 +10,18 @@
 - `recommend --json` reports `install_tokens` for the suggested install and warns when that total exceeds the
   budget, not only when the top choice does.
 - A labelled recommendation test set and a ranking benchmark (`docs/selection-evaluation.md`).
+- `skillman doctor --self`: checks the running binary and its Git revision, `skillman`/`skill-add`/`skill-search`
+  on PATH and in `~/.local/bin` (broken links, a different build), Python-era leftovers in the library, uncommitted
+  library changes, the state directory and the global agent skill links, with a fix for each. `--version` prints
+  the revision.
+- Project-only skills: `skillman new <skill> --project` and `adopt --project` keep a skill in the project's
+  `.agents/skills` with `"source": "project"` in the manifest, out of the shared library. `update <skill>` records
+  an edit; `verify` checks it like any skill.
+- `skillman library duplicates`, `similar` in `info --json` and a `doctor` warning for near-duplicate skills
+  (`postgres` / `postgres-best-practices`); `recommend` shortlists only one of a pair, preferring an installed copy.
+- `recommend` choices carry `signals` that explain them without a task: pack or stack and evidence file, a project
+  dependency, a name that matches the stack, an installed copy, task keywords.
+- `status --agents` gives a `reason` for every `invalid`, `drifted` or `external_link` entry.
 
 ### Fixed
 - Skill hashes are the same on Windows, Linux and macOS: symlink targets are hashed with forward slashes, import
@@ -23,6 +35,11 @@
   manifest, the conversion restores those bytes; real local edits are still refused. `verify` points to it.
 - Saving a preference no longer replaces an invalid `settings.json` with only that preference; it reports the
   file instead.
+- `info --json` and `recommend --json` return the whole description instead of the index's first 200 characters.
+- Inside an agent sandbox, a path masked by a device file or a read-only directory is named as such, with a hint to
+  run outside the sandbox or exclude `skillman`. `add --dry-run` blocks targets it cannot write and warns when the
+  state directory cannot record the project.
+- `install.sh` builds with a temporary Go cache when the default one is not writable.
 
 ### Changed
 - `recommend --task` also ranks library skills outside the detected stacks (evidence `library`). A stack match
@@ -33,6 +50,14 @@
   regular files in the library skill. Imports already inline or drop upstream symlinks. They also refuse a skill
   whose own `.gitattributes` turns on line-ending or filter conversion, which would override the project's `-text`.
 - A task made only of filler words is treated as no task.
+- `recommend` reads the project's JavaScript dependencies: a skill named for a tool the project does not use
+  (`vite`, `vitest`, `nextjs-on-cloudflare` without `wrangler`) is left out unless the task names it, names that
+  match the stack and installed copies come first, and with a task, skills tied to another technology are left
+  out. `skill-add --suggest` prints the same shortlist and lists whole packs as an aside; its `--json` is unchanged.
+- The shipped `ci-github` pack no longer includes `commit`, which imposes its own commit conventions.
+- `library new` refuses placeholder descriptions, takes `--from-file` and `--lang vi`, and commits the new skill
+  with the index.
+- `init` rewrites a Python-era library README and gives a new library a first commit.
 - `docs/ci.md` states what `verify` checks: files against the committed manifest, not who changed both.
 
 ## 0.2.0 — Go rewrite
