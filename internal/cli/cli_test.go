@@ -533,6 +533,70 @@ func TestInfoKeepsFullDescriptionAndResultsGoToStdout(t *testing.T) {
 	}
 }
 
+func TestDoctorSelfFindsBrokenInstallAndLegacyLibrary(t *testing.T) {
+	lib, _ := setup(t)
+	bin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Links left by the Python installer point into a removed bin/ folder.
+	for _, name := range []string{"skillman", "skill-add"} {
+		if err := os.Symlink(filepath.Join(t.TempDir(), "gone", name), filepath.Join(bin, exeName(name))); err != nil {
+			t.Skip("symlinks unavailable:", err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	if err := os.Symlink(filepath.Join(t.TempDir(), "scripts"), filepath.Join(lib, "scripts")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "README.md"), []byte("Run scripts/skillcore.py doctor .\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	selfSkill := filepath.Join(lib, "skills", "skillman", "SKILL.md")
+	if err := os.WriteFile(selfSkill, []byte("---\nname: skillman\ndescription: old skill-add and skillcore.py instructions\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		OK     bool
+		Checks []SelfCheck
+	}
+	if rc := runJSON(t, &report, "doctor", "--self"); rc != 1 || report.OK {
+		t.Fatalf("broken links must fail: rc=%d", rc)
+	}
+	found := func(level, text string) bool {
+		for _, c := range report.Checks {
+			if c.Level == level && strings.Contains(c.Message, text) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []struct{ level, text string }{
+		{"error", filepath.Join(bin, exeName("skillman")) + " is a broken link"},
+		{"error", filepath.Join(bin, exeName("skill-add")) + " is a broken link"},
+		{"warn", "skillman is not on PATH"},
+		{"warn", "broken link to the removed Python scripts"},
+		{"warn", "describes the Python skillcore.py commands"},
+		{"warn", "not the version shipped with this binary"},
+	} {
+		if !found(want.level, want.text) {
+			t.Errorf("missing %s %q in %+v", want.level, want.text, report.Checks)
+		}
+	}
+	// init repairs the library side.
+	runOK(t, "init")
+	report.Checks = nil
+	runJSON(t, &report, "doctor", "--self")
+	for _, text := range []string{"Python scripts", "skillcore.py", "not the version shipped"} {
+		if found("warn", text) {
+			t.Errorf("init left %q", text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(lib, "README.md")); strings.Contains(string(b), "skillcore.py") || !strings.Contains(string(b), "skillman doctor --self") {
+		t.Fatalf("README not rewritten: %s", b)
+	}
+}
+
 func TestProjectSkillsStayOutOfTheLibrary(t *testing.T) {
 	lib, p := setup(t)
 	before := core.LibraryNames()
