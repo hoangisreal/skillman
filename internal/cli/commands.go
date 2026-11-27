@@ -56,8 +56,11 @@ func init() {
 	reg("update", "[skills…] [-C dir] [--force] [--dry-run] [--json]",
 		"Refresh outdated project copies from the library. Use --dry-run to preview and --force to allow replacing local edits.", []string{"C"}, cmdUpdate)
 	reg("update-projects", "[--dry-run] [--json]", "Refresh outdated skills in every registered project.", nil, cmdUpdateProjects)
-	reg("adopt", "[skills…] [-C dir] [--json]", "Track skills copied into .agents/skills before the manifest existed.",
+	reg("adopt", "[skills…] [-C dir] [--project] [--json]", "Track skills copied into .agents/skills before the manifest existed. --project tracks them as project skills that do not follow the library.",
 		[]string{"C"}, cmdAdopt)
+	reg("new", "<skill> [--project] [-C dir] [-d DESC] [--from-file FILE] [--lang en|vi] [--no-commit]",
+		"Scaffold a skill: in the library, or with --project only in this project (tracked by its manifest, invisible to other projects). --from-file takes a SKILL.md or Markdown body.",
+		[]string{"C", "d", "description", "from-file", "lang"}, cmdNew)
 	reg("pin", "<skills…> [-C dir]", "Keep a project copy as it is (skipped by update, accepted by verify).",
 		[]string{"C"}, func(a *Args) int { return cmdPin(a, true) })
 	reg("unpin", "<skills…> [-C dir]", "Undo pin.", []string{"C"}, func(a *Args) int { return cmdPin(a, false) })
@@ -88,8 +91,8 @@ func init() {
 			"  library rollback <skill>                                restore the previous version and pin it\n"+
 			"  library pin|unpin <skills…>                             freeze a skill against upstream updates\n"+
 			"  library rebuild-index · library validate [--strict] [-v] · library build-packs\n"+
-			"  library new <skill> [-d DESC]                           scaffold a local skill",
-		[]string{"pack", "d", "description"}, cmdLibrary)
+			"  library new <skill> [-d DESC] [--from-file F] [--lang en|vi] [--no-commit]  scaffold and commit a local skill",
+		[]string{"pack", "d", "description", "from-file", "lang"}, cmdLibrary)
 	reg("upstream", "verify|candidates|tick|import …",
 		"Import pipeline:\n"+
 			"  upstream verify [repos.txt] [-j 8]       sparse-clone upstream repos, list candidate skills\n"+
@@ -858,8 +861,19 @@ func cmdAdopt(a *Args) int {
 	if err != nil {
 		return fail(err)
 	}
+	if a.Has("project") {
+		rs, err := core.AdoptProject(d, a.Pos)
+		return resultsOut(a, rs, err)
+	}
 	rs, err := core.Adopt(d, a.Pos)
 	return resultsOut(a, rs, err)
+}
+
+func cmdNew(a *Args) int {
+	if len(a.Pos) != 1 {
+		return usage("skillman new <skill> [--project] [-C dir] [-d DESC] [--from-file FILE] [--lang en|vi]")
+	}
+	return newSkill(a, a.Pos[0], a.Has("project"))
 }
 
 func cmdPin(a *Args, pin bool) int {

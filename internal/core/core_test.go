@@ -396,7 +396,7 @@ func TestLifecycle(t *testing.T) {
 	check(t, len(sg) > 0 && sg[0] == "core" && Contains(sg, "web-vue") && Contains(sg, "node-backend") && Contains(sg, "docker") && Contains(sg, "web-quality"), "suggest %v", sg)
 
 	// new: scaffold a local skill
-	d, err := NewSkill("my-flow", "Runs my flow.")
+	d, err := NewSkill("my-flow", "Runs my flow end to end.")
 	e, _, row := CheckSkill(d, "")
 	check(t, err == nil && len(e) == 0 && row.Source == "local", "new skill is valid and local: %v %v", err, e)
 	check(t, Contains(CheckUpdates([]string{"my-flow"}, 1, nil).NoUpstream, "my-flow"), "new skill has no upstream")
