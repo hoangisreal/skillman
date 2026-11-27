@@ -351,8 +351,19 @@ func Rank(catalog *core.RecommendationCatalog, project string, rows []core.Index
 		return a.Name < b.Name
 	})
 	chosen := map[string]bool{}
+	// Near-duplicates cost description tokens twice: keep one of a pair, and
+	// prefer a copy the project already has.
+	similar := core.NewSimilarIndex(rows)
+	duplicate := func(c Choice) bool {
+		for _, s := range similar.For(c.Name) {
+			if chosen[s.Name] || (r.States[s.Name] == "ok" && c.State != "ok") {
+				return true
+			}
+		}
+		return false
+	}
 	add := func(c Choice) bool {
-		if chosen[c.Name] {
+		if chosen[c.Name] || duplicate(c) {
 			return false
 		}
 		c.RecSkill = resolve(c.RecSkill)

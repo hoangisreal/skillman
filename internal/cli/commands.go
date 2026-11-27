@@ -82,8 +82,9 @@ func init() {
 	reg("import", "<owner/repo|GitHub URL> [--list] [--skill name ...] [--commit SHA] [-C project] [--dry-run] [--allow-risky] [--json]",
 		"Discover and import GitHub skills into the library. Supply -C to also install the selected skills into a project.",
 		[]string{"skill", "commit", "C"}, cmdImport)
-	reg("library", "check|apply|auto-safe|pending|rollback|pin|unpin|rebuild-index|validate|new|build-packs …",
+	reg("library", "check|apply|auto-safe|pending|rollback|pin|unpin|rebuild-index|validate|new|build-packs|duplicates …",
 		"Manage the library and upstream updates:\n"+
+			"  library duplicates [--json]                            near-duplicate skills and their description cost\n"+
 			"  library check [skills…] [--pack P] [--log] [--json]     read-only upstream check\n"+
 			"  library apply [skills…] [--allow-risky] [--no-commit]   apply changed skills (asks nothing: be sure)\n"+
 			"  library auto-safe                                       apply safe updates, queue risky ones\n"+
@@ -262,8 +263,13 @@ func cmdInfo(a *Args) int {
 	if full := core.FullDescription(d); full != "" {
 		row.Description = full
 	}
+	similar := core.WithTokens(core.SimilarSkills(core.LoadIndex(), []string{name})[name])
+	if similar == nil {
+		similar = []core.Similar{}
+	}
 	info := map[string]any{
-		"name": name, "description": row.Description, "source": row.Source, "commit": src["commit"],
+		"similar": similar,
+		"name":    name, "description": row.Description, "source": row.Source, "commit": src["commit"],
 		"domain": row.Domain, "stacks": nzs(row.Stacks), "tags": row.Tags, "packs": nzs(pbs[name]),
 		"tokens": core.SkillTokens(d), "lines": row.Lines, "has_scripts": row.HasScripts, "path": d,
 		"errors": nzs(errs), "warnings": nzs(warns), "project": proj, "state": state,
@@ -285,6 +291,9 @@ func cmdInfo(a *Args) int {
 		outf("in project %s: %s\n", proj, state)
 	} else {
 		outf("install: skillman add %s\n", name)
+	}
+	for _, s := range similar {
+		outf("note: %s (%s)\n", core.SimilarNote(s, core.SkillTokens(d)), s.Reason)
 	}
 	for _, e := range errs {
 		outf("ERROR %s\n", e)

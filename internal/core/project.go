@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1114,6 +1115,20 @@ func Doctor(d string) []Diagnostic {
 	}
 	for _, p := range DanglingLinks(d) {
 		add("warn", "dangling link .claude/skills/%s", filepath.Base(p))
+	}
+	var installed []string
+	for _, r := range rows {
+		if r.State != "missing" && r.State != "invalid" {
+			installed = append(installed, r.Name)
+		}
+	}
+	for name, sims := range SimilarSkills(LoadIndex(), installed) {
+		for _, s := range sims {
+			if name < s.Name && slices.Contains(installed, s.Name) {
+				a, b := SkillTokens(Dest(d, name)), SkillTokens(Dest(d, s.Name))
+				add("warn", "%s and %s cover the same topic (%s): together ≈ %d description tokens; consider removing one", name, s.Name, s.Reason, a+b)
+			}
+		}
 	}
 	for _, s := range Shadowing(d) {
 		add("warn", "%s: also installed globally in %s (name shadowing)", s.Name, s.Dir)

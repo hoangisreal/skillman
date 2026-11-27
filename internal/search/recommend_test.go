@@ -312,3 +312,52 @@ func TestRecommendUsesDependenciesAndNames(t *testing.T) {
 		t.Fatalf("deep dependency: %v", deps)
 	}
 }
+
+func TestRecommendSkipsNearDuplicates(t *testing.T) {
+	root := t.TempDir()
+	lib := filepath.Join(root, "lib")
+	proj := filepath.Join(root, "app")
+	t.Setenv("SKILL_LIBRARY", lib)
+	t.Setenv("SKILLMAN_STATE", filepath.Join(root, "state"))
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	core.Configure()
+	for _, dir := range []string{"packs", "staging"} {
+		if err := os.MkdirAll(filepath.Join(lib, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkskill(t, lib, "postgres", "PostgreSQL schema design, indexing and migrations for any database work")
+	mkskill(t, lib, "postgres-best-practices", "PostgreSQL schema and query best practices")
+	mkskill(t, lib, "postgres-database-migration", "Plan and review PostgreSQL schema migrations safely")
+	if err := core.SavePack(&core.Pack{Name: "postgres", Skills: []string{"postgres", "postgres-best-practices", "postgres-database-migration"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := core.RebuildIndex(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "package.json"), []byte(`{"dependencies":{"pg":"8"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	names := func(rec Recommendation) []string {
+		var out []string
+		for _, c := range rec.Shortlist {
+			out = append(out, c.Name)
+		}
+		return out
+	}
+	got := names(Recommend(proj, core.LoadIndex(), "postgres schema", 5, 0))
+	if slices.Contains(got, "postgres") && slices.Contains(got, "postgres-best-practices") {
+		t.Fatalf("both near-duplicates shortlisted: %v", got)
+	}
+	// An installed copy wins over its near-duplicate.
+	if _, err := core.Install(proj, []core.Item{{Name: "postgres-best-practices", Manual: true}}, false); err != nil {
+		t.Fatal(err)
+	}
+	got = names(Recommend(proj, core.LoadIndex(), "postgres schema", 5, 0))
+	if slices.Contains(got, "postgres") || !slices.Contains(got, "postgres-best-practices") {
+		t.Fatalf("installed duplicate not preferred: %v", got)
+	}
+}
